@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const systemPrompt = `Eres Nora Itu, la superinteligencia y asistente ag�ntica de Ituzaing�, Corrientes. Hablas en espa�ol argentino c�lido, directo y emp�tico. Responde en 1 a 3 oraciones concisas y claras preparadas para s�ntesis de voz, sin tablas ni markdown denso.`;
+    const systemPrompt = `Eres Nora Itu, la superinteligencia y asistente agéntica de Ituzaingó, Corrientes. Hablas en español argentino cálido, directo y empático. Responde en 1 a 3 oraciones concisas y claras preparadas para síntesis de voz, sin tablas ni markdown denso.`;
 
     const messages: Array<{ role: string; content: any }> = [
       { role: "system", content: systemPrompt }
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         content: [
           {
             type: "text",
-            text: trimmedMessage || "Describe con precisi�n espacial qu� est�s observando en esta toma."
+            text: trimmedMessage || "Describe con precisión espacial qué estás observando en esta toma."
           },
           {
             type: "image_url",
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         stream: true,
         temperature: 0.35
       }),
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(12000)
     });
 
     if (!pollinationsResponse.ok || !pollinationsResponse.body) {
@@ -115,16 +115,20 @@ export async function POST(req: Request) {
         } catch (streamErr) {
           console.error("[Stream Processing Error]:", streamErr);
         } finally {
-          controller.close();
-
-          // Guardar as�ncronamente en Neon PostgreSQL
-          if (accumulatedResponse.trim() || trimmedMessage) {
-            logToNeon({
-              sessionId,
-              userMessage: trimmedMessage || "[Imagen enviada]",
-              assistantResponse: accumulatedResponse.trim(),
-              hasImage: Boolean(imageBase64)
-            }).catch((err) => console.warn("[Neon Background Log Warn]:", err));
+          // Asegurar guardado en Neon antes de cerrar el stream del serverless worker
+          try {
+            if (accumulatedResponse.trim() || trimmedMessage) {
+              await logToNeon({
+                sessionId,
+                userMessage: trimmedMessage || "[Imagen enviada]",
+                assistantResponse: accumulatedResponse.trim(),
+                hasImage: Boolean(imageBase64)
+              });
+            }
+          } catch (logErr) {
+            console.warn("[Neon Background Log Warn]:", logErr);
+          } finally {
+            controller.close();
           }
         }
       }
