@@ -1,169 +1,147 @@
-/**
- * ========================================================================
- * ⚡ NORAITU REALTIME PROXY - 100% SOBERANO Y DE ALTA VELOCIDAD (<300MS)
- * Ubicación: /src/app/api/noraitu-realtime-proxy/route.ts
- * ========================================================================
- */
-
 import { NextResponse } from "next/server";
-import { NORA_PROSODY_SYSTEM_PROMPT } from "@/lib/nora/realtime/prosodyPrompt";
-import { recordPerformanceMetric } from "@/lib/nora/telemetry";
-import { executeSovereignText } from "@/lib/nora/sovereignCore";
-import { normalizePhoneticTextForSpeech } from "@/lib/nora/phoneticNormalizer";
-import { transcribeAudioWithWhisper } from "@/lib/nora/audioTranscriber";
+import { logToNeon } from "../../../lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
-export const maxDuration = 30;
+
+interface RequestPayload {
+  userMessage?: string;
+  imageBase64?: string | null;
+  sessionId?: string;
+}
 
 export async function POST(req: Request) {
-  const tStart = Date.now();
-
   try {
-    const {
-      message = "",
-      audioBase64,
-      mimeType = "audio/webm",
-      history = [],
-      mode = "general",
-      lastInterruptedResponse = null
-    } = await req.json();
+    const body: RequestPayload = await req.json();
+    const { userMessage = "", imageBase64 = null, sessionId = `nora_${Date.now()}` } = body;
 
-    let effectiveUserText = (message || "").trim();
-    let sttDuration = 0;
-
-    // Si viene audio y no hay texto previo, transcribir con Cascada Soberana (Whisper + Gemini)
-    if (!effectiveUserText && audioBase64) {
-      const tSttStart = Date.now();
-      const transcribed = await transcribeAudioWithWhisper({
-        base64: audioBase64,
-        mimeType
-      });
-      if (transcribed && transcribed.trim().length > 0) {
-        effectiveUserText = transcribed.trim();
-        sttDuration = Date.now() - tSttStart;
-      }
+    const trimmedMessage = userMessage.trim();
+    if (!trimmedMessage && !imageBase64) {
+      return NextResponse.json(
+        { error: "Se requiere un mensaje de texto o una imagen en base64." },
+        { status: 400 }
+      );
     }
 
-    // 🛡️ FILTRO DE RUIDO Y ALUCINACIONES COMUNES DE WHISPER
-    const whisperHallucinations = [
-      "gracias por ver",
-      "subtítulos por",
-      "subtitulos por",
-      "amara.org",
-      "suscríbete",
-      "suscribete al canal",
-      "transcripción por",
-      "transcripcion por",
-      "un subtítulo de",
-      "reproducir música",
-      "música de fondo",
-      "[música]",
-      "(música)",
-      "[risas]",
-      "[aplausos]",
-      "chau",
-      "adiós",
-      "silencio"
+    const systemPrompt = `Eres Nora Itu, la superinteligencia y asistente ag�ntica de Ituzaing�, Corrientes. Hablas en espa�ol argentino c�lido, directo y emp�tico. Responde en 1 a 3 oraciones concisas y claras preparadas para s�ntesis de voz, sin tablas ni markdown denso.`;
+
+    const messages: Array<{ role: string; content: any }> = [
+      { role: "system", content: systemPrompt }
     ];
 
-    const isHallucination = whisperHallucinations.some(h => 
-      effectiveUserText.toLowerCase().includes(h) && effectiveUserText.length < 35
-    );
-
-    if (isHallucination) {
-      effectiveUserText = "";
-    }
-
-    // 🛡️ PROTOCOLO DE RECUPERACIÓN CONVERSACIONAL (Manejo de Hilo ante Ruidos / Transcripciones Vacías)
-    const isNoiseOrEmpty = !effectiveUserText ||
-      effectiveUserText.length < 2 ||
-      /^(tos|carraspeo|hum|eh|ah|ajá|aja|ruido|sonido|\[.*\]|\(.*\))\.*$/i.test(effectiveUserText);
-
-    if (isNoiseOrEmpty) {
-      if (lastInterruptedResponse && lastInterruptedResponse.text) {
-        const rescueCourtesy = "Te escucho. ¿Deseás que continúe con la explicación anterior o querés consultarme otra cosa?";
-        return NextResponse.json({
-          text: rescueCourtesy,
-          phoneticText: rescueCourtesy,
-          transcribedUserText: "[Sonido detectado]",
-          latencyMs: Date.now() - tStart,
-          model: "Conversational-Recovery-Protocol"
-        });
-      }
-
-      const defaultText = "No alcancé a escucharte con claridad. ¿Podrías repetir tu pregunta o decirme 'continuar'?";
-      return NextResponse.json({
-        text: defaultText,
-        phoneticText: defaultText,
-        transcribedUserText: "",
-        latencyMs: Date.now() - tStart,
-        model: "Sovereign-Fallback"
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: trimmedMessage || "Describe con precisi�n espacial qu� est�s observando en esta toma."
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
+          }
+        ]
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: trimmedMessage
       });
     }
 
-    // 🔄 DETECTOR INTELIGENTE DE CONTINUIDAD (Reconocimiento amplio de pedidos de continuación e hilo)
-    const isContinueRequest = /^(si|sí|continua|continuá|continúa|seguí|seguir|dale|adelante|retoma|retomá|completá|completa|terminá|termina|qué más|que mas|no terminaste|seguí contándome|seguí diciéndome|explicame más|explicame mas|respondé a mi última pregunta|responde mi pregunta|completá la info|completa la info)\b/i.test(effectiveUserText) ||
-      effectiveUserText.toLowerCase().includes("completá la info") ||
-      effectiveUserText.toLowerCase().includes("completa la info") ||
-      effectiveUserText.toLowerCase().includes("terminá de") ||
-      effectiveUserText.toLowerCase().includes("no terminaste") ||
-      effectiveUserText.toLowerCase().includes("respondé a mi última pregunta") ||
-      effectiveUserText.toLowerCase().includes("responde mi pregunta");
+    const pollinationsResponse = await fetch("https://text.pollinations.ai/openai", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages,
+        model: "openai",
+        stream: true,
+        temperature: 0.35
+      }),
+      signal: AbortSignal.timeout(8000)
+    });
 
-    let promptToInfer = effectiveUserText;
-    
-    // Obtener la última respuesta del asistente registrada en el historial si no viene en lastInterruptedResponse
-    const lastAssistantInHistory = [...history].reverse().find(h => h.role === "assistant" || h.role === "model")?.content;
-    const referenceContext = (lastInterruptedResponse && lastInterruptedResponse.text) ? lastInterruptedResponse.text : (lastAssistantInHistory || "");
-
-    if (isContinueRequest && referenceContext) {
-      promptToInfer = `[INSTRUCCIÓN CRÍTICA DE CONTINUIDAD]: El usuario solicita continuar o completar la información sobre el tema exacto que estábamos desarrollando. Continúa y finaliza de forma elocuente, profunda y clara la siguiente explicación sin cambiar de tema ni inventar otra historia: "${referenceContext}".`;
+    if (!pollinationsResponse.ok || !pollinationsResponse.body) {
+      throw new Error(`Error en Pollinations API: ${pollinationsResponse.statusText}`);
     }
 
-    const tInferStart = Date.now();
-    const sovereignRes = await executeSovereignText({
-      history,
-      userMessage: promptToInfer,
-      systemPrompt: NORA_PROSODY_SYSTEM_PROMPT,
-      mode: mode as any,
-      maxTokens: 850,
-      temperature: 0.35,
-      lastInterruptedResponse: isContinueRequest ? null : lastInterruptedResponse
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const reader = pollinationsResponse.body.getReader();
+
+    let accumulatedResponse = "";
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine.startsWith("data: ")) continue;
+
+              const jsonStr = trimmedLine.replace(/^data:\s*/, "").trim();
+              if (jsonStr === "[DONE]") {
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                continue;
+              }
+
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const deltaContent = parsed.choices?.[0]?.delta?.content || "";
+                if (deltaContent) {
+                  accumulatedResponse += deltaContent;
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ text: deltaContent })}\n\n`)
+                  );
+                }
+              } catch {
+                // Fragmento parcial no parseable
+              }
+            }
+          }
+        } catch (streamErr) {
+          console.error("[Stream Processing Error]:", streamErr);
+        } finally {
+          controller.close();
+
+          // Guardar as�ncronamente en Neon PostgreSQL
+          if (accumulatedResponse.trim() || trimmedMessage) {
+            logToNeon({
+              sessionId,
+              userMessage: trimmedMessage || "[Imagen enviada]",
+              assistantResponse: accumulatedResponse.trim(),
+              hasImage: Boolean(imageBase64)
+            }).catch((err) => console.warn("[Neon Background Log Warn]:", err));
+          }
+        }
+      }
     });
-    const inferDuration = Date.now() - tInferStart;
 
-    const phoneticSpokenText = normalizePhoneticTextForSpeech(sovereignRes.text);
-    const totalLatency = Date.now() - tStart;
-
-    recordPerformanceMetric({
-      interactionMode: "voice",
-      totalLatencyMs: totalLatency,
-      modelProvider: "sovereign_open",
-      modelName: sovereignRes.modelTag,
-      metadata: { sttMs: sttDuration, inferMs: inferDuration }
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive"
+      }
     });
-
-    return NextResponse.json({
-      text: sovereignRes.text,
-      phoneticText: phoneticSpokenText,
-      audioBase64: sovereignRes.audioBase64,
-      transcribedUserText: effectiveUserText,
-      latencyMs: totalLatency,
-      model: sovereignRes.modelTag
-    });
-
   } catch (error: any) {
-    console.error("[Realtime Voice Proxy Server Error]:", error);
-    const emergencyText = "He procesado tu consulta. Sigamos adelante con la clase.";
-    return NextResponse.json({
-      text: emergencyText,
-      phoneticText: emergencyText,
-      transcribedUserText: "",
-      latencyMs: Date.now() - tStart,
-      model: "Emergency-Fallback"
-    });
+    console.error("[noraitu-stream Error]:", error);
+    return NextResponse.json(
+      { error: error?.message || "Error interno del servidor" },
+      { status: 500 }
+    );
   }
 }
