@@ -1,52 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { 
-  Sparkles, 
-  Send, 
-  Plus, 
-  Trash2, 
-  Copy, 
-  Check, 
-  Bot, 
-  User, 
-  Mic, 
-  MicOff, 
-  Camera, 
-  Image as ImageIcon, 
-  Volume2, 
-  VolumeX, 
-  Wifi, 
-  WifiOff, 
-  FlipHorizontal, 
-  X, 
-  Eye, 
-  Puzzle, 
-  Zap, 
-  PhoneCall,
-  Loader2,
-  RefreshCw,
-  FileText,
-  Printer,
-  Presentation,
-  Sliders,
-  ChevronLeft,
-  ChevronRight,
-  Database,
-  ShieldCheck,
-  UploadCloud,
-  Maximize2,
-  Minimize2
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Bot, User, Send, Mic, MicOff, Camera, Image as ImageIcon, Volume2, VolumeX,
+  Wifi, WifiOff, FlipHorizontal, X, Eye, Puzzle, Zap, PhoneCall, Loader2,
+  RefreshCw, FileText, Printer, Sliders, ChevronLeft, ChevronRight, Database,
+  Plus, Trash2, Copy, Check, Sparkles, UploadCloud, Presentation, Maximize2
 } from "lucide-react";
 import NoraRealtimeCallModal from "../components/NoraRealtimeCallModal";
 import { exportToWord, exportToPdf, exportToPptx } from "../lib/exportUtils";
 
+/* ─────────────────────────── TIPOS ─────────────────────────── */
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   imageBase64?: string | null;
-  mode?: "general" | "tea" | "lazarillo" | "docente";
+  mode?: Mode;
   timestamp: string;
 }
 
@@ -56,331 +26,343 @@ interface ChatSession {
   date: string;
 }
 
-export default function NoraTitanUniversalPage() {
-  // ==========================================
-  // ESTADOS DE SESIÓN Y CHAT
-  // ==========================================
-  const [sessionId, setSessionId] = useState<string>("");
+type Mode = "general" | "tea" | "lazarillo" | "docente";
+
+/* ─────────────── PICTOGRAMAS TEA (grid visual simplificado) ─── */
+const TEA_PICTOGRAMS: Record<string, { emoji: string; label: string }> = {
+  casa: { emoji: "🏠", label: "Casa" },
+  escuela: { emoji: "🏫", label: "Escuela" },
+  comida: { emoji: "🍎", label: "Comida" },
+  agua: { emoji: "💧", label: "Agua" },
+  baño: { emoji: "🚽", label: "Baño" },
+  dormir: { emoji: "😴", label: "Dormir" },
+  jugar: { emoji: "🎮", label: "Jugar" },
+  ayuda: { emoji: "🙋", label: "Ayuda" },
+  bien: { emoji: "👍", label: "Bien" },
+  mal: { emoji: "👎", label: "Mal" },
+  mamá: { emoji: "👩", label: "Mamá" },
+  papá: { emoji: "👨", label: "Papá" },
+  amor: { emoji: "❤️", label: "Amor" },
+  sí: { emoji: "✅", label: "Sí" },
+  no: { emoji: "❌", label: "No" },
+  leer: { emoji: "📖", label: "Leer" },
+  escribir: { emoji: "✏️", label: "Escribir" },
+  número: { emoji: "🔢", label: "Número" },
+  música: { emoji: "🎵", label: "Música" },
+  sol: { emoji: "☀️", label: "Sol" },
+  lluvia: { emoji: "🌧️", label: "Lluvia" },
+  calor: { emoji: "🌡️", label: "Calor" },
+  frío: { emoji: "❄️", label: "Frío" },
+  perro: { emoji: "🐕", label: "Perro" },
+  gato: { emoji: "🐈", label: "Gato" },
+};
+
+/* ─────────────── LIMPIEZA TTS: sin símbolos markdown ─────────── */
+function cleanForTTS(text: string): string {
+  return text
+    .replace(/#{1,6}\s+/g, "")          // encabezados
+    .replace(/\*\*([^*]+)\*\*/g, "$1")  // negrita
+    .replace(/\*([^*]+)\*/g, "$1")      // cursiva
+    .replace(/`([^`]+)`/g, "$1")        // código inline
+    .replace(/```[\s\S]*?```/g, "")     // bloques de código
+    .replace(/^\s*[-*]\s+/gm, "")       // viñetas
+    .replace(/^\s*\d+\.\s+/gm, "")      // listas numeradas
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") // links
+    .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")    // subrayado/cursiva
+    .replace(/\n{2,}/g, ". ")
+    .replace(/\n/g, " ")
+    .trim();
+}
+
+/* ─────────────── DETECCIÓN ECOLALIA / TEA AUTO ─────────────── */
+function detectEcholaliaPattern(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/);
+  if (words.length < 4) return false;
+  const unique = new Set(words);
+  const ratio = unique.size / words.length;
+  return ratio < 0.45; // >55% repetición → probable ecolalia
+}
+
+export default function NoraTitanPage() {
+  /* ── Sesión / Chat ── */
+  const [sessionId, setSessionId] = useState("");
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<Mode>("general");
+  const [autoTEAMode, setAutoTEAMode] = useState(false); // activado automáticamente
 
-  // Perfil de Asistencia: General, TEA, Lazarillo, Docente
-  const [activeMode, setActiveMode] = useState<"general" | "tea" | "lazarillo" | "docente">("general");
-
-  // Barra Lateral PWA
+  /* ── Sidebar ── */
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Conectividad Offline / Neon
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+  /* ── Conectividad ── */
+  const [isOnline, setIsOnline] = useState(true);
 
-  // ==========================================
-  // ESTADOS MULTIMEDIA Y CÁMARA TITÁN
-  // ==========================================
+  /* ── Cámara Titán ── */
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
-  const [cameraCapturing, setCameraCapturing] = useState<boolean>(false);
-  const [cameraAnalysisResult, setCameraAnalysisResult] = useState<string>("");
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [cameraCapturing, setCameraCapturing] = useState(false);
+  const [cameraAnalysis, setCameraAnalysis] = useState("");
+  const [autoVisionActive, setAutoVisionActive] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // ==========================================
-  // ESTADOS DE VOZ (TTS / STT)
-  // ==========================================
+  /* ── Voz (TTS / STT) ── */
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
 
-  // ==========================================
-  // REFERENCIAS DOM
-  // ==========================================
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const recognitionRef = useRef<any>(null);
+  /* ── TEA: Pictogramas ── */
+  const [showPictograms, setShowPictograms] = useState(false);
 
-  // ==========================================
-  // 1. INICIALIZACIÓN Y GESTIÓN DE PERSISTENCIA
-  // ==========================================
+  /* ── Refs ── */
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const autoVisionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  /* ──────────────────────────── INIT ───────────────────────────── */
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Conectividad reactiva
     setIsOnline(navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", () => setIsOnline(true));
+    window.addEventListener("offline", () => setIsOnline(false));
 
-    // Ajuste responsive sidebar
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
+    if (window.innerWidth < 768) setSidebarOpen(false);
 
-    // Carga de sesiones anteriores
-    const rawSessions = localStorage.getItem("noraitu_saved_sessions");
-    let loadedSessions: ChatSession[] = [];
-    if (rawSessions) {
-      try {
-        loadedSessions = JSON.parse(rawSessions);
-        setSessions(loadedSessions);
-      } catch {}
-    }
+    const raw = localStorage.getItem("noraitu_saved_sessions");
+    if (raw) setSessions(JSON.parse(raw));
 
-    // Inicializar sesión actual
-    const currentSid = localStorage.getItem("noraitu_session_id") || `nora_${Date.now()}`;
-    setSessionId(currentSid);
-    localStorage.setItem("noraitu_session_id", currentSid);
+    const sid = localStorage.getItem("noraitu_session_id") || `nora_${Date.now()}`;
+    setSessionId(sid);
+    localStorage.setItem("noraitu_session_id", sid);
+    loadSessionMessages(sid);
 
-    // Cargar historial de la sesión activa
-    loadSessionMessages(currentSid);
+    // STT: Reconocimiento nativo
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) {
+      const rec = new SR();
+      rec.lang = "es-AR";
+      rec.continuous = false;
+      rec.interimResults = true;
 
-    // Inicializar Web Speech Recognition nativo
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "es-AR";
-      recognition.continuous = false;
-      recognition.interimResults = true;
+      rec.onresult = (e: any) => {
+        let t = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
+        setInputMessage(t);
 
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+        // ── AUTO-DETECCIÓN ECOLALIA / TEA ──
+        if (detectEcholaliaPattern(t) && !autoTEAMode) {
+          setAutoTEAMode(true);
+          setActiveMode("tea");
         }
-        setInputMessage(transcript);
       };
 
-      recognition.onend = () => setIsListening(false);
-      recognition.onerror = () => setIsListening(false);
-
-      recognitionRef.current = recognition;
+      rec.onend = () => setIsListening(false);
+      rec.onerror = () => setIsListening(false);
+      recognitionRef.current = rec;
     }
 
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-      if (cameraStream) {
-        cameraStream.getTracks().forEach((track) => track.stop());
-      }
+      window.removeEventListener("online", () => setIsOnline(true));
+      window.removeEventListener("offline", () => setIsOnline(false));
+      stopAutoVision();
     };
   }, []);
 
-  const loadSessionMessages = (sid: string) => {
-    const saved = localStorage.getItem(`noraitu_history_${sid}`);
-    if (saved) {
-      try {
-        setMessages(JSON.parse(saved));
-        return;
-      } catch {}
-    }
-    // Mensaje de bienvenida inicial
-    setMessages([
-      {
-        id: "welcome_titan",
-        role: "assistant",
-        content: `Soy **Nora Titán Universal**, el pináculo de la asistencia agéntica inclusiva y corporativa de vanguardia.\n\nEstoy preparada para brindarte:\n* **Análisis Multimodal de Élite:** Visión espacial con tu cámara y análisis de documentos.\n* **Inclusión Cognitiva TEA:** Comunicación clara, predecible y baja sobrecarga sensorial.\n* **Generación y Exportación Documental:** Informes ejecutivos en Word (.doc), PDF y Presentaciones PPTX.\n* **Persistencia Serverless:** Registrada en tiempo real sobre Neon PostgreSQL.\n\n¿Qué desafío estratégico o consulta abordamos hoy?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        mode: activeMode
-      }
-    ]);
-  };
-
-  // Guardar mensajes localmente en cada cambio
   useEffect(() => {
-    if (typeof window === "undefined" || !sessionId) return;
+    if (!sessionId) return;
     localStorage.setItem(`noraitu_history_${sessionId}`, JSON.stringify(messages));
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sessionId]);
 
-  // ==========================================
-  // GESTIÓN DE SESIONES Y CREACIÓN RÁPIDA
-  // ==========================================
-  const handleNewSession = () => {
+  /* ─────────────────────── SESIONES ─────────────────────────── */
+  function loadSessionMessages(sid: string) {
+    const saved = localStorage.getItem(`noraitu_history_${sid}`);
+    if (saved) {
+      try { setMessages(JSON.parse(saved)); return; } catch {}
+    }
+    setMessages([{
+      id: "welcome",
+      role: "assistant",
+      content: "Soy **Nora Titán Universal**, asistencia agéntica inclusiva y corporativa de vanguardia.\n\nCapacidades activas:\n- Análisis Visual Multimodal con Cámara Titán\n- Lazarillo Visual en Tiempo Real con descripción por voz\n- Inclusión Cognitiva TEA con Pictogramas\n- Exportación Documental: Word, PDF, Presentaciones\n- Persistencia Serverless en Neon PostgreSQL\n\n¿En qué puedo asistirte hoy?",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      mode: "general"
+    }]);
+  }
+
+  function handleNewSession() {
     const newSid = `nora_${Date.now()}`;
-    const newSessionItem: ChatSession = {
-      id: newSid,
-      title: "Nueva Consulta Titán",
-      date: new Date().toLocaleDateString("es-AR")
-    };
-    const updated = [newSessionItem, ...sessions.slice(0, 14)];
-    setSessions(updated);
-    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    const s: ChatSession = { id: newSid, title: "Nueva Consulta", date: new Date().toLocaleDateString("es-AR") };
+    const upd = [s, ...sessions.slice(0, 14)];
+    setSessions(upd);
+    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(upd));
     setSessionId(newSid);
     localStorage.setItem("noraitu_session_id", newSid);
     loadSessionMessages(newSid);
     if (window.innerWidth < 768) setSidebarOpen(false);
-  };
+  }
 
-  const handleSelectSession = (sid: string) => {
+  function handleSelectSession(sid: string) {
     setSessionId(sid);
     localStorage.setItem("noraitu_session_id", sid);
     loadSessionMessages(sid);
     if (window.innerWidth < 768) setSidebarOpen(false);
-  };
+  }
 
-  const handleDeleteSession = (sid: string, e: React.MouseEvent) => {
+  function handleDeleteSession(sid: string, e: React.MouseEvent) {
     e.stopPropagation();
-    const updated = sessions.filter((s) => s.id !== sid);
-    setSessions(updated);
-    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    const upd = sessions.filter(s => s.id !== sid);
+    setSessions(upd);
+    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(upd));
     localStorage.removeItem(`noraitu_history_${sid}`);
-    if (sessionId === sid) {
-      handleNewSession();
-    }
-  };
+    if (sessionId === sid) handleNewSession();
+  }
 
-  // ==========================================
-  // 2. CÁMARA MULTIMODAL TITÁN Y DRAG & DROP
-  // ==========================================
-  const startCamera = async (mode: "user" | "environment") => {
+  /* ─────────────────── CÁMARA MULTIMODAL TITÁN ──────────────── */
+  const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach((t) => t.stop());
-      }
+      if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false
       });
+
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       setIsCameraOpen(true);
-      setCameraAnalysisResult("");
-    } catch (err) {
-      alert("No se pudo inicializar la cámara. Por favor autoriza los permisos de video en el navegador.");
-    }
-  };
+      setCameraAnalysis("");
 
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      setCameraStream(null);
+      // Montar stream en el videoRef con robustez
+      const mountVideo = () => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch(() => {});
+          };
+        } else {
+          setTimeout(mountVideo, 100);
+        }
+      };
+      setTimeout(mountVideo, 80);
+    } catch {
+      alert("No se pudo inicializar la cámara. Por favor autoriza los permisos de video.");
     }
+  }, [cameraStream]);
+
+  const stopCamera = useCallback(() => {
+    stopAutoVision();
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    setCameraStream(null);
     setIsCameraOpen(false);
-    setCameraAnalysisResult("");
-  };
+    setCameraAnalysis("");
+    setAutoVisionActive(false);
+  }, [cameraStream]);
 
-  const toggleCameraFacing = () => {
-    const nextMode = facingMode === "user" ? "environment" : "user";
-    setFacingMode(nextMode);
-    startCamera(nextMode);
-  };
-
-  const captureFrameFromCamera = (): string | null => {
-    if (!videoRef.current) return null;
+  function captureFrame(): string | null {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) return null;
     const canvas = canvasRef.current || document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.8);
-  };
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.78);
+  }
 
-  const handleAnalyzeCameraLive = async () => {
-    const base64 = captureFrameFromCamera();
+  async function analyzeFrame(customPrompt?: string) {
+    const base64 = captureFrame();
     if (!base64) return;
 
-    setCameraCapturing(true);
-    setCameraAnalysisResult("Nora Titán analizando fotograma en tiempo real...");
+    const prompt = customPrompt || (
+      activeMode === "lazarillo"
+        ? "Lazarillo Visual: describe el espacio usando esfera de reloj (12 en punto, 3 en punto, etc.). Advierte obstáculos, escalones y desniveles con máxima prioridad."
+        : activeMode === "tea"
+        ? "Modo TEA: describe de forma ordenada en pasos lo que observas, usando lenguaje literal y simple."
+        : "Describe con precisión analítica y contexto espacial lo que observas en esta toma."
+    );
 
-    const userPrompt = activeMode === "lazarillo"
-      ? "Lazarillo Visual: Describe la escena con referencias de reloj y advierte desniveles u obstáculos."
-      : activeMode === "tea"
-      ? "Inclusión TEA: Describe con lenguaje literal, claro y ordenado por pasos lo que observas."
-      : "Describe detalladamente la imagen con precisión analítica y contexto espacial.";
+    setCameraCapturing(true);
+    setCameraAnalysis("Nora Titán analizando en tiempo real...");
 
     try {
-      const response = await fetch("/api/noraitu-stream", {
+      const res = await fetch("/api/noraitu-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userMessage: userPrompt,
-          imageBase64: base64,
-          sessionId,
-          mode: activeMode
-        })
+        body: JSON.stringify({ userMessage: prompt, imageBase64: base64, sessionId, mode: activeMode })
       });
+      if (!res.ok || !res.body) throw new Error("Stream error");
 
-      if (!response.ok || !response.body) throw new Error("Fallo en el flujo de análisis visual");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let acc = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const dataStr = line.replace("data: ", "").trim();
-            if (dataStr === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.text) {
-                accumulated += parsed.text;
-                setCameraAnalysisResult(accumulated);
-              }
-            } catch {}
-          }
+        for (const line of dec.decode(value).split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const d = line.replace("data: ", "").trim();
+          if (d === "[DONE]") continue;
+          try {
+            const p = JSON.parse(d);
+            if (p.text) { acc += p.text; setCameraAnalysis(acc); }
+          } catch {}
         }
       }
-
-      if (accumulated) {
-        speakText(accumulated);
-      }
+      if (acc) speakText(acc);
     } catch (err: any) {
-      setCameraAnalysisResult("⚠️ Error en análisis: " + (err?.message || "Intenta nuevamente"));
+      setCameraAnalysis("⚠️ " + (err?.message || "Error al analizar"));
     } finally {
       setCameraCapturing(false);
     }
-  };
+  }
 
-  const handleAttachSnapshotToChat = () => {
-    const base64 = captureFrameFromCamera();
-    if (base64) {
-      setAttachedImage(base64);
-      stopCamera();
+  /* ─── Lazarillo: visión automática cada 5s ─── */
+  function startAutoVision() {
+    if (autoVisionIntervalRef.current) clearInterval(autoVisionIntervalRef.current);
+    analyzeFrame();
+    autoVisionIntervalRef.current = setInterval(() => analyzeFrame(), 5000);
+    setAutoVisionActive(true);
+  }
+
+  function stopAutoVision() {
+    if (autoVisionIntervalRef.current) {
+      clearInterval(autoVisionIntervalRef.current);
+      autoVisionIntervalRef.current = null;
     }
-  };
+    setAutoVisionActive(false);
+  }
 
-  // Drag & Drop de Imágenes
-  const handleDragOver = (e: React.DragEvent) => {
+  function attachSnapshotToChat() {
+    const base64 = captureFrame();
+    if (base64) { setAttachedImage(base64); stopCamera(); }
+  }
+
+  /* ──────────────── DRAG & DROP ──────────────── */
+  function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    setIsDraggingFile(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDraggingFile(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingFile(false);
-    const files = e.dataTransfer.files;
-    if (files && files[0] && files[0].type.startsWith("image/")) {
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file?.type.startsWith("image/")) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachedImage(event.target?.result as string);
-      };
-      reader.readAsDataURL(files[0]);
+      reader.onload = ev => setAttachedImage(ev.target?.result as string);
+      reader.readAsDataURL(file);
     }
-  };
+  }
 
-  // ==========================================
-  // 3. CORRECCIÓN DEL PORTAPAPELES (CTRL+V)
-  // ==========================================
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  /* ───── PASTE (Ctrl+V) CORREGIDO: sin 'v' fantasma ────── */
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const items = e.clipboardData?.items;
     if (items) {
       for (let i = 0; i < items.length; i++) {
@@ -389,50 +371,29 @@ export default function NoraTitanUniversalPage() {
           const file = items[i].getAsFile();
           if (file) {
             const reader = new FileReader();
-            reader.onload = (event) => {
-              setAttachedImage(event.target?.result as string);
-            };
+            reader.onload = ev => setAttachedImage(ev.target?.result as string);
             reader.readAsDataURL(file);
             return;
           }
         }
       }
     }
-
-    // Inserción limpia de texto plano evitando caracteres parásitos 'v'
     const pastedText = e.clipboardData?.getData("text/plain");
     if (pastedText) {
       e.preventDefault();
-      const textarea = e.currentTarget;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const currentVal = textarea.value;
-      const newVal = currentVal.substring(0, start) + pastedText + currentVal.substring(end);
+      const ta = e.currentTarget;
+      const start = ta.selectionStart ?? 0;
+      const end = ta.selectionEnd ?? 0;
+      const newVal = inputMessage.substring(0, start) + pastedText + inputMessage.substring(end);
       setInputMessage(newVal);
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
-      }, 0);
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + pastedText.length;
+      });
     }
-  };
+  }
 
-  // ==========================================
-  // 4. VOZ, DICTADO Y TTS ADAPTATIVO
-  // ==========================================
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert("El reconocimiento de voz no está disponible en este navegador.");
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current.start();
-      setIsListening(true);
-    }
-  };
-
-  const speakText = (text: string, msgId?: string) => {
+  /* ──────────────── TTS — Habla fluida sin símbolos ──────── */
+  function speakText(text: string, msgId?: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
 
@@ -442,801 +403,412 @@ export default function NoraTitanUniversalPage() {
       return;
     }
 
-    const clean = text.replace(/[*_#`>-]/g, "").trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = "es-AR";
-    utterance.rate = activeMode === "tea" ? 0.88 : 0.98;
-    utterance.pitch = activeMode === "tea" ? 0.95 : 1.0;
+    const clean = cleanForTTS(text);
+    if (!clean) return;
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      if (msgId) setSpeakingMsgId(msgId);
-    };
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.lang = "es-AR";
+    utt.rate = (activeMode === "tea" || autoTEAMode) ? 0.86 : 0.98;
+    utt.pitch = (activeMode === "tea" || autoTEAMode) ? 0.93 : 1.0;
 
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setSpeakingMsgId(null);
-    };
+    // Preferir voz en español si está disponible
+    const voices = window.speechSynthesis.getVoices();
+    const esVoice = voices.find(v => v.lang.startsWith("es") && v.name.includes("Google"))
+      || voices.find(v => v.lang.startsWith("es"));
+    if (esVoice) utt.voice = esVoice;
 
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setSpeakingMsgId(null);
-    };
+    utt.onstart = () => { setIsSpeaking(true); if (msgId) setSpeakingMsgId(msgId); };
+    utt.onend = () => { setIsSpeaking(false); setSpeakingMsgId(null); };
+    utt.onerror = () => { setIsSpeaking(false); setSpeakingMsgId(null); };
 
-    window.speechSynthesis.speak(utterance);
-  };
+    speechUtteranceRef.current = utt;
+    window.speechSynthesis.speak(utt);
+  }
 
-  // ==========================================
-  // 5. ENVÍO DE MENSAJES CON STREAMING PRO
-  // ==========================================
-  const handleSendMessage = async () => {
+  /* ──────────────── STT ──────────────── */
+  function toggleListening() {
+    if (!recognitionRef.current) { alert("El reconocimiento de voz no está disponible en este navegador."); return; }
+    if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
+    else { recognitionRef.current.start(); setIsListening(true); }
+  }
+
+  /* ──────────────── SEND MESSAGE ──────────────── */
+  async function handleSendMessage() {
     const trimmed = inputMessage.trim();
     if ((!trimmed && !attachedImage) || isLoading) return;
 
-    const userMsgId = `user_${Date.now()}`;
-    const assistantMsgId = `nora_${Date.now()}`;
-    const imageToSend = attachedImage;
+    const userMsgId = `u_${Date.now()}`;
+    const assistantMsgId = `a_${Date.now()}`;
+    const img = attachedImage;
 
-    const newMsg: Message = {
-      id: userMsgId,
-      role: "user",
-      content: trimmed,
-      imageBase64: imageToSend,
-      mode: activeMode,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    };
-
-    // Actualizar título de la sesión si es el primer mensaje
-    if (messages.length <= 1) {
-      const titleCandidate = trimmed.length > 25 ? trimmed.substring(0, 25) + "..." : trimmed || "Consulta Visual";
-      const updated = sessions.map((s) => (s.id === sessionId ? { ...s, title: titleCandidate } : s));
-      setSessions(updated);
-      localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    if (messages.length <= 1 && trimmed) {
+      const title = trimmed.length > 28 ? trimmed.slice(0, 28) + "…" : trimmed;
+      const upd = sessions.map(s => s.id === sessionId ? { ...s, title } : s);
+      setSessions(upd);
+      localStorage.setItem("noraitu_saved_sessions", JSON.stringify(upd));
     }
 
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages(prev => [...prev, {
+      id: userMsgId, role: "user", content: trimmed,
+      imageBase64: img, mode: activeMode,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    }]);
     setInputMessage("");
     setAttachedImage(null);
     setIsLoading(true);
 
-    // Placeholder para la respuesta con streaming
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: assistantMsgId,
-        role: "assistant",
-        content: "",
-        mode: activeMode,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      }
-    ]);
+    setMessages(prev => [...prev, {
+      id: assistantMsgId, role: "assistant", content: "",
+      mode: activeMode,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    }]);
 
     try {
-      const response = await fetch("/api/noraitu-stream", {
+      const res = await fetch("/api/noraitu-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userMessage: trimmed,
-          imageBase64: imageToSend,
-          sessionId,
-          mode: activeMode
-        })
+        body: JSON.stringify({ userMessage: trimmed, imageBase64: img, sessionId, mode: activeMode })
       });
+      if (!res.ok || !res.body) throw new Error("Fallo de comunicación con Nora Titán");
 
-      if (!response.ok || !response.body) throw new Error("Fallo de comunicación con Nora Titán");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullAssistantText = "";
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let full = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const dataStr = line.replace("data: ", "").trim();
-            if (dataStr === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.text) {
-                fullAssistantText += parsed.text;
-                setMessages((prev) =>
-                  prev.map((m) => (m.id === assistantMsgId ? { ...m, content: fullAssistantText } : m))
-                );
-              }
-            } catch {}
-          }
+        for (const line of dec.decode(value).split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const d = line.replace("data: ", "").trim();
+          if (d === "[DONE]") continue;
+          try {
+            const p = JSON.parse(d);
+            if (p.text) {
+              full += p.text;
+              setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: full } : m));
+            }
+          } catch {}
         }
       }
 
-      if (fullAssistantText && (activeMode === "tea" || activeMode === "lazarillo")) {
-        speakText(fullAssistantText, assistantMsgId);
+      if (full && (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode)) {
+        speakText(full, assistantMsgId);
       }
     } catch (err: any) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? { ...m, content: "⚠️ No se pudo procesar la solicitud: " + (err?.message || "Verifica tu conexión a internet.") }
-            : m
-        )
-      );
+      setMessages(prev => prev.map(m => m.id === assistantMsgId
+        ? { ...m, content: "⚠️ " + (err?.message || "Error de conexión. Verifica tu red.") } : m));
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const copyToClipboard = (id: string, text: string) => {
+  function copyToClipboard(id: string, text: string) {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
+  }
 
+  /* ─── Colores de modo ─── */
+  const modeColor = {
+    general: { bg: "#090d16", border: "rgba(99,102,241,0.25)", accent: "#6366f1", badge: "rgba(99,102,241,0.15)", badgeText: "#818cf8" },
+    tea:     { bg: "#07111e", border: "rgba(14,165,233,0.25)", accent: "#0ea5e9", badge: "rgba(14,165,233,0.15)", badgeText: "#38bdf8" },
+    lazarillo: { bg: "#0b0f1a", border: "rgba(139,92,246,0.25)", accent: "#8b5cf6", badge: "rgba(139,92,246,0.15)", badgeText: "#a78bfa" },
+    docente: { bg: "#071510", border: "rgba(16,185,129,0.25)", accent: "#10b981", badge: "rgba(16,185,129,0.15)", badgeText: "#34d399" },
+  };
+  const mc = autoTEAMode ? modeColor.tea : modeColor[activeMode];
+
+  /* ══════════════════════════════════ RENDER ══════════════════════════════════ */
   return (
-    <div 
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
+    <div
+      onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
       style={{
         display: "flex",
-        height: "100vh",
-        width: "100vw",
+        height: "100dvh",
+        width: "100%",
+        maxWidth: "100vw",
         overflow: "hidden",
-        backgroundColor: activeMode === "tea" ? "#07111e" : "#090d16",
+        backgroundColor: mc.bg,
         color: "#f0f6fc",
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        boxSizing: "border-box"
       }}
     >
-
-      {/* ========================================================= */}
-      {/* 1. BARRA LATERAL PWA: DISEÑO EJECUTIVO SLATE/ZINC 900     */}
-      {/* ========================================================= */}
-      <aside style={{
-        width: sidebarOpen ? "280px" : "0px",
-        minWidth: sidebarOpen ? "280px" : "0px",
-        backgroundColor: "#0d1322",
-        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
-        display: "flex",
-        flexDirection: "column",
-        transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-        overflow: "hidden",
-        zIndex: 40
-      }}>
-        {/* Header Lateral */}
-        <div style={{ padding: "18px 16px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* ═══════════════════════ SIDEBAR PWA ═══════════════════════ */}
+      <aside
+        style={{
+          width: sidebarOpen ? "260px" : "0",
+          minWidth: sidebarOpen ? "260px" : "0",
+          transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s cubic-bezier(0.4,0,0.2,1)",
+          overflow: "hidden",
+          backgroundColor: "#0d1322",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
+          display: "flex",
+          flexDirection: "column",
+          flexShrink: 0,
+          zIndex: 40
+        }}
+      >
+        {/* Header sidebar */}
+        <div style={{ padding: "16px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "10px",
-              background: activeMode === "tea" 
-                ? "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)" 
-                : "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 4px 15px rgba(59, 130, 246, 0.35)"
-            }}>
-              <Bot size={20} color="#fff" />
+            <div style={{ width: "34px", height: "34px", borderRadius: "10px", background: `linear-gradient(135deg, ${mc.accent}, #3b82f6)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 14px ${mc.accent}55` }}>
+              <Bot size={18} color="#fff" />
             </div>
             <div>
-              <div style={{ fontSize: "14px", fontWeight: 800, letterSpacing: "-0.3px", color: "#f8fafc" }}>
-                NORA TITÁN
-              </div>
-              <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", letterSpacing: "0.5px" }}>
-                ÉLITE GLOBAL
-              </div>
+              <div style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc" }}>NORA TITÁN</div>
+              <div style={{ fontSize: "10px", fontWeight: 700, color: mc.badgeText, letterSpacing: "0.5px" }}>UNIVERSAL</div>
             </div>
           </div>
-
-          <button
-            onClick={() => setSidebarOpen(false)}
-            style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "4px" }}
-          >
-            <ChevronLeft size={18} />
+          <button onClick={() => setSidebarOpen(false)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer" }}>
+            <ChevronLeft size={16} />
           </button>
         </div>
 
-        {/* Botón Nueva Consulta */}
-        <div style={{ padding: "14px 16px" }}>
-          <button
-            onClick={handleNewSession}
-            style={{
-              width: "100%",
-              backgroundColor: "#1e293b",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              color: "#f8fafc",
-              borderRadius: "12px",
-              padding: "10px 14px",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Plus size={16} color="#38bdf8" />
-            <span>Nueva Consulta</span>
+        {/* Nueva consulta */}
+        <div style={{ padding: "12px 14px" }}>
+          <button onClick={handleNewSession} style={{ width: "100%", backgroundColor: "#1e293b", border: "1px solid rgba(255,255,255,0.1)", color: "#f8fafc", borderRadius: "10px", padding: "9px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px" }}>
+            <Plus size={15} color={mc.accent} /><span>Nueva Consulta</span>
           </button>
         </div>
 
-        {/* Perfiles de Accesibilidad y Modo */}
-        <div style={{ padding: "0 16px 12px 16px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            Perfiles Cognitivos & Visión
-          </div>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {/* Perfiles */}
+        <div style={{ padding: "0 14px 10px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "7px" }}>Perfil Cognitivo</div>
+          {([
+            { id: "general", label: "Titán Ejecutivo", icon: <Zap size={13} />, accentKey: "general" },
+            { id: "tea", label: "Inclusión TEA", icon: <Puzzle size={13} />, accentKey: "tea" },
+            { id: "lazarillo", label: "Lazarillo Visual", icon: <Eye size={13} />, accentKey: "lazarillo" },
+            { id: "docente", label: "Cátedra Universitaria", icon: <FileText size={13} />, accentKey: "docente" },
+          ] as const).map(({ id, label, icon }) => (
             <button
-              onClick={() => setActiveMode("general")}
+              key={id}
+              onClick={() => { setActiveMode(id); setAutoTEAMode(false); }}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: activeMode === "general" ? "rgba(37, 99, 235, 0.2)" : "transparent",
-                color: activeMode === "general" ? "#60a5fa" : "#94a3b8",
-                fontWeight: activeMode === "general" ? 700 : 500,
-                fontSize: "12px",
-                cursor: "pointer",
-                textAlign: "left"
+                width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                padding: "8px 10px", borderRadius: "9px", border: "none",
+                backgroundColor: activeMode === id ? `${modeColor[id].accent}22` : "transparent",
+                color: activeMode === id ? modeColor[id].badgeText : "#94a3b8",
+                fontWeight: activeMode === id ? 700 : 500, fontSize: "12px",
+                cursor: "pointer", marginBottom: "3px", textAlign: "left"
               }}
             >
-              <Zap size={15} />
-              <span>Titán Ejecutivo / Global</span>
+              {icon}<span>{label}</span>
+              {id === "tea" && autoTEAMode && (
+                <span style={{ fontSize: "9px", padding: "1px 5px", backgroundColor: "#0ea5e955", color: "#38bdf8", borderRadius: "4px", marginLeft: "auto" }}>AUTO</span>
+              )}
             </button>
-
-            <button
-              onClick={() => setActiveMode("tea")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: activeMode === "tea" ? "rgba(14, 165, 233, 0.2)" : "transparent",
-                color: activeMode === "tea" ? "#38bdf8" : "#94a3b8",
-                fontWeight: activeMode === "tea" ? 700 : 500,
-                fontSize: "12px",
-                cursor: "pointer",
-                textAlign: "left"
-              }}
-            >
-              <Puzzle size={15} />
-              <span>Soporte Inclusión TEA</span>
-            </button>
-
-            <button
-              onClick={() => setActiveMode("lazarillo")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: activeMode === "lazarillo" ? "rgba(139, 92, 246, 0.2)" : "transparent",
-                color: activeMode === "lazarillo" ? "#a78bfa" : "#94a3b8",
-                fontWeight: activeMode === "lazarillo" ? 700 : 500,
-                fontSize: "12px",
-                cursor: "pointer",
-                textAlign: "left"
-              }}
-            >
-              <Eye size={15} />
-              <span>Lazarillo Visual 360°</span>
-            </button>
-
-            <button
-              onClick={() => setActiveMode("docente")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "none",
-                backgroundColor: activeMode === "docente" ? "rgba(16, 185, 129, 0.2)" : "transparent",
-                color: activeMode === "docente" ? "#34d399" : "#94a3b8",
-                fontWeight: activeMode === "docente" ? 700 : 500,
-                fontSize: "12px",
-                cursor: "pointer",
-                textAlign: "left"
-              }}
-            >
-              <FileText size={15} />
-              <span>Cátedra Universitaria</span>
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* Historial de Sesiones Guardadas */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 16px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            Historial de Consultas
+        {/* TEA: Pictogramas */}
+        {(activeMode === "tea" || autoTEAMode) && (
+          <div style={{ padding: "0 14px 10px" }}>
+            <button
+              onClick={() => setShowPictograms(v => !v)}
+              style={{ width: "100%", padding: "7px 10px", borderRadius: "9px", border: `1px solid ${mc.accent}44`, backgroundColor: showPictograms ? `${mc.accent}22` : "transparent", color: mc.badgeText, fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
+            >
+              🧩 {showPictograms ? "Cerrar Pictogramas" : "Abrir Panel Pictogramas TEA"}
+            </button>
           </div>
+        )}
+
+        {/* Historial */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 14px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "7px" }}>Historial</div>
           {sessions.length === 0 ? (
-            <div style={{ fontSize: "12px", color: "#475569", padding: "8px 0" }}>Sin sesiones anteriores</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => handleSelectSession(s.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    backgroundColor: sessionId === s.id ? "rgba(255, 255, 255, 0.08)" : "transparent",
-                    color: sessionId === s.id ? "#f8fafc" : "#94a3b8",
-                    fontSize: "12px",
-                    cursor: "pointer"
-                  }}
-                >
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "190px" }}>
-                    {s.title}
-                  </span>
-                  <button
-                    onClick={(e) => handleDeleteSession(s.id, e)}
-                    style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "2px" }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+            <div style={{ fontSize: "11px", color: "#475569" }}>Sin sesiones anteriores</div>
+          ) : sessions.map(s => (
+            <div key={s.id} onClick={() => handleSelectSession(s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 9px", borderRadius: "7px", backgroundColor: sessionId === s.id ? "rgba(255,255,255,0.07)" : "transparent", color: sessionId === s.id ? "#f8fafc" : "#94a3b8", fontSize: "11px", cursor: "pointer", marginBottom: "2px" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{s.title}</span>
+              <button onClick={e => handleDeleteSession(s.id, e)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", padding: "2px", flexShrink: 0 }}>
+                <Trash2 size={12} />
+              </button>
             </div>
-          )}
+          ))}
         </div>
 
-        {/* Footer Lateral: Estado Neon & Online */}
-        <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", backgroundColor: "rgba(0, 0, 0, 0.2)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-            <span style={{ fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
-              <Database size={13} color="#38bdf8" /> Neon PostgreSQL
+        {/* Estado Neon */}
+        <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.07)", backgroundColor: "rgba(0,0,0,0.15)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ fontSize: "10px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "5px" }}>
+              <Database size={11} color="#38bdf8" /> Neon PostgreSQL
             </span>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#22c55e" }}></span>
+            <span style={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: "#22c55e" }} />
           </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
-              {isOnline ? <Wifi size={13} color="#22c55e" /> : <WifiOff size={13} color="#f59e0b" />}
-              {isOnline ? "Conexión Activa" : "Modo Offline Activo"}
-            </span>
-            <span style={{ fontSize: "10px", color: "#64748b" }}>PWA v3</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "10px", color: "#94a3b8" }}>
+            {isOnline ? <Wifi size={11} color="#22c55e" /> : <WifiOff size={11} color="#f59e0b" />}
+            <span>{isOnline ? "Conexión Activa" : "Modo Offline"}</span>
           </div>
         </div>
       </aside>
 
-      {/* ========================================================= */}
-      {/* 2. CONTENEDOR PRINCIPAL: CHAT, CÁMARA Y ACCIONES           */}
-      {/* ========================================================= */}
-      <main style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        position: "relative"
-      }}>
+      {/* ═══════════════════════ MAIN ═══════════════════════ */}
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", minWidth: 0, position: "relative" }}>
 
-        {/* Top Navbar */}
-        <header style={{
-          height: "56px",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-          backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.9)" : "rgba(9, 13, 22, 0.9)",
-          backdropFilter: "blur(12px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 20px",
-          zIndex: 30
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* ─── Navbar ─── */}
+        <header style={{ height: "52px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.08)", backgroundColor: `${mc.bg}f0`, backdropFilter: "blur(14px)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", zIndex: 30 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
             {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                  color: "#f8fafc",
-                  borderRadius: "8px",
-                  padding: "6px 8px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center"
-                }}
-              >
-                <ChevronRight size={16} />
+              <button onClick={() => setSidebarOpen(true)} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#f8fafc", borderRadius: "7px", padding: "5px 7px", cursor: "pointer" }}>
+                <ChevronRight size={15} />
               </button>
             )}
-
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "15px", fontWeight: 800, color: "#f8fafc" }}>
-                NORA TITÁN UNIVERSAL
-              </span>
-              <span style={{
-                fontSize: "10px",
-                padding: "2px 8px",
-                borderRadius: "20px",
-                backgroundColor: activeMode === "tea" ? "rgba(14, 165, 233, 0.15)" : "rgba(99, 102, 241, 0.15)",
-                color: activeMode === "tea" ? "#38bdf8" : "#818cf8",
-                fontWeight: 700,
-                border: "1px solid currentColor"
-              }}>
-                {activeMode === "tea" ? "MODO TEA" : activeMode === "lazarillo" ? "LAZARILLO" : activeMode === "docente" ? "CÁTEDRA" : "EJECUTIVO"}
-              </span>
-            </div>
+            <span style={{ fontSize: "14px", fontWeight: 800, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>NORA TITÁN UNIVERSAL</span>
+            {autoTEAMode && (
+              <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", whiteSpace: "nowrap" }}>AUTO-TEA ACTIVO</span>
+            )}
           </div>
 
-          {/* Acciones de Cabecera */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            
-            {/* Botón Abrir Cámara Titán */}
+          <div style={{ display: "flex", alignItems: "center", gap: "7px", flexShrink: 0 }}>
             <button
-              onClick={() => (isCameraOpen ? stopCamera() : startCamera(facingMode))}
-              style={{
-                backgroundColor: isCameraOpen ? "#dc2626" : "rgba(56, 189, 248, 0.12)",
-                color: isCameraOpen ? "#fff" : "#38bdf8",
-                border: "1px solid rgba(56, 189, 248, 0.3)",
-                borderRadius: "10px",
-                padding: "7px 14px",
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px"
-              }}
+              onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
+              style={{ backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`, color: isCameraOpen ? "#fff" : mc.badgeText, border: `1px solid ${mc.accent}44`, borderRadius: "9px", padding: "6px 12px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" }}
             >
-              <Camera size={14} />
-              <span>{isCameraOpen ? "Cerrar Visor" : "Cámara IA"}</span>
+              <Camera size={13} /><span style={{ display: "none" }}>{isCameraOpen ? "Cerrar" : "Cámara"}</span>
+              <span>{isCameraOpen ? "✕ Cámara" : "📷 Cámara IA"}</span>
             </button>
-
-            {/* Botón Llamada PTT */}
             <button
               onClick={() => setIsCallModalOpen(true)}
-              style={{
-                backgroundColor: "#238636",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "10px",
-                padding: "7px 14px",
-                fontSize: "12px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                boxShadow: "0 0 12px rgba(35, 134, 54, 0.3)"
-              }}
+              style={{ backgroundColor: "#238636", color: "#fff", border: "none", borderRadius: "9px", padding: "6px 12px", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", boxShadow: "0 0 10px rgba(35,134,54,0.3)", whiteSpace: "nowrap" }}
             >
-              <PhoneCall size={14} />
-              <span>Llamada PTT</span>
+              <PhoneCall size={13} /><span>PTT</span>
             </button>
           </div>
         </header>
 
-        {/* ========================================================= */}
-        {/* 2.1 CÁMARA IA Y MULTIMEDIA: ÁREA CENTRAL SUPERIOR          */}
-        {/* ========================================================= */}
+        {/* ─── Panel Pictogramas TEA ─── */}
+        {showPictograms && (activeMode === "tea" || autoTEAMode) && (
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(14,165,233,0.2)", backgroundColor: "rgba(14,165,233,0.06)", flexShrink: 0 }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#38bdf8", marginBottom: "8px", letterSpacing: "0.5px" }}>🧩 PICTOGRAMAS TEA — Toca para comunicarte</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {Object.entries(TEA_PICTOGRAMS).map(([key, { emoji, label }]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setInputMessage(prev => prev ? `${prev} ${key}` : key);
+                    textareaRef.current?.focus();
+                  }}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", backgroundColor: "#1e293b", border: "1px solid rgba(56,189,248,0.2)", borderRadius: "10px", padding: "8px 10px", cursor: "pointer", minWidth: "52px", transition: "all 0.15s" }}
+                  aria-label={label}
+                  title={label}
+                >
+                  <span style={{ fontSize: "22px", lineHeight: 1 }}>{emoji}</span>
+                  <span style={{ fontSize: "9px", color: "#94a3b8", fontWeight: 600 }}>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Cámara Titán Multimodal ─── */}
         {isCameraOpen && (
-          <div style={{
-            padding: "16px 20px 0 20px",
-            backgroundColor: "rgba(0, 0, 0, 0.4)",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)"
-          }}>
-            <div style={{
-              maxWidth: "850px",
-              margin: "0 auto",
-              backgroundColor: "#0d1322",
-              borderRadius: "18px",
-              border: "1px solid rgba(56, 189, 248, 0.25)",
-              overflow: "hidden",
-              boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)"
-            }}>
-              {/* Header Cámara */}
-              <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 700, color: "#38bdf8" }}>
-                  <Sparkles size={15} />
-                  <span>VISIÓN ESPACIAL TITÁN EN VIVO</span>
+          <div style={{ padding: "12px 16px 0", flexShrink: 0 }}>
+            <div style={{ borderRadius: "16px", border: `1px solid ${mc.accent}44`, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", backgroundColor: "#0d1322" }}>
+              {/* Header cámara */}
+              <div style={{ padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "11px", fontWeight: 700, color: mc.badgeText }}>
+                  <Sparkles size={13} /><span>VISIÓN ESPACIAL TITÁN EN VIVO</span>
+                  {autoVisionActive && <span style={{ fontSize: "9px", padding: "2px 6px", backgroundColor: "#dc262633", color: "#f87171", borderRadius: "4px", animation: "pulse 1.5s infinite" }}>● LAZARILLO ACTIVO</span>}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <button
-                    onClick={toggleCameraFacing}
-                    title="Alternar cámara frontal/trasera"
-                    style={{ background: "rgba(255, 255, 255, 0.06)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}
-                  >
-                    <FlipHorizontal size={14} />
-                  </button>
-                  <button
-                    onClick={stopCamera}
-                    style={{ background: "rgba(255, 255, 255, 0.06)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}
-                  >
-                    <X size={14} />
-                  </button>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button onClick={() => { const f = facingMode === "user" ? "environment" : "user"; setFacingMode(f); startCamera(f); }} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}><FlipHorizontal size={13} /></button>
+                  <button onClick={stopCamera} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}><X size={13} /></button>
                 </div>
               </div>
 
-              {/* Viewport de Video */}
-              <div style={{ position: "relative", width: "100%", height: "260px", backgroundColor: "#020617" }}>
+              {/* Video viewport — correctamente montado */}
+              <div style={{ position: "relative", backgroundColor: "#000", height: "240px" }}>
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
                 <canvas ref={canvasRef} style={{ display: "none" }} />
 
-                {cameraAnalysisResult && (
-                  <div style={{
-                    position: "absolute",
-                    bottom: 0,
-                    insetInline: 0,
-                    backgroundColor: "rgba(13, 19, 34, 0.92)",
-                    backdropFilter: "blur(6px)",
-                    padding: "10px 16px",
-                    fontSize: "12px",
-                    lineHeight: 1.5,
-                    maxHeight: "90px",
-                    overflowY: "auto",
-                    borderTop: "1px solid rgba(56, 189, 248, 0.3)"
-                  }}>
-                    <strong style={{ color: "#38bdf8" }}>Nora: </strong>
-                    {cameraAnalysisResult}
+                {cameraAnalysis && (
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "rgba(9,13,22,0.92)", backdropFilter: "blur(6px)", padding: "9px 14px", fontSize: "12px", lineHeight: 1.5, maxHeight: "100px", overflowY: "auto", borderTop: `1px solid ${mc.accent}44` }}>
+                    <strong style={{ color: mc.badgeText }}>Nora: </strong>{cameraAnalysis}
                   </div>
                 )}
               </div>
 
-              {/* Controles de Cámara */}
-              <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#111827", gap: "8px", flexWrap: "wrap" }}>
-                <button
-                  onClick={handleAnalyzeCameraLive}
-                  disabled={cameraCapturing}
-                  style={{
-                    backgroundColor: "#2563eb",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "8px 14px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    cursor: cameraCapturing ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px"
-                  }}
-                >
-                  {cameraCapturing ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
-                  <span>{cameraCapturing ? "Analizando..." : "Escanear en Vivo"}</span>
+              {/* Controles cámara */}
+              <div style={{ padding: "9px 14px", backgroundColor: "#111827", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button onClick={() => analyzeFrame()} disabled={cameraCapturing} style={{ backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 13px", fontSize: "11px", fontWeight: 700, cursor: cameraCapturing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                  {cameraCapturing ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                  <span>{cameraCapturing ? "Analizando..." : "Escanear"}</span>
                 </button>
-
                 <button
-                  onClick={handleAttachSnapshotToChat}
-                  style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.08)",
-                    color: "#f8fafc",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "8px",
-                    padding: "8px 14px",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px"
-                  }}
+                  onClick={() => autoVisionActive ? stopAutoVision() : startAutoVision()}
+                  style={{ backgroundColor: autoVisionActive ? "#7f1d1d" : "#7c3aed", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 13px", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
                 >
-                  <ImageIcon size={14} />
-                  <span>Adjuntar Captura al Chat</span>
+                  <span>{autoVisionActive ? "⏹ Detener Lazarillo" : "👁 Lazarillo Auto"}</span>
+                </button>
+                <button onClick={attachSnapshotToChat} style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "#f8fafc", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "7px 13px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <ImageIcon size={12} /><span>Adjuntar al Chat</span>
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* FEEDBACK DRAG & DROP ZONA ACTIVA */}
-        {isDraggingFile && (
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 60,
-            backgroundColor: "rgba(2, 132, 199, 0.2)",
-            backdropFilter: "blur(6px)",
-            border: "2px dashed #38bdf8",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "12px"
-          }}>
-            <UploadCloud size={48} color="#38bdf8" />
-            <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>
-              Suelta tu imagen aquí para análisis multimodal
-            </div>
+        {/* ─── DRAG & DROP OVERLAY ─── */}
+        {isDragging && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 60, backgroundColor: `${mc.accent}22`, backdropFilter: "blur(6px)", border: `2px dashed ${mc.accent}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
+            <UploadCloud size={44} color={mc.badgeText} />
+            <div style={{ fontSize: "16px", fontWeight: 700, color: "#f8fafc" }}>Suelta tu imagen para análisis multimodal</div>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* LISTADO DE MENSAJES Y CHAT                                */}
-        {/* ========================================================= */}
-        <div style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "24px 20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "18px"
-        }}>
-          <div style={{ maxWidth: "850px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "18px" }}>
-            {messages.map((msg) => {
+        {/* ─── MENSAJES ─── */}
+        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ width: "100%", maxWidth: "820px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {messages.map(msg => {
               const isUser = msg.role === "user";
               return (
-                <div
-                  key={msg.id}
-                  style={{
-                    display: "flex",
-                    flexDirection: isUser ? "row-reverse" : "row",
-                    gap: "12px",
-                    alignItems: "flex-start"
-                  }}
-                >
-                  {/* Avatar */}
-                  <div style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "10px",
-                    backgroundColor: isUser ? "#2563eb" : activeMode === "tea" ? "#0284c7" : "#4f46e5",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)"
-                  }}>
-                    {isUser ? <User size={18} color="#fff" /> : <Bot size={18} color="#fff" />}
+                <div key={msg.id} style={{ display: "flex", flexDirection: isUser ? "row-reverse" : "row", gap: "10px", alignItems: "flex-start" }}>
+                  <div style={{ width: "34px", height: "34px", borderRadius: "9px", backgroundColor: isUser ? "#2563eb" : mc.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 2px 8px ${mc.accent}44` }}>
+                    {isUser ? <User size={16} color="#fff" /> : <Bot size={16} color="#fff" />}
                   </div>
 
-                  {/* Burbuja */}
-                  <div style={{
-                    maxWidth: "82%",
-                    backgroundColor: isUser 
-                      ? "rgba(37, 99, 235, 0.18)" 
-                      : activeMode === "tea"
-                      ? "rgba(14, 165, 233, 0.08)"
-                      : "rgba(15, 23, 42, 0.75)",
-                    border: isUser 
-                      ? "1px solid rgba(59, 130, 246, 0.35)" 
-                      : activeMode === "tea"
-                      ? "1px solid rgba(56, 189, 248, 0.25)"
-                      : "1px solid rgba(255, 255, 255, 0.08)",
-                    borderRadius: "16px",
-                    padding: "16px 18px",
-                    lineHeight: activeMode === "tea" ? 1.75 : 1.6,
-                    fontSize: activeMode === "tea" ? "14.5px" : "14px",
-                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)"
-                  }}>
-                    {/* Imagen adjunta si existe */}
+                  <div style={{ maxWidth: "82%", minWidth: 0, backgroundColor: isUser ? "rgba(37,99,235,0.15)" : "rgba(15,23,42,0.7)", border: isUser ? "1px solid rgba(59,130,246,0.3)" : `1px solid ${mc.border}`, borderRadius: "14px", padding: "14px 16px", lineHeight: (activeMode === "tea" || autoTEAMode) ? 1.8 : 1.6, fontSize: (activeMode === "tea" || autoTEAMode) ? "15px" : "13.5px", boxShadow: "0 3px 16px rgba(0,0,0,0.2)", wordBreak: "break-word" }}>
                     {msg.imageBase64 && (
-                      <div style={{ marginBottom: "12px" }}>
-                        <img 
-                          src={msg.imageBase64} 
-                          alt="Adjunto" 
-                          style={{ maxWidth: "100%", maxHeight: "280px", borderRadius: "10px", objectFit: "cover", border: "1px solid rgba(255, 255, 255, 0.12)" }} 
-                        />
+                      <div style={{ marginBottom: "10px" }}>
+                        <img src={msg.imageBase64} alt="Adjunto" style={{ maxWidth: "100%", maxHeight: "240px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} />
                       </div>
                     )}
-
-                    {/* Texto formateado */}
-                    <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    <div style={{ whiteSpace: "pre-wrap" }}>
                       {msg.content || (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#94a3b8" }}>
-                          <Loader2 size={14} className="animate-spin" /> Nora procesando con rigor de élite...
+                          <Loader2 size={13} className="animate-spin" /> Procesando con Nora Titán...
                         </span>
                       )}
                     </div>
 
-                    {/* Botones de Exportación Documental y Acciones */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", fontSize: "11px", color: "#64748b", flexWrap: "wrap", gap: "8px" }}>
-                      <span>{msg.timestamp}</span>
-
+                    {/* Footer: hora + acciones */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "10px", paddingTop: "7px", borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: "6px" }}>
+                      <span style={{ fontSize: "10px", color: "#475569" }}>{msg.timestamp}</span>
                       {!isUser && msg.content && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          
-                          {/* Exportar Word */}
-                          <button
-                            onClick={() => exportToWord("informe_nora_titan", "Reporte Institucional Nora Titán", msg.content)}
-                            title="Exportar a Microsoft Word (.doc)"
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              border: "1px solid rgba(255, 255, 255, 0.1)",
-                              color: "#94a3b8",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              fontSize: "11px"
-                            }}
-                          >
-                            <FileText size={12} color="#38bdf8" />
-                            <span>Word</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <button onClick={() => exportToWord("informe_nora", "Reporte Nora Titán", msg.content)} title="Exportar Word" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "5px", padding: "3px 7px", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", fontSize: "10px" }}>
+                            <FileText size={11} color="#38bdf8" /><span>Word</span>
                           </button>
-
-                          {/* Exportar PDF */}
-                          <button
-                            onClick={() => exportToPdf("Documento Ejecutivo Nora Titán", msg.content)}
-                            title="Imprimir / Exportar a PDF"
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              border: "1px solid rgba(255, 255, 255, 0.1)",
-                              color: "#94a3b8",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              fontSize: "11px"
-                            }}
-                          >
-                            <Printer size={12} color="#818cf8" />
-                            <span>PDF</span>
+                          <button onClick={() => exportToPdf("Reporte Nora Titán", msg.content)} title="Exportar PDF" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "5px", padding: "3px 7px", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", fontSize: "10px" }}>
+                            <Printer size={11} color="#818cf8" /><span>PDF</span>
                           </button>
-
-                          {/* Exportar PPTX */}
-                          <button
-                            onClick={() => exportToPptx("presentacion_nora_titan", "Presentación Nora Titán", msg.content)}
-                            title="Exportar Presentación Ejecutiva"
-                            style={{
-                              background: "rgba(255, 255, 255, 0.05)",
-                              border: "1px solid rgba(255, 255, 255, 0.1)",
-                              color: "#94a3b8",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              fontSize: "11px"
-                            }}
-                          >
-                            <Presentation size={12} color="#34d399" />
-                            <span>PPTX</span>
+                          <button onClick={() => exportToPptx("presentacion_nora", "Presentación Nora Titán", msg.content)} title="Exportar PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "5px", padding: "3px 7px", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", fontSize: "10px" }}>
+                            <Presentation size={11} color="#34d399" /><span>PPTX</span>
                           </button>
-
-                          {/* TTS / Voz */}
-                          <button
-                            onClick={() => speakText(msg.content, msg.id)}
-                            title="Escuchar audio"
-                            style={{
-                              background: "none",
-                              border: "none",
-                              color: isSpeaking && speakingMsgId === msg.id ? "#38bdf8" : "#94a3b8",
-                              cursor: "pointer",
-                              padding: "4px"
-                            }}
-                          >
-                            {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                          <button onClick={() => speakText(msg.content, msg.id)} title="Escuchar en voz" style={{ background: "none", border: "none", color: isSpeaking && speakingMsgId === msg.id ? mc.badgeText : "#64748b", cursor: "pointer", padding: "3px" }}>
+                            {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={13} /> : <Volume2 size={13} />}
                           </button>
-
-                          {/* Copiar */}
-                          <button
-                            onClick={() => copyToClipboard(msg.id, msg.content)}
-                            title="Copiar respuesta"
-                            style={{ background: "none", border: "none", color: copiedId === msg.id ? "#22c55e" : "#94a3b8", cursor: "pointer", padding: "4px" }}
-                          >
-                            {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                          <button onClick={() => copyToClipboard(msg.id, msg.content)} title="Copiar" style={{ background: "none", border: "none", color: copiedId === msg.id ? "#22c55e" : "#64748b", cursor: "pointer", padding: "3px" }}>
+                            {copiedId === msg.id ? <Check size={12} /> : <Copy size={12} />}
                           </button>
                         </div>
                       )}
@@ -1249,175 +821,75 @@ export default function NoraTitanUniversalPage() {
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* 3. CAJÓN DE CHAT INFERIOR PRO                             */}
-        {/* ========================================================= */}
-        <footer style={{
-          padding: "16px 20px 20px 20px",
-          backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.95)" : "rgba(9, 13, 22, 0.95)",
-          backdropFilter: "blur(16px)",
-          borderTop: "1px solid rgba(255, 255, 255, 0.08)"
-        }}>
-          <div style={{ maxWidth: "850px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "8px" }}>
-            
-            {/* Previsualización de Imagen Adjunta */}
+        {/* ─── FOOTER / INPUT PRO ─── */}
+        <footer style={{ padding: "12px 16px 16px", backgroundColor: `${mc.bg}f5`, backdropFilter: "blur(16px)", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <div style={{ maxWidth: "820px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+
+            {/* Preview imagen adjunta */}
             {attachedImage && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", backgroundColor: "#1e293b", padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.12)", width: "fit-content" }}>
-                <img src={attachedImage} alt="Preview" style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} />
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>Imagen lista para análisis multimodal</span>
-                <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}>
-                  <X size={14} />
-                </button>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "9px", backgroundColor: "#1e293b", padding: "5px 11px", borderRadius: "9px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
+                <img src={attachedImage} alt="Preview" style={{ width: "28px", height: "28px", borderRadius: "5px", objectFit: "cover" }} />
+                <span style={{ fontSize: "11px", color: "#94a3b8" }}>Imagen lista</span>
+                <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={13} /></button>
               </div>
             )}
 
-            {/* Input Box Flotante */}
-            <div style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: "8px",
-              backgroundColor: "rgba(30, 41, 59, 0.45)",
-              border: activeMode === "tea" ? "1px solid rgba(56, 189, 248, 0.35)" : "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: "20px",
-              padding: "8px 12px",
-              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.3)"
-            }}>
-              
-              {/* Botón Adjuntar Archivo / Foto */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                title="Adjuntar imagen o documento"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#94a3b8",
-                  padding: "8px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center"
-                }}
-              >
-                <ImageIcon size={19} />
+            {/* Input box flotante */}
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "7px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "18px", padding: "7px 10px", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
+              {/* Adjuntar */}
+              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", padding: "7px", cursor: "pointer", flexShrink: 0 }}>
+                <ImageIcon size={18} />
               </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => setAttachedImage(event.target?.result as string);
-                    reader.readAsDataURL(file);
-                  }
-                }}
-              />
+              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); }
+              }} />
 
-              {/* Botón Abrir Cámara Rápida */}
-              <button
-                onClick={() => (isCameraOpen ? stopCamera() : startCamera(facingMode))}
-                title="Abrir Cámara en Vivo"
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: isCameraOpen ? "#38bdf8" : "#94a3b8",
-                  padding: "8px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center"
-                }}
-              >
-                <Camera size={19} />
+              {/* Cámara rápida */}
+              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", padding: "7px", cursor: "pointer", flexShrink: 0 }}>
+                <Camera size={18} />
               </button>
 
-              {/* Textarea Inteligente con Manejo Limpio de Portapapeles (Ctrl+V) */}
+              {/* Textarea con paste corregido */}
               <textarea
                 ref={textareaRef}
                 value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
+                onChange={e => setInputMessage(e.target.value)}
                 onPaste={handlePaste}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
                 }}
                 rows={1}
                 placeholder={
-                  activeMode === "tea"
-                    ? "Escribe un mensaje claro o pega una imagen (Ctrl+V)..."
-                    : activeMode === "lazarillo"
-                    ? "Pregunta qué hay frente a ti..."
-                    : "Consulta a Nora Titán o solicita un documento en Word/PDF/PPTX..."
+                  activeMode === "tea" || autoTEAMode ? "Escribe o toca un pictograma..." :
+                  activeMode === "lazarillo" ? "Pregunta qué hay frente a ti..." :
+                  "Consulta a Nora Titán, pega imagen con Ctrl+V o solicita un documento..."
                 }
-                style={{
-                  flex: 1,
-                  background: "transparent",
-                  border: "none",
-                  outline: "none",
-                  color: "#f8fafc",
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                  padding: "6px 4px",
-                  resize: "none",
-                  maxHeight: "120px"
-                }}
+                aria-label="Mensaje para Nora Titán"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "13.5px", lineHeight: "20px", padding: "6px 4px", resize: "none", maxHeight: "110px", minHeight: "32px" }}
               />
 
-              {/* Botón Micrófono STT */}
-              <button
-                onClick={toggleListening}
-                title={isListening ? "Detener dictado" : "Hablar con Nora (STT)"}
-                style={{
-                  background: isListening ? "rgba(239, 68, 68, 0.2)" : "none",
-                  border: "none",
-                  color: isListening ? "#ef4444" : "#94a3b8",
-                  padding: "8px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center"
-                }}
-              >
-                {isListening ? <MicOff size={19} /> : <Mic size={19} />}
+              {/* STT Micrófono */}
+              <button onClick={toggleListening} title={isListening ? "Detener dictado" : "Hablar"} aria-label="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#64748b", padding: "7px", borderRadius: "9px", cursor: "pointer", flexShrink: 0 }}>
+                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
               </button>
 
-              {/* Botón Enviar */}
+              {/* Enviar */}
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
-                style={{
-                  backgroundColor: activeMode === "tea" ? "#0284c7" : "#2563eb",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "12px",
-                  width: "38px",
-                  height: "38px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer",
-                  opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.5 : 1,
-                  boxShadow: "0 2px 10px rgba(37, 99, 235, 0.4)",
-                  transition: "all 0.15s ease"
-                }}
+                aria-label="Enviar mensaje"
+                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "12px", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 2px 10px ${mc.accent}55` }}
               >
-                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {isLoading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
               </button>
             </div>
           </div>
         </footer>
       </main>
 
-      {/* MODAL DE LLAMADA PTT REALTIME */}
-      <NoraRealtimeCallModal
-        isOpen={isCallModalOpen}
-        onClose={() => setIsCallModalOpen(false)}
-        sessionId={sessionId}
-      />
+      {/* ─── Modal Llamada PTT ─── */}
+      <NoraRealtimeCallModal isOpen={isCallModalOpen} onClose={() => setIsCallModalOpen(false)} sessionId={sessionId} />
     </div>
   );
 }
