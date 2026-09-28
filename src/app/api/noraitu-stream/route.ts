@@ -8,12 +8,18 @@ interface RequestPayload {
   userMessage?: string;
   imageBase64?: string | null;
   sessionId?: string;
+  mode?: "general" | "tea" | "lazarillo";
 }
 
 export async function POST(req: Request) {
   try {
     const body: RequestPayload = await req.json();
-    const { userMessage = "", imageBase64 = null, sessionId = `nora_${Date.now()}` } = body;
+    const { 
+      userMessage = "", 
+      imageBase64 = null, 
+      sessionId = `nora_${Date.now()}`,
+      mode = "general"
+    } = body;
 
     const trimmedMessage = userMessage.trim();
     if (!trimmedMessage && !imageBase64) {
@@ -23,7 +29,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const systemPrompt = `Eres Nora Itu, la superinteligencia y asistente agéntica de Ituzaingó, Corrientes. Hablas en español argentino cálido, directo y empático. Responde en 1 a 3 oraciones concisas y claras preparadas para síntesis de voz, sin tablas ni markdown denso.`;
+    let systemPrompt = `Eres Nora Titán Universal, la superinteligencia agéntica de Ituzaingó, Corrientes. Hablas en español argentino cálido, directo y empático. Responde en 1 a 3 oraciones concisas y claras preparadas para síntesis de voz, sin tablas ni markdown denso.`;
+
+    if (mode === "tea") {
+      systemPrompt = `Eres Nora Titán en Modo Inclusión TEA y Neurodivergencia. Hablas con tono pausado, claro, empático y predecible. Prohibidas metáforas confusas, sarcasmo o ambigüedades. Usa lenguaje literal, frases cortas y estructuras sencillas en pasos (1, 2, 3) para evitar sobrecarga sensorial.`;
+    } else if (mode === "lazarillo") {
+      systemPrompt = `Eres Nora Titán en Modo Lazarillo Visual para asistencia de personas no videntes o baja visión. Describe el espacio físico indicando referencias con esfera de reloj (ej: a tus 12 en punto, a tus 3 en punto). Advierte desniveles, puertas y obstáculos con máxima prioridad y concisión.`;
+    }
 
     const messages: Array<{ role: string; content: any }> = [
       { role: "system", content: systemPrompt }
@@ -31,12 +43,18 @@ export async function POST(req: Request) {
 
     if (imageBase64) {
       const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+      const defaultVisionPrompt = mode === "lazarillo" 
+        ? "Describe el camino indicando referencias de reloj y cualquier obstáculo inmediato."
+        : mode === "tea"
+        ? "Describe en palabras simples, calmas y ordenadas lo que se observa en esta imagen."
+        : "Describe con precisión espacial y contexto qué estás observando en esta toma.";
+
       messages.push({
         role: "user",
         content: [
           {
             type: "text",
-            text: trimmedMessage || "Describe con precisión espacial qué estás observando en esta toma."
+            text: trimmedMessage || defaultVisionPrompt
           },
           {
             type: "image_url",
@@ -60,7 +78,7 @@ export async function POST(req: Request) {
         messages,
         model: "openai",
         stream: true,
-        temperature: 0.35
+        temperature: mode === "tea" ? 0.2 : 0.35
       }),
       signal: AbortSignal.timeout(12000)
     });
@@ -120,7 +138,7 @@ export async function POST(req: Request) {
             if (accumulatedResponse.trim() || trimmedMessage) {
               await logToNeon({
                 sessionId,
-                userMessage: trimmedMessage || "[Imagen enviada]",
+                userMessage: trimmedMessage || (mode === "lazarillo" ? "[Lazarillo Visual]" : "[Cámara Titán]"),
                 assistantResponse: accumulatedResponse.trim(),
                 hasImage: Boolean(imageBase64)
               });
