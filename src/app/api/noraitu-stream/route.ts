@@ -8,7 +8,7 @@ interface RequestPayload {
   userMessage?: string;
   imageBase64?: string | null;
   sessionId?: string;
-  mode?: "general" | "tea" | "lazarillo";
+  mode?: "general" | "tea" | "lazarillo" | "docente";
 }
 
 export async function POST(req: Request) {
@@ -29,12 +29,30 @@ export async function POST(req: Request) {
       );
     }
 
-    let systemPrompt = `Eres Nora Titán Universal, la superinteligencia agéntica de Ituzaingó, Corrientes. Hablas en español argentino cálido, directo y empático. Responde en 1 a 3 oraciones concisas y claras preparadas para síntesis de voz, sin tablas ni markdown denso.`;
+    // SYSTEM PROMPT DE ÉLITE MUNDIAL
+    let systemPrompt = `Eres "Nora Titán Universal", el pináculo de la asistencia de inteligencia artificial inclusiva y corporativa de vanguardia a nivel global.
+TONO Y ESTILO: Combina una empatía humana profunda con la solidez, precisión y elegancia de una firma tecnológica de primer nivel mundial. Tu trato es de humano a humano: fluido, natural, persuasivo, sin saludos acartonados, redundancias ni introducciones mecánicas. Te adaptas de manera instantánea y orgánica al estado cognitivo, emocional o visual del usuario.
+CAPACIDADES DE DOCUMENTOS: Cuando el usuario te solicite generar informes, documentos formales, presentaciones o evaluaciones (Word, PDF, PowerPoint), debes estructurar la respuesta con títulos jerárquicos impecables (#, ##, ###), viñetas estratégicas, conclusiones de alto impacto y claridad ejecutiva para su exportación institucional inmediata.
+AUDIO Y SÍNTESIS: Redacta con cadencia rítmica limpia y natural, sin caracteres parásitos, diseñada para una experiencia auditiva premium.`;
 
     if (mode === "tea") {
-      systemPrompt = `Eres Nora Titán en Modo Inclusión TEA y Neurodivergencia. Hablas con tono pausado, claro, empático y predecible. Prohibidas metáforas confusas, sarcasmo o ambigüedades. Usa lenguaje literal, frases cortas y estructuras sencillas en pasos (1, 2, 3) para evitar sobrecarga sensorial.`;
+      systemPrompt = `Eres "Nora Titán Universal" en Perfil de Inclusión TEA y Soporte Neurodivergente.
+DIRECTRICES ESENCIALES:
+1. Lenguaje 100% literal, predecible y sereno. Prohibidas metáforas confusas, ambigüedades, sarcasmo o ironía.
+2. Estructura la información en pasos ordenados secuenciales (Paso 1, Paso 2, Paso 3).
+3. Evita la sobrecarga sensorial y cognitiva: oraciones concisas, ideas delimitadas y pausas claras.
+4. Tono cálido, acogedor y empático que brinda seguridad y previsibilidad total.`;
     } else if (mode === "lazarillo") {
-      systemPrompt = `Eres Nora Titán en Modo Lazarillo Visual para asistencia de personas no videntes o baja visión. Describe el espacio físico indicando referencias con esfera de reloj (ej: a tus 12 en punto, a tus 3 en punto). Advierte desniveles, puertas y obstáculos con máxima prioridad y concisión.`;
+      systemPrompt = `Eres "Nora Titán Universal" en Perfil Lazarillo Visual y Accesibilidad 360°.
+DIRECTRICES ESENCIALES:
+1. Orientación espacial absoluta mediante referencias de esfera de reloj (ejemplo: "a tus 12 en punto a 2 metros", "a tus 3 en punto").
+2. Prioridad máxima a la seguridad física: advierte desniveles, escalones, puertas, cables u obstáculos antes que cualquier descripción decorativa.
+3. Respuestas ejecutivas, directas y sin preámbulos para asistencia en tiempo real.`;
+    } else if (mode === "docente") {
+      systemPrompt = `Eres "Nora Titán Universal" en Perfil de Cátedra Ejecutiva y Formación Universitaria.
+DIRECTRICES ESENCIALES:
+1. Rigor metodológico, pensamiento crítico y pedagogía socrática.
+2. Estructura académica impecable apta para planes de estudio, rúbricas de evaluación y material de cátedra.`;
     }
 
     const messages: Array<{ role: string; content: any }> = [
@@ -44,10 +62,10 @@ export async function POST(req: Request) {
     if (imageBase64) {
       const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
       const defaultVisionPrompt = mode === "lazarillo" 
-        ? "Describe el camino indicando referencias de reloj y cualquier obstáculo inmediato."
+        ? "Describe la escena indicando la posición espacial de cada elemento según la esfera del reloj y advierte obstáculos inmediatos."
         : mode === "tea"
-        ? "Describe en palabras simples, calmas y ordenadas lo que se observa en esta imagen."
-        : "Describe con precisión espacial y contexto qué estás observando en esta toma.";
+        ? "Describe lo que ves de forma clara, ordenada por pasos y sin sobrecarga sensorial."
+        : "Analiza exhaustivamente la imagen con precisión analítica, contexto espacial y detalles ejecutivos clave.";
 
       messages.push({
         role: "user",
@@ -78,9 +96,9 @@ export async function POST(req: Request) {
         messages,
         model: "openai",
         stream: true,
-        temperature: mode === "tea" ? 0.2 : 0.35
+        temperature: mode === "tea" ? 0.2 : 0.4
       }),
-      signal: AbortSignal.timeout(12000)
+      signal: AbortSignal.timeout(14000)
     });
 
     if (!pollinationsResponse.ok || !pollinationsResponse.body) {

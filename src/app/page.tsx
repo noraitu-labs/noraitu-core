@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Sparkles, 
   Send, 
+  Plus, 
   Trash2, 
   Copy, 
   Check, 
@@ -25,90 +26,120 @@ import {
   PhoneCall,
   Loader2,
   RefreshCw,
-  Layers
+  FileText,
+  Printer,
+  Presentation,
+  Sliders,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  ShieldCheck,
+  UploadCloud,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import NoraRealtimeCallModal from "../components/NoraRealtimeCallModal";
+import { exportToWord, exportToPdf, exportToPptx } from "../lib/exportUtils";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   imageBase64?: string | null;
-  mode?: "general" | "tea" | "lazarillo";
+  mode?: "general" | "tea" | "lazarillo" | "docente";
   timestamp: string;
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  date: string;
+}
+
 export default function NoraTitanUniversalPage() {
-  // Estados de Chat y Sesión
+  // ==========================================
+  // ESTADOS DE SESIÓN Y CHAT
+  // ==========================================
   const [sessionId, setSessionId] = useState<string>("");
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState<"general" | "tea" | "lazarillo">("general");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Estados de Imagen Adjunta
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  // Perfil de Asistencia: General, TEA, Lazarillo, Docente
+  const [activeMode, setActiveMode] = useState<"general" | "tea" | "lazarillo" | "docente">("general");
 
-  // Estados de Conectividad Offline
+  // Barra Lateral PWA
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Conectividad Offline / Neon
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
-  // Estados de Audio / TTS
-  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
-
-  // Estados de Dictado por Voz (STT)
-  const [isListening, setIsListening] = useState<boolean>(false);
-  const recognitionRef = useRef<any>(null);
-
-  // Estados de Modal Realtime Call
-  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-
-  // Estados de Cámara Multimodal Titán
-  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  // ==========================================
+  // ESTADOS MULTIMEDIA Y CÁMARA TITÁN
+  // ==========================================
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [cameraCapturing, setCameraCapturing] = useState<boolean>(false);
   const [cameraAnalysisResult, setCameraAnalysisResult] = useState<string>("");
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
+  // ==========================================
+  // ESTADOS DE VOZ (TTS / STT)
+  // ==========================================
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+
+  // ==========================================
+  // REFERENCIAS DOM
+  // ==========================================
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recognitionRef = useRef<any>(null);
 
-  // 1. Inicialización de Sesión, Storage Offline y Escucha de Conectividad
+  // ==========================================
+  // 1. INICIALIZACIÓN Y GESTIÓN DE PERSISTENCIA
+  // ==========================================
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Conectividad
+    // Conectividad reactiva
     setIsOnline(navigator.onLine);
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // ID de Sesión
-    const storedSession = localStorage.getItem("noraitu_session_id") || `nora_${Date.now()}`;
-    setSessionId(storedSession);
-    localStorage.setItem("noraitu_session_id", storedSession);
-
-    // Mensajes guardados offline
-    const saved = localStorage.getItem(`noraitu_history_${storedSession}`);
-    if (saved) {
-      try {
-        setMessages(JSON.parse(saved));
-      } catch {}
-    } else {
-      setMessages([
-        {
-          id: "welcome_1",
-          role: "assistant",
-          content: "¡Hola! Soy Nora Titán Universal, la superinteligencia agéntica de Ituzaingó. Estoy lista para asistirte con chat de alta velocidad, análisis visual con tu cámara y modo de inclusión TEA. ¿En qué te puedo ayudar hoy?",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          mode: "general"
-        }
-      ]);
+    // Ajuste responsive sidebar
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
     }
+
+    // Carga de sesiones anteriores
+    const rawSessions = localStorage.getItem("noraitu_saved_sessions");
+    let loadedSessions: ChatSession[] = [];
+    if (rawSessions) {
+      try {
+        loadedSessions = JSON.parse(rawSessions);
+        setSessions(loadedSessions);
+      } catch {}
+    }
+
+    // Inicializar sesión actual
+    const currentSid = localStorage.getItem("noraitu_session_id") || `nora_${Date.now()}`;
+    setSessionId(currentSid);
+    localStorage.setItem("noraitu_session_id", currentSid);
+
+    // Cargar historial de la sesión activa
+    loadSessionMessages(currentSid);
 
     // Inicializar Web Speech Recognition nativo
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -126,13 +157,8 @@ export default function NoraTitanUniversalPage() {
         setInputMessage(transcript);
       };
 
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = () => setIsListening(false);
 
       recognitionRef.current = recognition;
     }
@@ -146,14 +172,73 @@ export default function NoraTitanUniversalPage() {
     };
   }, []);
 
-  // Guardar en Storage al actualizar mensajes
+  const loadSessionMessages = (sid: string) => {
+    const saved = localStorage.getItem(`noraitu_history_${sid}`);
+    if (saved) {
+      try {
+        setMessages(JSON.parse(saved));
+        return;
+      } catch {}
+    }
+    // Mensaje de bienvenida inicial
+    setMessages([
+      {
+        id: "welcome_titan",
+        role: "assistant",
+        content: `Soy **Nora Titán Universal**, el pináculo de la asistencia agéntica inclusiva y corporativa de vanguardia.\n\nEstoy preparada para brindarte:\n* **Análisis Multimodal de Élite:** Visión espacial con tu cámara y análisis de documentos.\n* **Inclusión Cognitiva TEA:** Comunicación clara, predecible y baja sobrecarga sensorial.\n* **Generación y Exportación Documental:** Informes ejecutivos en Word (.doc), PDF y Presentaciones PPTX.\n* **Persistencia Serverless:** Registrada en tiempo real sobre Neon PostgreSQL.\n\n¿Qué desafío estratégico o consulta abordamos hoy?`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        mode: activeMode
+      }
+    ]);
+  };
+
+  // Guardar mensajes localmente en cada cambio
   useEffect(() => {
     if (typeof window === "undefined" || !sessionId) return;
     localStorage.setItem(`noraitu_history_${sessionId}`, JSON.stringify(messages));
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sessionId]);
 
-  // Manejo de Cámara Multimodal Titán
+  // ==========================================
+  // GESTIÓN DE SESIONES Y CREACIÓN RÁPIDA
+  // ==========================================
+  const handleNewSession = () => {
+    const newSid = `nora_${Date.now()}`;
+    const newSessionItem: ChatSession = {
+      id: newSid,
+      title: "Nueva Consulta Titán",
+      date: new Date().toLocaleDateString("es-AR")
+    };
+    const updated = [newSessionItem, ...sessions.slice(0, 14)];
+    setSessions(updated);
+    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    setSessionId(newSid);
+    localStorage.setItem("noraitu_session_id", newSid);
+    loadSessionMessages(newSid);
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const handleSelectSession = (sid: string) => {
+    setSessionId(sid);
+    localStorage.setItem("noraitu_session_id", sid);
+    loadSessionMessages(sid);
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const handleDeleteSession = (sid: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = sessions.filter((s) => s.id !== sid);
+    setSessions(updated);
+    localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    localStorage.removeItem(`noraitu_history_${sid}`);
+    if (sessionId === sid) {
+      handleNewSession();
+    }
+  };
+
+  // ==========================================
+  // 2. CÁMARA MULTIMODAL TITÁN Y DRAG & DROP
+  // ==========================================
   const startCamera = async (mode: "user" | "environment") => {
     try {
       if (cameraStream) {
@@ -170,7 +255,7 @@ export default function NoraTitanUniversalPage() {
       setIsCameraOpen(true);
       setCameraAnalysisResult("");
     } catch (err) {
-      alert("No se pudo acceder a la cámara. Por favor autoriza los permisos de video.");
+      alert("No se pudo inicializar la cámara. Por favor autoriza los permisos de video en el navegador.");
     }
   };
 
@@ -197,36 +282,35 @@ export default function NoraTitanUniversalPage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.75);
+    return canvas.toDataURL("image/jpeg", 0.8);
   };
 
-  // Capturar y analizar en vivo dentro del visor de cámara
   const handleAnalyzeCameraLive = async () => {
     const base64 = captureFrameFromCamera();
     if (!base64) return;
 
     setCameraCapturing(true);
-    setCameraAnalysisResult("Analizando fotograma en vivo con Nora Titán...");
+    setCameraAnalysisResult("Nora Titán analizando fotograma en tiempo real...");
 
-    const userMsg = activeMode === "lazarillo"
-      ? "Lazarillo Visual: Describe el espacio con esfera de reloj y advierte desniveles u obstáculos."
+    const userPrompt = activeMode === "lazarillo"
+      ? "Lazarillo Visual: Describe la escena con referencias de reloj y advierte desniveles u obstáculos."
       : activeMode === "tea"
-      ? "Modo TEA: Describe en palabras sencillas, ordenadas y sin sobrecarga lo que ves en la toma."
-      : "Describe detalladamente lo que observas en esta toma espacial.";
+      ? "Inclusión TEA: Describe con lenguaje literal, claro y ordenado por pasos lo que observas."
+      : "Describe detalladamente la imagen con precisión analítica y contexto espacial.";
 
     try {
       const response = await fetch("/api/noraitu-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userMessage: userMsg,
+          userMessage: userPrompt,
           imageBase64: base64,
           sessionId,
           mode: activeMode
         })
       });
 
-      if (!response.ok || !response.body) throw new Error("Error en el stream");
+      if (!response.ok || !response.body) throw new Error("Fallo en el flujo de análisis visual");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -252,19 +336,17 @@ export default function NoraTitanUniversalPage() {
         }
       }
 
-      // Reproducir por voz el análisis
       if (accumulated) {
         speakText(accumulated);
       }
     } catch (err: any) {
-      setCameraAnalysisResult("⚠️ Error al analizar la imagen: " + (err?.message || "Intenta nuevamente"));
+      setCameraAnalysisResult("⚠️ Error en análisis: " + (err?.message || "Intenta nuevamente"));
     } finally {
       setCameraCapturing(false);
     }
   };
 
-  // Capturar fotograma para enviarlo al chat central
-  const handleUsePhotoInChat = () => {
+  const handleAttachSnapshotToChat = () => {
     const base64 = captureFrameFromCamera();
     if (base64) {
       setAttachedImage(base64);
@@ -272,31 +354,97 @@ export default function NoraTitanUniversalPage() {
     }
   };
 
-  // Carga de archivo de imagen manual
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setAttachedImage(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  // Drag & Drop de Imágenes
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingFile(true);
   };
 
-  // Manejo de Síntesis de Voz (TTS)
+  const handleDragLeave = () => {
+    setIsDraggingFile(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    const files = e.dataTransfer.files;
+    if (files && files[0] && files[0].type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachedImage(event.target?.result as string);
+      };
+      reader.readAsDataURL(files[0]);
+    }
+  };
+
+  // ==========================================
+  // 3. CORRECCIÓN DEL PORTAPAPELES (CTRL+V)
+  // ==========================================
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              setAttachedImage(event.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      }
+    }
+
+    // Inserción limpia de texto plano evitando caracteres parásitos 'v'
+    const pastedText = e.clipboardData?.getData("text/plain");
+    if (pastedText) {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentVal = textarea.value;
+      const newVal = currentVal.substring(0, start) + pastedText + currentVal.substring(end);
+      setInputMessage(newVal);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
+      }, 0);
+    }
+  };
+
+  // ==========================================
+  // 4. VOZ, DICTADO Y TTS ADAPTATIVO
+  // ==========================================
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("El reconocimiento de voz no está disponible en este navegador.");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
   const speakText = (text: string, msgId?: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
     window.speechSynthesis.cancel();
+
     if (isSpeaking && speakingMsgId === msgId) {
       setIsSpeaking(false);
       setSpeakingMsgId(null);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const clean = text.replace(/[*_#`>-]/g, "").trim();
+    const utterance = new SpeechSynthesisUtterance(clean);
     utterance.lang = "es-AR";
-    // Si estamos en modo TEA, usamos ritmo más pausado y tono suave
     utterance.rate = activeMode === "tea" ? 0.88 : 0.98;
     utterance.pitch = activeMode === "tea" ? 0.95 : 1.0;
 
@@ -318,22 +466,9 @@ export default function NoraTitanUniversalPage() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Manejo de STT (Dictado)
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert("El reconocimiento de voz no está soportado en este navegador.");
-      return;
-    }
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current.start();
-      setIsListening(true);
-    }
-  };
-
-  // Envío de Mensaje al Chat Central
+  // ==========================================
+  // 5. ENVÍO DE MENSAJES CON STREAMING PRO
+  // ==========================================
   const handleSendMessage = async () => {
     const trimmed = inputMessage.trim();
     if ((!trimmed && !attachedImage) || isLoading) return;
@@ -350,6 +485,14 @@ export default function NoraTitanUniversalPage() {
       mode: activeMode,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     };
+
+    // Actualizar título de la sesión si es el primer mensaje
+    if (messages.length <= 1) {
+      const titleCandidate = trimmed.length > 25 ? trimmed.substring(0, 25) + "..." : trimmed || "Consulta Visual";
+      const updated = sessions.map((s) => (s.id === sessionId ? { ...s, title: titleCandidate } : s));
+      setSessions(updated);
+      localStorage.setItem("noraitu_saved_sessions", JSON.stringify(updated));
+    }
 
     setMessages((prev) => [...prev, newMsg]);
     setInputMessage("");
@@ -380,7 +523,7 @@ export default function NoraTitanUniversalPage() {
         })
       });
 
-      if (!response.ok || !response.body) throw new Error("Error al conectar con Nora");
+      if (!response.ok || !response.body) throw new Error("Fallo de comunicación con Nora Titán");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -409,7 +552,6 @@ export default function NoraTitanUniversalPage() {
         }
       }
 
-      // Si es modo TEA o Lazarillo, reproducir automáticamente en voz amigable
       if (fullAssistantText && (activeMode === "tea" || activeMode === "lazarillo")) {
         speakText(fullAssistantText, assistantMsgId);
       }
@@ -417,29 +559,12 @@ export default function NoraTitanUniversalPage() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsgId
-            ? { ...m, content: "⚠️ No pude procesar tu mensaje. " + (err?.message || "Revisa tu conexión.") }
+            ? { ...m, content: "⚠️ No se pudo procesar la solicitud: " + (err?.message || "Verifica tu conexión a internet.") }
             : m
         )
       );
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleClearHistory = () => {
-    if (confirm("¿Deseas reiniciar la conversación de Nora Titán?")) {
-      const newSid = `nora_${Date.now()}`;
-      setSessionId(newSid);
-      localStorage.setItem("noraitu_session_id", newSid);
-      setMessages([
-        {
-          id: "welcome_reset",
-          role: "assistant",
-          content: "Conversación reiniciada. ¿En qué puedo asistirte ahora?",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          mode: activeMode
-        }
-      ]);
     }
   };
 
@@ -450,145 +575,334 @@ export default function NoraTitanUniversalPage() {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      backgroundColor: activeMode === "tea" ? "#07111e" : "#080c14",
-      color: "#f0f6fc",
-      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-    }}>
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        display: "flex",
+        height: "100vh",
+        width: "100vw",
+        overflow: "hidden",
+        backgroundColor: activeMode === "tea" ? "#07111e" : "#090d16",
+        color: "#f0f6fc",
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+      }}
+    >
 
-      {/* HEADER DE CONTROL PRINCIPAL */}
-      <header style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.92)" : "rgba(8, 12, 20, 0.92)",
-        backdropFilter: "blur(12px)",
-        borderBottom: activeMode === "tea" ? "1px solid rgba(56, 189, 248, 0.2)" : "1px solid rgba(255, 255, 255, 0.08)",
-        padding: "12px 20px"
+      {/* ========================================================= */}
+      {/* 1. BARRA LATERAL PWA: DISEÑO EJECUTIVO SLATE/ZINC 900     */}
+      {/* ========================================================= */}
+      <aside style={{
+        width: sidebarOpen ? "280px" : "0px",
+        minWidth: sidebarOpen ? "280px" : "0px",
+        backgroundColor: "#0d1322",
+        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
+        display: "flex",
+        flexDirection: "column",
+        transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+        overflow: "hidden",
+        zIndex: 40
       }}>
-        <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-          
-          {/* Logo y Badges */}
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* Header Lateral */}
+        <div style={{ padding: "18px 16px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{
-              width: "38px",
-              height: "38px",
-              borderRadius: "12px",
+              width: "36px",
+              height: "36px",
+              borderRadius: "10px",
               background: activeMode === "tea" 
-                ? "linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%)" 
-                : "linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)",
+                ? "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)" 
+                : "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 0 20px rgba(59, 130, 246, 0.3)"
+              boxShadow: "0 4px 15px rgba(59, 130, 246, 0.35)"
             }}>
-              {activeMode === "tea" ? <Puzzle size={20} color="#ffffff" /> : <Bot size={20} color="#ffffff" />}
+              <Bot size={20} color="#fff" />
             </div>
-
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 800, letterSpacing: "-0.5px" }}>
-                  NORA TITÁN UNIVERSAL
-                </span>
-                <span style={{
-                  fontSize: "10px",
-                  padding: "2px 8px",
-                  borderRadius: "20px",
-                  backgroundColor: activeMode === "tea" ? "rgba(56, 189, 248, 0.15)" : "rgba(139, 92, 246, 0.15)",
-                  color: activeMode === "tea" ? "#38bdf8" : "#a78bfa",
-                  fontWeight: 700,
-                  border: "1px solid currentColor"
-                }}>
-                  {activeMode === "tea" ? "MODO TEA" : activeMode === "lazarillo" ? "LAZARILLO" : "CORE V3"}
-                </span>
+              <div style={{ fontSize: "14px", fontWeight: 800, letterSpacing: "-0.3px", color: "#f8fafc" }}>
+                NORA TITÁN
               </div>
-              <div style={{ fontSize: "11px", color: "#8b949e", display: "flex", alignItems: "center", gap: "12px", marginTop: "2px" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: isOnline ? "#3fb950" : "#d29922" }}></span>
-                  {isOnline ? "Neon Online" : "Modo Offline Local"}
-                </span>
-                <span>•</span>
-                <span>Multimodal + Voz PTT</span>
+              <div style={{ fontSize: "10px", fontWeight: 700, color: "#38bdf8", letterSpacing: "0.5px" }}>
+                ÉLITE GLOBAL
               </div>
             </div>
           </div>
 
-          {/* Selector de Modo Adaptativo y Acciones Rápidas */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            
-            {/* Botón Selector de Modos */}
-            <div style={{
-              display: "inline-flex",
-              backgroundColor: "rgba(255, 255, 255, 0.05)",
-              borderRadius: "10px",
-              padding: "3px",
-              border: "1px solid rgba(255, 255, 255, 0.1)"
-            }}>
-              <button
-                onClick={() => setActiveMode("general")}
-                style={{
-                  border: "none",
-                  backgroundColor: activeMode === "general" ? "#238636" : "transparent",
-                  color: activeMode === "general" ? "#ffffff" : "#8b949e",
-                  padding: "6px 12px",
-                  borderRadius: "7px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px"
-                }}
-              >
-                <Zap size={13} />
-                <span>Titán</span>
-              </button>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "4px" }}
+          >
+            <ChevronLeft size={18} />
+          </button>
+        </div>
 
-              <button
-                onClick={() => setActiveMode("tea")}
-                style={{
-                  border: "none",
-                  backgroundColor: activeMode === "tea" ? "#0284c7" : "transparent",
-                  color: activeMode === "tea" ? "#ffffff" : "#8b949e",
-                  padding: "6px 12px",
-                  borderRadius: "7px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px"
-                }}
-              >
-                <Puzzle size={13} />
-                <span>Inclusión TEA</span>
-              </button>
+        {/* Botón Nueva Consulta */}
+        <div style={{ padding: "14px 16px" }}>
+          <button
+            onClick={handleNewSession}
+            style={{
+              width: "100%",
+              backgroundColor: "#1e293b",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              color: "#f8fafc",
+              borderRadius: "12px",
+              padding: "10px 14px",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <Plus size={16} color="#38bdf8" />
+            <span>Nueva Consulta</span>
+          </button>
+        </div>
 
-              <button
-                onClick={() => setActiveMode("lazarillo")}
-                style={{
-                  border: "none",
-                  backgroundColor: activeMode === "lazarillo" ? "#7c3aed" : "transparent",
-                  color: activeMode === "lazarillo" ? "#ffffff" : "#8b949e",
-                  padding: "6px 12px",
-                  borderRadius: "7px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px"
-                }}
-              >
-                <Eye size={13} />
-                <span>Lazarillo</span>
-              </button>
+        {/* Perfiles de Accesibilidad y Modo */}
+        <div style={{ padding: "0 16px 12px 16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+            Perfiles Cognitivos & Visión
+          </div>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <button
+              onClick={() => setActiveMode("general")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "8px 12px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: activeMode === "general" ? "rgba(37, 99, 235, 0.2)" : "transparent",
+                color: activeMode === "general" ? "#60a5fa" : "#94a3b8",
+                fontWeight: activeMode === "general" ? 700 : 500,
+                fontSize: "12px",
+                cursor: "pointer",
+                textAlign: "left"
+              }}
+            >
+              <Zap size={15} />
+              <span>Titán Ejecutivo / Global</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMode("tea")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "8px 12px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: activeMode === "tea" ? "rgba(14, 165, 233, 0.2)" : "transparent",
+                color: activeMode === "tea" ? "#38bdf8" : "#94a3b8",
+                fontWeight: activeMode === "tea" ? 700 : 500,
+                fontSize: "12px",
+                cursor: "pointer",
+                textAlign: "left"
+              }}
+            >
+              <Puzzle size={15} />
+              <span>Soporte Inclusión TEA</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMode("lazarillo")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "8px 12px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: activeMode === "lazarillo" ? "rgba(139, 92, 246, 0.2)" : "transparent",
+                color: activeMode === "lazarillo" ? "#a78bfa" : "#94a3b8",
+                fontWeight: activeMode === "lazarillo" ? 700 : 500,
+                fontSize: "12px",
+                cursor: "pointer",
+                textAlign: "left"
+              }}
+            >
+              <Eye size={15} />
+              <span>Lazarillo Visual 360°</span>
+            </button>
+
+            <button
+              onClick={() => setActiveMode("docente")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "8px 12px",
+                borderRadius: "10px",
+                border: "none",
+                backgroundColor: activeMode === "docente" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                color: activeMode === "docente" ? "#34d399" : "#94a3b8",
+                fontWeight: activeMode === "docente" ? 700 : 500,
+                fontSize: "12px",
+                cursor: "pointer",
+                textAlign: "left"
+              }}
+            >
+              <FileText size={15} />
+              <span>Cátedra Universitaria</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Historial de Sesiones Guardadas */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+            Historial de Consultas
+          </div>
+          {sessions.length === 0 ? (
+            <div style={{ fontSize: "12px", color: "#475569", padding: "8px 0" }}>Sin sesiones anteriores</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              {sessions.map((s) => (
+                <div
+                  key={s.id}
+                  onClick={() => handleSelectSession(s.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    backgroundColor: sessionId === s.id ? "rgba(255, 255, 255, 0.08)" : "transparent",
+                    color: sessionId === s.id ? "#f8fafc" : "#94a3b8",
+                    fontSize: "12px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "190px" }}>
+                    {s.title}
+                  </span>
+                  <button
+                    onClick={(e) => handleDeleteSession(s.id, e)}
+                    style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "2px" }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
             </div>
+          )}
+        </div>
 
-            {/* Botón Llamada Realtime PTT */}
+        {/* Footer Lateral: Estado Neon & Online */}
+        <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", backgroundColor: "rgba(0, 0, 0, 0.2)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
+              <Database size={13} color="#38bdf8" /> Neon PostgreSQL
+            </span>
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#22c55e" }}></span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
+              {isOnline ? <Wifi size={13} color="#22c55e" /> : <WifiOff size={13} color="#f59e0b" />}
+              {isOnline ? "Conexión Activa" : "Modo Offline Activo"}
+            </span>
+            <span style={{ fontSize: "10px", color: "#64748b" }}>PWA v3</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* ========================================================= */}
+      {/* 2. CONTENEDOR PRINCIPAL: CHAT, CÁMARA Y ACCIONES           */}
+      {/* ========================================================= */}
+      <main style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        position: "relative"
+      }}>
+
+        {/* Top Navbar */}
+        <header style={{
+          height: "56px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.9)" : "rgba(9, 13, 22, 0.9)",
+          backdropFilter: "blur(12px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 20px",
+          zIndex: 30
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                style={{
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  color: "#f8fafc",
+                  borderRadius: "8px",
+                  padding: "6px 8px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 800, color: "#f8fafc" }}>
+                NORA TITÁN UNIVERSAL
+              </span>
+              <span style={{
+                fontSize: "10px",
+                padding: "2px 8px",
+                borderRadius: "20px",
+                backgroundColor: activeMode === "tea" ? "rgba(14, 165, 233, 0.15)" : "rgba(99, 102, 241, 0.15)",
+                color: activeMode === "tea" ? "#38bdf8" : "#818cf8",
+                fontWeight: 700,
+                border: "1px solid currentColor"
+              }}>
+                {activeMode === "tea" ? "MODO TEA" : activeMode === "lazarillo" ? "LAZARILLO" : activeMode === "docente" ? "CÁTEDRA" : "EJECUTIVO"}
+              </span>
+            </div>
+          </div>
+
+          {/* Acciones de Cabecera */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            
+            {/* Botón Abrir Cámara Titán */}
+            <button
+              onClick={() => (isCameraOpen ? stopCamera() : startCamera(facingMode))}
+              style={{
+                backgroundColor: isCameraOpen ? "#dc2626" : "rgba(56, 189, 248, 0.12)",
+                color: isCameraOpen ? "#fff" : "#38bdf8",
+                border: "1px solid rgba(56, 189, 248, 0.3)",
+                borderRadius: "10px",
+                padding: "7px 14px",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              <Camera size={14} />
+              <span>{isCameraOpen ? "Cerrar Visor" : "Cámara IA"}</span>
+            </button>
+
+            {/* Botón Llamada PTT */}
             <button
               onClick={() => setIsCallModalOpen(true)}
               style={{
@@ -596,468 +910,509 @@ export default function NoraTitanUniversalPage() {
                 color: "#ffffff",
                 border: "none",
                 borderRadius: "10px",
-                padding: "8px 14px",
+                padding: "7px 14px",
                 fontSize: "12px",
                 fontWeight: 700,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                boxShadow: "0 0 15px rgba(35, 134, 54, 0.4)"
+                boxShadow: "0 0 12px rgba(35, 134, 54, 0.3)"
               }}
             >
               <PhoneCall size={14} />
               <span>Llamada PTT</span>
             </button>
-
-            {/* Reiniciar Chat */}
-            <button
-              onClick={handleClearHistory}
-              title="Reiniciar conversación"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.05)",
-                color: "#8b949e",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "10px",
-                padding: "8px 10px",
-                cursor: "pointer"
-              }}
-            >
-              <RefreshCw size={14} />
-            </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* BANNER INFORMATIVO EN MODO TEA */}
-      {activeMode === "tea" && (
-        <div style={{
-          backgroundColor: "rgba(14, 165, 233, 0.1)",
-          borderBottom: "1px solid rgba(56, 189, 248, 0.2)",
-          padding: "10px 20px",
-          fontSize: "13px",
-          color: "#7dd3fc",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "10px"
-        }}>
-          <Puzzle size={16} />
-          <span>
-            <strong>Modo Inclusión TEA Activo:</strong> Estructura ordenada en pasos secuenciales, lenguaje literal predecible y baja sobrecarga sensorial con voz pausada.
-          </span>
-        </div>
-      )}
-
-      {/* ÁREA DE MENSAJES Y CHAT */}
-      <div style={{
-        flex: 1,
-        maxWidth: "900px",
-        width: "100%",
-        margin: "0 auto",
-        padding: "24px 16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "20px",
-        boxSizing: "border-box"
-      }}>
-        {messages.map((msg) => {
-          const isUser = msg.role === "user";
-          return (
-            <div
-              key={msg.id}
-              style={{
-                display: "flex",
-                flexDirection: isUser ? "row-reverse" : "row",
-                gap: "12px",
-                alignItems: "flex-start"
-              }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: "34px",
-                height: "34px",
-                borderRadius: "10px",
-                backgroundColor: isUser ? "#1f6feb" : activeMode === "tea" ? "#0284c7" : "#8957e5",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0
-              }}>
-                {isUser ? <User size={16} color="#fff" /> : <Bot size={16} color="#fff" />}
+        {/* ========================================================= */}
+        {/* 2.1 CÁMARA IA Y MULTIMEDIA: ÁREA CENTRAL SUPERIOR          */}
+        {/* ========================================================= */}
+        {isCameraOpen && (
+          <div style={{
+            padding: "16px 20px 0 20px",
+            backgroundColor: "rgba(0, 0, 0, 0.4)",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)"
+          }}>
+            <div style={{
+              maxWidth: "850px",
+              margin: "0 auto",
+              backgroundColor: "#0d1322",
+              borderRadius: "18px",
+              border: "1px solid rgba(56, 189, 248, 0.25)",
+              overflow: "hidden",
+              boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)"
+            }}>
+              {/* Header Cámara */}
+              <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: 700, color: "#38bdf8" }}>
+                  <Sparkles size={15} />
+                  <span>VISIÓN ESPACIAL TITÁN EN VIVO</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    onClick={toggleCameraFacing}
+                    title="Alternar cámara frontal/trasera"
+                    style={{ background: "rgba(255, 255, 255, 0.06)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}
+                  >
+                    <FlipHorizontal size={14} />
+                  </button>
+                  <button
+                    onClick={stopCamera}
+                    style={{ background: "rgba(255, 255, 255, 0.06)", border: "none", color: "#fff", borderRadius: "6px", padding: "5px 8px", cursor: "pointer" }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
 
-              {/* Burbuja */}
-              <div style={{
-                maxWidth: "80%",
-                backgroundColor: isUser 
-                  ? "rgba(31, 111, 235, 0.15)" 
-                  : activeMode === "tea"
-                  ? "rgba(14, 165, 233, 0.08)"
-                  : "rgba(22, 27, 34, 0.8)",
-                border: isUser 
-                  ? "1px solid rgba(56, 139, 253, 0.3)" 
-                  : activeMode === "tea"
-                  ? "1px solid rgba(56, 189, 248, 0.25)"
-                  : "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "16px",
-                padding: "16px 18px",
-                lineHeight: 1.6,
-                boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)"
-              }}>
-                {/* Imagen adjunta en el mensaje si existe */}
-                {msg.imageBase64 && (
-                  <div style={{ marginBottom: "12px" }}>
-                    <img 
-                      src={msg.imageBase64} 
-                      alt="Captura analizada" 
-                      style={{ maxWidth: "100%", maxHeight: "260px", borderRadius: "10px", objectFit: "cover", border: "1px solid rgba(255, 255, 255, 0.1)" }} 
-                    />
+              {/* Viewport de Video */}
+              <div style={{ position: "relative", width: "100%", height: "260px", backgroundColor: "#020617" }}>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+                <canvas ref={canvasRef} style={{ display: "none" }} />
+
+                {cameraAnalysisResult && (
+                  <div style={{
+                    position: "absolute",
+                    bottom: 0,
+                    insetInline: 0,
+                    backgroundColor: "rgba(13, 19, 34, 0.92)",
+                    backdropFilter: "blur(6px)",
+                    padding: "10px 16px",
+                    fontSize: "12px",
+                    lineHeight: 1.5,
+                    maxHeight: "90px",
+                    overflowY: "auto",
+                    borderTop: "1px solid rgba(56, 189, 248, 0.3)"
+                  }}>
+                    <strong style={{ color: "#38bdf8" }}>Nora: </strong>
+                    {cameraAnalysisResult}
                   </div>
                 )}
-
-                {/* Contenido del Mensaje */}
-                <div style={{ fontSize: "14px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                  {msg.content || (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#8b949e" }}>
-                      <Loader2 size={14} className="animate-spin" /> Pensando...
-                    </span>
-                  )}
-                </div>
-
-                {/* Footer de la burbuja: hora y acciones */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "10px", fontSize: "11px", color: "#8b949e" }}>
-                  <span>{msg.timestamp}</span>
-
-                  {!isUser && msg.content && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <button
-                        onClick={() => speakText(msg.content, msg.id)}
-                        title="Escuchar respuesta"
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: isSpeaking && speakingMsgId === msg.id ? "#38bdf8" : "#8b949e",
-                          cursor: "pointer",
-                          padding: 0,
-                          display: "flex",
-                          alignItems: "center"
-                        }}
-                      >
-                        {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={15} /> : <Volume2 size={15} />}
-                      </button>
-
-                      <button
-                        onClick={() => copyToClipboard(msg.id, msg.content)}
-                        title="Copiar texto"
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: copiedId === msg.id ? "#3fb950" : "#8b949e",
-                          cursor: "pointer",
-                          padding: 0,
-                          display: "flex",
-                          alignItems: "center"
-                        }}
-                      >
-                        {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
-            </div>
-          );
-        })}
-        <div ref={chatEndRef} />
-      </div>
 
-      {/* MODAL O VISOR DE CÁMARA MULTIMODAL TITÁN */}
-      {isCameraOpen && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 100,
-          backgroundColor: "rgba(0, 0, 0, 0.88)",
-          backdropFilter: "blur(16px)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "20px"
-        }}>
-          <div style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: "680px",
-            backgroundColor: "#0d1117",
-            borderRadius: "20px",
-            border: "1px solid rgba(255, 255, 255, 0.15)",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            {/* Header del Visor */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Camera size={18} color="#38bdf8" />
-                <span style={{ fontSize: "14px", fontWeight: 700 }}>CÁMARA TITÁN MULTIMODAL</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {/* Controles de Cámara */}
+              <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#111827", gap: "8px", flexWrap: "wrap" }}>
                 <button
-                  onClick={toggleCameraFacing}
-                  title="Girar cámara"
-                  style={{ background: "rgba(255, 255, 255, 0.1)", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 10px", cursor: "pointer" }}
+                  onClick={handleAnalyzeCameraLive}
+                  disabled={cameraCapturing}
+                  style={{
+                    backgroundColor: "#2563eb",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "8px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: cameraCapturing ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
                 >
-                  <FlipHorizontal size={16} />
+                  {cameraCapturing ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                  <span>{cameraCapturing ? "Analizando..." : "Escanear en Vivo"}</span>
                 </button>
+
                 <button
-                  onClick={stopCamera}
-                  style={{ background: "rgba(255, 255, 255, 0.1)", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 10px", cursor: "pointer" }}
+                  onClick={handleAttachSnapshotToChat}
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.08)",
+                    color: "#f8fafc",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "8px",
+                    padding: "8px 14px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
                 >
-                  <X size={16} />
+                  <ImageIcon size={14} />
+                  <span>Adjuntar Captura al Chat</span>
                 </button>
               </div>
-            </div>
-
-            {/* Video Viewport */}
-            <div style={{ position: "relative", width: "100%", height: "360px", backgroundColor: "#000" }}>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-              <canvas ref={canvasRef} style={{ display: "none" }} />
-
-              {/* Overlay de Subtítulos y Análisis */}
-              {cameraAnalysisResult && (
-                <div style={{
-                  position: "absolute",
-                  bottom: 0,
-                  insetInline: 0,
-                  backgroundColor: "rgba(13, 17, 23, 0.9)",
-                  backdropFilter: "blur(8px)",
-                  padding: "12px 16px",
-                  fontSize: "13px",
-                  lineHeight: 1.5,
-                  maxHeight: "130px",
-                  overflowY: "auto",
-                  borderTop: "1px solid rgba(56, 189, 248, 0.3)"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#38bdf8", fontWeight: 700, marginBottom: "4px" }}>
-                    <Sparkles size={14} />
-                    <span>Nora Titán Vision:</span>
-                  </div>
-                  {cameraAnalysisResult}
-                </div>
-              )}
-            </div>
-
-            {/* Barra de Acciones de la Cámara */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", gap: "10px", flexWrap: "wrap", backgroundColor: "#161b22" }}>
-              <button
-                onClick={handleAnalyzeCameraLive}
-                disabled={cameraCapturing}
-                style={{
-                  backgroundColor: "#238636",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "10px 18px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  cursor: cameraCapturing ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                {cameraCapturing ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
-                <span>{cameraCapturing ? "Analizando..." : "Analizar en Vivo"}</span>
-              </button>
-
-              <button
-                onClick={handleUsePhotoInChat}
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.1)",
-                  color: "#fff",
-                  border: "1px solid rgba(255, 255, 255, 0.15)",
-                  borderRadius: "10px",
-                  padding: "10px 18px",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                <ImageIcon size={16} />
-                <span>Adjuntar a la Charla</span>
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* BARRA INFERIOR DE ENTRADA Y ACCIONES */}
-      <footer style={{
-        position: "sticky",
-        bottom: 0,
-        backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.95)" : "rgba(8, 12, 20, 0.95)",
-        backdropFilter: "blur(12px)",
-        borderTop: activeMode === "tea" ? "1px solid rgba(56, 189, 248, 0.2)" : "1px solid rgba(255, 255, 255, 0.08)",
-        padding: "14px 16px"
-      }}>
-        <div style={{ maxWidth: "900px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "10px" }}>
-          
-          {/* Vista previa de imagen adjunta antes de enviar */}
-          {attachedImage && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", backgroundColor: "#161b22", padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.1)", width: "fit-content" }}>
-              <img src={attachedImage} alt="Preview" style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} />
-              <span style={{ fontSize: "12px", color: "#8b949e" }}>Imagen lista para analizar</span>
-              <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f85149", cursor: "pointer", padding: 0 }}>
-                <X size={14} />
-              </button>
+        {/* FEEDBACK DRAG & DROP ZONA ACTIVA */}
+        {isDraggingFile && (
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 60,
+            backgroundColor: "rgba(2, 132, 199, 0.2)",
+            backdropFilter: "blur(6px)",
+            border: "2px dashed #38bdf8",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px"
+          }}>
+            <UploadCloud size={48} color="#38bdf8" />
+            <div style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>
+              Suelta tu imagen aquí para análisis multimodal
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Formulario y Controles */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {/* ========================================================= */}
+        {/* LISTADO DE MENSAJES Y CHAT                                */}
+        {/* ========================================================= */}
+        <div style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "24px 20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "18px"
+        }}>
+          <div style={{ maxWidth: "850px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "18px" }}>
+            {messages.map((msg) => {
+              const isUser = msg.role === "user";
+              return (
+                <div
+                  key={msg.id}
+                  style={{
+                    display: "flex",
+                    flexDirection: isUser ? "row-reverse" : "row",
+                    gap: "12px",
+                    alignItems: "flex-start"
+                  }}
+                >
+                  {/* Avatar */}
+                  <div style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "10px",
+                    backgroundColor: isUser ? "#2563eb" : activeMode === "tea" ? "#0284c7" : "#4f46e5",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)"
+                  }}>
+                    {isUser ? <User size={18} color="#fff" /> : <Bot size={18} color="#fff" />}
+                  </div>
+
+                  {/* Burbuja */}
+                  <div style={{
+                    maxWidth: "82%",
+                    backgroundColor: isUser 
+                      ? "rgba(37, 99, 235, 0.18)" 
+                      : activeMode === "tea"
+                      ? "rgba(14, 165, 233, 0.08)"
+                      : "rgba(15, 23, 42, 0.75)",
+                    border: isUser 
+                      ? "1px solid rgba(59, 130, 246, 0.35)" 
+                      : activeMode === "tea"
+                      ? "1px solid rgba(56, 189, 248, 0.25)"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "16px",
+                    padding: "16px 18px",
+                    lineHeight: activeMode === "tea" ? 1.75 : 1.6,
+                    fontSize: activeMode === "tea" ? "14.5px" : "14px",
+                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)"
+                  }}>
+                    {/* Imagen adjunta si existe */}
+                    {msg.imageBase64 && (
+                      <div style={{ marginBottom: "12px" }}>
+                        <img 
+                          src={msg.imageBase64} 
+                          alt="Adjunto" 
+                          style={{ maxWidth: "100%", maxHeight: "280px", borderRadius: "10px", objectFit: "cover", border: "1px solid rgba(255, 255, 255, 0.12)" }} 
+                        />
+                      </div>
+                    )}
+
+                    {/* Texto formateado */}
+                    <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {msg.content || (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "#94a3b8" }}>
+                          <Loader2 size={14} className="animate-spin" /> Nora procesando con rigor de élite...
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Botones de Exportación Documental y Acciones */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px", paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.06)", fontSize: "11px", color: "#64748b", flexWrap: "wrap", gap: "8px" }}>
+                      <span>{msg.timestamp}</span>
+
+                      {!isUser && msg.content && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          
+                          {/* Exportar Word */}
+                          <button
+                            onClick={() => exportToWord("informe_nora_titan", "Reporte Institucional Nora Titán", msg.content)}
+                            title="Exportar a Microsoft Word (.doc)"
+                            style={{
+                              background: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              color: "#94a3b8",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "11px"
+                            }}
+                          >
+                            <FileText size={12} color="#38bdf8" />
+                            <span>Word</span>
+                          </button>
+
+                          {/* Exportar PDF */}
+                          <button
+                            onClick={() => exportToPdf("Documento Ejecutivo Nora Titán", msg.content)}
+                            title="Imprimir / Exportar a PDF"
+                            style={{
+                              background: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              color: "#94a3b8",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "11px"
+                            }}
+                          >
+                            <Printer size={12} color="#818cf8" />
+                            <span>PDF</span>
+                          </button>
+
+                          {/* Exportar PPTX */}
+                          <button
+                            onClick={() => exportToPptx("presentacion_nora_titan", "Presentación Nora Titán", msg.content)}
+                            title="Exportar Presentación Ejecutiva"
+                            style={{
+                              background: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              color: "#94a3b8",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "11px"
+                            }}
+                          >
+                            <Presentation size={12} color="#34d399" />
+                            <span>PPTX</span>
+                          </button>
+
+                          {/* TTS / Voz */}
+                          <button
+                            onClick={() => speakText(msg.content, msg.id)}
+                            title="Escuchar audio"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: isSpeaking && speakingMsgId === msg.id ? "#38bdf8" : "#94a3b8",
+                              cursor: "pointer",
+                              padding: "4px"
+                            }}
+                          >
+                            {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                          </button>
+
+                          {/* Copiar */}
+                          <button
+                            onClick={() => copyToClipboard(msg.id, msg.content)}
+                            title="Copiar respuesta"
+                            style={{ background: "none", border: "none", color: copiedId === msg.id ? "#22c55e" : "#94a3b8", cursor: "pointer", padding: "4px" }}
+                          >
+                            {copiedId === msg.id ? <Check size={13} /> : <Copy size={13} />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* 3. CAJÓN DE CHAT INFERIOR PRO                             */}
+        {/* ========================================================= */}
+        <footer style={{
+          padding: "16px 20px 20px 20px",
+          backgroundColor: activeMode === "tea" ? "rgba(7, 17, 30, 0.95)" : "rgba(9, 13, 22, 0.95)",
+          backdropFilter: "blur(16px)",
+          borderTop: "1px solid rgba(255, 255, 255, 0.08)"
+        }}>
+          <div style={{ maxWidth: "850px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "8px" }}>
             
-            {/* Botón Cámara Titán */}
-            <button
-              onClick={() => startCamera(facingMode)}
-              title="Abrir Cámara Multimodal Titán"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                color: "#38bdf8",
-                borderRadius: "12px",
-                width: "44px",
-                height: "44px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
-            >
-              <Camera size={19} />
-            </button>
+            {/* Previsualización de Imagen Adjunta */}
+            {attachedImage && (
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", backgroundColor: "#1e293b", padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.12)", width: "fit-content" }}>
+                <img src={attachedImage} alt="Preview" style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }} />
+                <span style={{ fontSize: "12px", color: "#94a3b8" }}>Imagen lista para análisis multimodal</span>
+                <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
 
-            {/* Botón Subir Imagen */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              title="Cargar foto desde archivo"
-              style={{
-                backgroundColor: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                color: "#8b949e",
-                borderRadius: "12px",
-                width: "44px",
-                height: "44px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
-            >
-              <ImageIcon size={19} />
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={handleFileChange}
-            />
-
-            {/* Input de Texto Principal */}
+            {/* Input Box Flotante */}
             <div style={{
-              flex: 1,
               display: "flex",
-              alignItems: "center",
-              backgroundColor: "rgba(255, 255, 255, 0.04)",
-              border: activeMode === "tea" ? "1px solid rgba(56, 189, 248, 0.3)" : "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: "12px",
-              padding: "0 14px"
+              alignItems: "flex-end",
+              gap: "8px",
+              backgroundColor: "rgba(30, 41, 59, 0.45)",
+              border: activeMode === "tea" ? "1px solid rgba(56, 189, 248, 0.35)" : "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "20px",
+              padding: "8px 12px",
+              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.3)"
             }}>
+              
+              {/* Botón Adjuntar Archivo / Foto */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                title="Adjuntar imagen o documento"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#94a3b8",
+                  padding: "8px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                <ImageIcon size={19} />
+              </button>
               <input
-                type="text"
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => setAttachedImage(event.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+
+              {/* Botón Abrir Cámara Rápida */}
+              <button
+                onClick={() => (isCameraOpen ? stopCamera() : startCamera(facingMode))}
+                title="Abrir Cámara en Vivo"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: isCameraOpen ? "#38bdf8" : "#94a3b8",
+                  padding: "8px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                <Camera size={19} />
+              </button>
+
+              {/* Textarea Inteligente con Manejo Limpio de Portapapeles (Ctrl+V) */}
+              <textarea
+                ref={textareaRef}
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSendMessage();
                   }
                 }}
+                rows={1}
                 placeholder={
-                  activeMode === "tea" 
-                    ? "Escribe un mensaje claro y sencillo para Nora..." 
+                  activeMode === "tea"
+                    ? "Escribe un mensaje claro o pega una imagen (Ctrl+V)..."
                     : activeMode === "lazarillo"
-                    ? "Pregunta qué hay en el entorno..."
-                    : "Mensaje a Nora Titán o describe la imagen..."
+                    ? "Pregunta qué hay frente a ti..."
+                    : "Consulta a Nora Titán o solicita un documento en Word/PDF/PPTX..."
                 }
                 style={{
-                  width: "100%",
-                  height: "44px",
+                  flex: 1,
                   background: "transparent",
                   border: "none",
                   outline: "none",
-                  color: "#f0f6fc",
-                  fontSize: "14px"
+                  color: "#f8fafc",
+                  fontSize: "14px",
+                  lineHeight: "20px",
+                  padding: "6px 4px",
+                  resize: "none",
+                  maxHeight: "120px"
                 }}
               />
 
-              {/* Botón Micrófono Dictado */}
+              {/* Botón Micrófono STT */}
               <button
                 onClick={toggleListening}
-                title={isListening ? "Detener dictado" : "Hablar con micrófono"}
+                title={isListening ? "Detener dictado" : "Hablar con Nora (STT)"}
                 style={{
-                  background: "none",
+                  background: isListening ? "rgba(239, 68, 68, 0.2)" : "none",
                   border: "none",
-                  color: isListening ? "#f85149" : "#8b949e",
+                  color: isListening ? "#ef4444" : "#94a3b8",
+                  padding: "8px",
+                  borderRadius: "10px",
                   cursor: "pointer",
-                  padding: "6px",
                   display: "flex",
                   alignItems: "center"
                 }}
               >
-                {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                {isListening ? <MicOff size={19} /> : <Mic size={19} />}
+              </button>
+
+              {/* Botón Enviar */}
+              <button
+                onClick={handleSendMessage}
+                disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
+                style={{
+                  backgroundColor: activeMode === "tea" ? "#0284c7" : "#2563eb",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "12px",
+                  width: "38px",
+                  height: "38px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer",
+                  opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.5 : 1,
+                  boxShadow: "0 2px 10px rgba(37, 99, 235, 0.4)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-
-            {/* Botón Enviar */}
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
-              style={{
-                backgroundColor: activeMode === "tea" ? "#0284c7" : "#1f6feb",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "12px",
-                width: "44px",
-                height: "44px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer",
-                flexShrink: 0,
-                opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.5 : 1
-              }}
-            >
-              {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-            </button>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </main>
 
-      {/* MODAL DE LLAMADA PTT REALTIME NATIVA */}
+      {/* MODAL DE LLAMADA PTT REALTIME */}
       <NoraRealtimeCallModal
         isOpen={isCallModalOpen}
         onClose={() => setIsCallModalOpen(false)}
