@@ -12,7 +12,7 @@ import {
   ThumbsUp, ThumbsDown, Heart, CheckCircle2, XCircle, BookOpen,
   PenLine, Hash, Music2, Sun, CloudRain, Thermometer, Snowflake,
   Dog, Cat, Calculator, Globe2, FlaskConical, Atom, BarChart3,
-  Landmark, Palette, Dumbbell, Clock, Utensils, Bus, Star
+  Landmark, Palette, Dumbbell, Clock, Utensils, Bus, Star, Share2
 } from "lucide-react";
 import NoraRealtimeCallModal from "../components/NoraRealtimeCallModal";
 import { exportToWord, exportToPdf, exportToPptx } from "../lib/exportUtils";
@@ -775,14 +775,33 @@ export default function NoraTitanPage() {
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
-      if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }
+      // Liberar cualquier flujo previo de forma imperativa antes de pedir hardware nuevo
+      if ((window as any).currentStream) {
+        ((window as any).currentStream as MediaStream).getTracks().forEach((t: MediaStreamTrack) => { t.stop(); t.enabled = false; });
+        (window as any).currentStream = null;
+      }
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
+      }
+
+      // 1. Inicializar micrófono de forma independiente para blindar el VAD 2s
+      let audioStream: MediaStream | null = null;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        (window as any).currentStream = audioStream;
+      } catch {
+        // Si el audio falla, continuar con solo video — el VAD se degrada con gracia
+      }
+
+      // 2. Acoplar el flujo de video con facingMode dinámico al elemento <video>
+      const videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
       });
-      setCameraStream(stream);
+      setCameraStream(videoStream);
       setIsCameraOpen(true);
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = videoStream;
         videoRef.current.play();
       }
       // Pre-cargar modelo de detección de objetos en segundo plano
@@ -798,8 +817,13 @@ export default function NoraTitanPage() {
   }, [cameraStream]);
 
   const stopCamera = useCallback(() => {
+    // Liberar window.currentStream de forma imperativa para que el SO libere micrófono/altavoz
+    if ((window as any).currentStream) {
+      ((window as any).currentStream as MediaStream).getTracks().forEach((t: MediaStreamTrack) => { t.stop(); t.enabled = false; });
+      (window as any).currentStream = null;
+    }
     if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
       setCameraStream(null);
     }
     setIsCameraOpen(false);
@@ -1549,6 +1573,34 @@ export default function NoraTitanPage() {
               justifyContent: "flex-end",
             }}
           >
+
+            {/* Botón de Compartir por WhatsApp */}
+            <button
+              onClick={() => {
+                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
+                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+              }}
+              title="Compartir Nora por WhatsApp"
+              aria-label="Compartir"
+              style={{
+                backgroundColor: "rgba(34,197,94,0.15)",
+                color: "#4ade80",
+                border: "1px solid rgba(34,197,94,0.3)",
+                borderRadius: "7px",
+                padding: "5px 9px",
+                fontSize: "10.5px",
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                whiteSpace: "nowrap",
+                flexShrink: 0
+              }}
+            >
+              <Share2 size={13} />
+              <span className="hidden sm:inline">Compartir</span>
+            </button>
 
             {/* Botón de Cámara (Compacto en móvil, completo en PC) */}
             <button
