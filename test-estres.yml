@@ -1,0 +1,15 @@
+config:
+  target: "https://nora-itu-core.vercel.app"
+  phases:
+    - duration: 15
+      arrivalRate: 2
+      rampTo: 6
+      name: "Rampa de estres corregida al endpoint de Groq"
+scenarios:
+  - name: "Petición directa al pipeline de IA"
+    flow:
+      - post:
+          url: "/api/nora-inference"
+          json:
+            userText: "Test concurrente"
+            sessionId: "test-estres"
