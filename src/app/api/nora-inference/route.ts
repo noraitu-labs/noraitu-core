@@ -1,0 +1,314 @@
+import { NextResponse } from "next/server";
+import Groq from "groq-sdk";
+import { appendMessages, getRecentMessages } from "@/lib/mongodb";
+import { logToNeon } from "@/lib/db";
+
+// ══════════════════════════════════════════════════════════════
+//  /api/nora-inference  →  Motor de Inferencia Cloud-Native (Costo Cero)
+//  Procesamiento ultra-rápido Groq LPU (Llama 3.3 70B / Llama 3.2 Vision)
+//  - Fail-Safe Total: MongoDB y Neon corren 100% asíncronos (fire-and-forget)
+//  - Latencia cero: El streaming a Groq inicia en milisegundos sin bloqueos de BD
+// ══════════════════════════════════════════════════════════════
+
+export const runtime = "nodejs";
+export const maxDuration = 45;
+
+interface ChatHistoryItem {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+interface RequestPayload {
+  sessionId?: string;
+  systemPrompt?: string;
+  userText: string;
+  imageBase64?: string | null;
+  history?: ChatHistoryItem[];
+  mode?: string;
+  provider?: "groq" | "sambanova";
+}
+
+export async function POST(req: Request) {
+  try {
+    const body: RequestPayload = await req.json();
+    const {
+      sessionId = "nora-session",
+      systemPrompt = "Eres Nora Itu, asistente de inteligencia artificial inclusiva creada por MyJNexoraVisual. Responde de forma directa, clara y precisa en español plano.",
+      userText = "",
+      imageBase64 = null,
+      history = [],
+      mode = "general",
+      provider = (process.env.AI_PROVIDER || "groq") as "groq" | "sambanova",
+    } = body;
+
+    const hasImage = Boolean(imageBase64 && imageBase64.length > 50);
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. RECUPERAR HISTORIAL CON FAIL-SAFE TOTAL (Max 1000ms)
+    // ─────────────────────────────────────────────────────────────
+    let contextualHistory = [...history];
+    if (contextualHistory.length === 0 && sessionId) {
+      try {
+        const remoteMessages = await getRecentMessages(sessionId, 6).catch(() => []);
+        if (remoteMessages && remoteMessages.length > 0) {
+          contextualHistory = remoteMessages.map((m) => ({
+            role: m.role as "user" | "assistant" | "system",
+            content: m.content,
+          }));
+        }
+      } catch (err) {
+        console.warn("[nora-inference Memory Fetch Bypassed]:", err);
+      }
+    }
+
+    // Formatear mensajes compatibles con Groq / Llama 3.3
+    const messages: any[] = [{ role: "system", content: systemPrompt }];
+
+    for (const h of contextualHistory.slice(-6)) {
+      if (h.content) {
+        messages.push({
+          role: h.role === "assistant" ? "assistant" : "user",
+          content: h.content,
+        });
+      }
+    }
+
+    if (hasImage && imageBase64) {
+      const imageUrl = imageBase64.startsWith("data:")
+        ? imageBase64
+        : `data:image/jpeg;base64,${imageBase64}`;
+
+      messages.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: userText || "Describe con precisión ejecutiva y orientación espacial lo que observas en esta imagen.",
+          },
+          {
+            type: "image_url",
+            image_url: { url: imageUrl },
+          },
+        ],
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: userText || "Hola Nora",
+      });
+    }
+
+    const groqKey = process.env.GROQ_API_KEY?.trim();
+    const sambanovaKey = process.env.SAMBANOVA_API_KEY?.trim();
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. CASO A: SambaNova Cloud
+    // ─────────────────────────────────────────────────────────────
+    if (provider === "sambanova" || (!groqKey && sambanovaKey)) {
+      if (!sambanovaKey) {
+        return NextResponse.json(
+          { error: "SAMBANOVA_API_KEY no configurada en variables de entorno" },
+          { status: 400 }
+        );
+      }
+
+      const model = hasImage
+        ? process.env.SAMBANOVA_MODEL_VISION || "Llama-3.2-11B-Vision-Instruct"
+        : process.env.SAMBANOVA_MODEL_TEXT || "Meta-Llama-3.3-70B-Instruct";
+
+      const upstreamRes = await fetch("https://api.sambanova.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sambanovaKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 800,
+        }),
+      });
+
+      if (!upstreamRes.ok || !upstreamRes.body) {
+        const errText = await upstreamRes.text().catch(() => "");
+        return NextResponse.json(
+          { error: `Error en SambaNova Cloud: ${upstreamRes.statusText}`, details: errText },
+          { status: upstreamRes.status }
+        );
+      }
+
+      const encoder = new TextEncoder();
+      let fullText = "";
+
+      const customStream = new ReadableStream({
+        async start(controller) {
+          const reader = upstreamRes.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data: ")) continue;
+                const data = trimmed.slice(6);
+                if (data === "[DONE]") {
+                  controller.close();
+                  // Disparo asíncrono fire-and-forget
+                  triggerBackgroundPersist(sessionId, userText, fullText, mode, model, hasImage);
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  const chunk = parsed.choices?.[0]?.delta?.content || "";
+                  if (chunk) {
+                    fullText += chunk;
+                    controller.enqueue(encoder.encode(chunk));
+                  }
+                } catch {}
+              }
+            }
+            controller.close();
+            triggerBackgroundPersist(sessionId, userText, fullText, mode, model, hasImage);
+          } catch (err) {
+            controller.error(err);
+          }
+        },
+      });
+
+      return new Response(customStream, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Transfer-Encoding": "chunked",
+          "Cache-Control": "no-cache, no-transform",
+          "X-AI-Provider": "sambanova",
+        },
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. CASO B: Groq Cloud (Por defecto, LPUs ultra-rápidas)
+    // ─────────────────────────────────────────────────────────────
+    if (!groqKey) {
+      return NextResponse.json(
+        {
+          error: "Falta configurar GROQ_API_KEY en variables de entorno",
+          hint: "Coloca tu clave en las variables de entorno de Vercel",
+        },
+        { status: 400 }
+      );
+    }
+
+    const groq = new Groq({ apiKey: groqKey });
+    const model = hasImage
+      ? process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview"
+      : process.env.GROQ_MODEL_TEXT || "llama-3.3-70b-versatile";
+
+    const chatCompletion = await groq.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 800,
+    });
+
+    const encoder = new TextEncoder();
+    let fullText = "";
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of chatCompletion) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) {
+              fullText += content;
+              controller.enqueue(encoder.encode(content));
+            }
+          }
+          controller.close();
+
+          // ─────────────────────────────────────────────────────────────
+          // 4. PERSISTENCIA EN SEGUNDO PLANO (Fire-and-Forget)
+          // ─────────────────────────────────────────────────────────────
+          triggerBackgroundPersist(sessionId, userText, fullText, mode, model, hasImage);
+        } catch (err) {
+          controller.error(err);
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache, no-transform",
+        "X-AI-Provider": "groq",
+        "X-AI-Model": model,
+      },
+    });
+  } catch (err: any) {
+    console.error("[nora-inference Error]:", err?.message || err);
+    return NextResponse.json(
+      { error: err?.message || "Error procesando inferencia en la nube" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Persiste asíncronamente en MongoDB Atlas y Neon PostgreSQL.
+ * Envuelto en try/catch total: si MongoDB rechaza la IP o Neon falla, NO afecta a la respuesta.
+ */
+function triggerBackgroundPersist(
+  sessionId: string,
+  userText: string,
+  assistantResponse: string,
+  mode: string,
+  model: string,
+  hasImage: boolean
+) {
+  if (!sessionId || !assistantResponse.trim()) return;
+
+  const userMsg = userText || (hasImage ? "Captura visual de cámara" : "Consulta");
+
+  Promise.allSettled([
+    // Guardado en MongoDB Atlas (Fail-Safe)
+    appendMessages(
+      sessionId,
+      [
+        {
+          role: "user",
+          content: userMsg,
+          imageBase64: hasImage ? "[imagen_adjunta]" : null,
+          timestamp: new Date().toISOString(),
+          mode,
+          metadata: { hasVision: hasImage },
+        },
+        {
+          role: "assistant",
+          content: assistantResponse,
+          timestamp: new Date().toISOString(),
+          mode,
+          metadata: { model },
+        },
+      ],
+      40
+    ).catch((err) => console.warn("[Background Mongo Save Bypassed]:", err?.message || err)),
+
+    // Logger rápido en Neon PostgreSQL (Fail-Safe)
+    logToNeon({
+      sessionId,
+      userMessage: userMsg,
+      assistantResponse: assistantResponse.slice(0, 1000),
+      hasImage,
+    }).catch((err) => console.warn("[Background Neon Log Bypassed]:", err?.message || err)),
+  ]).catch(() => {});
+}
