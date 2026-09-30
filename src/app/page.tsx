@@ -187,10 +187,19 @@ const PICTOGRAM_GROUPS: Record<string, string> = {
 /* ─────────────── LIMPIEZA TTS RADICAL (Sin Símbolos) ─────────── */
 function cleanRadicalForTTS(textoOriginal: string): string {
   return textoOriginal
-    .replace(/[*#\-_\[\]()~`>]+/g, '')
-    .replace(/(numeral|asterisco|guion|hash|at|barra)/gi, '')
+    .replace(/[*#_~`>\[\]\(\)\{\}\\]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Detección automática del idioma para síntesis fonética nativa
+function detectTextLanguage(text: string): string {
+  const t = text.toLowerCase();
+  if (/\b(the|and|is|you|that|this|with|for|are|have|from|in|what|how|hello|thank|welcome|please|world)\b/i.test(t)) return "en-US";
+  if (/\b(você|voce|não|nao|com|para|uma|este|obrigado|muito|tudo|fazer|olá|ola|bom|dia|senhor)\b/i.test(t)) return "pt-BR";
+  if (/\b(le|la|les|des|du|avec|pour|dans|est|vous|nous|merci|bonjour|s'il|oui|non|monde)\b/i.test(t)) return "fr-FR";
+  if (/\b(il|lo|la|i|gli|le|di|con|per|sono|grazie|ciao|questo|bene|perché|perche|mondo)\b/i.test(t)) return "it-IT";
+  return "es-419";
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -273,7 +282,7 @@ async function* parseCloudStream(
 /** System prompts por modo con personalidad profesional neutro latinoamericano y base curricular */
 const SYSTEM_PROMPTS: Record<string, string> = {
   general:
-    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano, sin regionalismos. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas como 'He procesado tu consulta' ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural para que suene a una conversación telefónica real. Escribe en texto plano limpio, sin asteriscos ni almohadillas. Pronuncia todos los términos de forma completa y correcta.",
+    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural. Escribe en texto plano limpio, sin asteriscos ni almohadillas.",
   tea:
     "Eres Nora Itu. En modo TEA acompañas con calma, contención y empatía. Explica de manera clara, predecible y paso a paso, sin sobrecarga sensorial ni metáforas confusas. Tono directo, seguro y reconfortante en español neutro. Texto plano sin caracteres especiales.",
   lazarillo:
@@ -927,21 +936,27 @@ export default function NoraTitanPage() {
       return;
     }
 
-    // PURGA ABSOLUTA DE SÍMBOLOS EN EL TTS
+    // PURGA SEGURA DE SÍMBOLOS EN EL TTS (Sin mutilar palabras con 'at' o 'barra')
     const textoLimpio = cleanRadicalForTTS(text);
     if (!textoLimpio) return;
 
+    const lang = detectTextLanguage(textoLimpio);
     const utt = new SpeechSynthesisUtterance(textoLimpio);
-    utt.rate = 0.95;
-    utt.pitch = 1.05;
+    utt.lang = lang;
+    utt.rate = 0.98;
+    utt.pitch = 1.0;
 
     const doSpeak = () => {
       const voices = window.speechSynthesis.getVoices();
-      const esVoice = voices.find(v => v.name.includes('Google') && v.lang.startsWith('es'))
-        || voices.find(v => v.name.includes('Sabina') || v.name.includes('Elena') || v.name.includes('Paulina') || v.name.includes('Monica'))
-        || voices.find(v => v.lang.startsWith('es-419') || v.lang.startsWith('es-MX') || v.lang.startsWith('es-US'))
-        || voices.find(v => v.lang.startsWith('es'));
-      if (esVoice) { utt.voice = esVoice; utt.lang = esVoice.lang; } else { utt.lang = 'es-419'; }
+      const langPrefix = lang.split("-")[0];
+      const matchVoice =
+        voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
+        voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
+        voices.find(v => v.name.includes("Google") && v.lang.startsWith(langPrefix)) ||
+        voices.find(v => v.name.includes("Sabina") || v.name.includes("Elena") || v.name.includes("Paulina") || v.name.includes("Monica")) ||
+        voices.find(v => v.lang.startsWith("es-419") || v.lang.startsWith("es-MX") || v.lang.startsWith("es-US")) ||
+        voices.find(v => v.lang.startsWith("es"));
+      if (matchVoice) { utt.voice = matchVoice; }
       window.speechSynthesis.speak(utt);
     };
 

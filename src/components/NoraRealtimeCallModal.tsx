@@ -51,16 +51,68 @@ export default function NoraRealtimeCallModal({
     statusRef.current = status;
   }, [status]);
 
-  // Limpieza de símbolos para voz humana natural
+  // Detección automática de idioma para los 5 idiomas principales
+  const detectSentenceLanguage = (text: string): string => {
+    const t = text.toLowerCase();
+    if (/\b(the|and|is|you|that|this|with|for|are|have|from|in|what|how|hello|thank|welcome|please|world)\b/i.test(t)) return "en-US";
+    if (/\b(você|voce|não|nao|com|para|uma|este|obrigado|muito|tudo|fazer|olá|ola|bom|dia|senhor)\b/i.test(t)) return "pt-BR";
+    if (/\b(le|la|les|des|du|avec|pour|dans|est|vous|nous|merci|bonjour|s'il|oui|non|monde)\b/i.test(t)) return "fr-FR";
+    if (/\b(il|lo|la|i|gli|le|di|con|per|sono|grazie|ciao|questo|bene|perché|perche|mondo)\b/i.test(t)) return "it-IT";
+    return "es-419";
+  };
+
+  // Limpieza segura de símbolos sin mutilar palabras que contengan "at", "barra", etc.
   const cleanForSpeech = (text: string): string => {
     return text
-      .replace(/[*#\-_\[\]()~`>]+/g, "")
-      .replace(/(numeral|asterisco|guion|hash|at|barra)/gi, "")
+      .replace(/[*#_~`>\[\]\(\)\{\}\\]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   };
 
-  // ── 1. PROCESADOR DE COLA TTS STREAMING ──
+  // Extracción de oraciones completas para evitar palabras fragmentadas en el stream
+  const extractNextCompleteSentence = (buffer: string): { sentence: string; remaining: string } | null => {
+    const pattern = /([.?!;]+|\n+|(?:,\s+))/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(buffer)) !== null) {
+      const punct = match[0];
+      const punctEnd = match.index + punct.length;
+
+      // Ignorar números decimales (ej. 3.14 o 10.5)
+      const prevChar = buffer[match.index - 1];
+      const nextChar = buffer[punctEnd];
+      if (punct.includes(".") && prevChar && /\d/.test(prevChar) && nextChar && /\d/.test(nextChar)) {
+        continue;
+      }
+
+      // Ignorar abreviaturas comunes
+      const textBefore = buffer.slice(0, match.index).trim();
+      if (punct.includes(".") && /\b(dr|sr|sra|ing|lic|av|etc|ej|pág|pag|núm|num|art|vol|vs)\.?$/i.test(textBefore)) {
+        continue;
+      }
+
+      // Si es una coma, exigir al menos 25 caracteres para evitar fragmentación excesiva
+      if (punct.startsWith(",") && textBefore.length < 25) {
+        continue;
+      }
+
+      // Bloquear palabras parciales al final del buffer
+      if (punctEnd === buffer.length && !punct.includes("\n")) {
+        continue;
+      }
+
+      const candidate = buffer.slice(0, punctEnd).trim();
+      const remaining = buffer.slice(punctEnd);
+
+      if (candidate.length > 0) {
+        return { sentence: candidate, remaining };
+      }
+    }
+
+    return null;
+  };
+
+  // ── 1. PROCESADOR DE COLA TTS STREAMING MULTI-IDIOMA ──
   const processNextSpeechSentence = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
@@ -70,7 +122,6 @@ export default function NoraRealtimeCallModal({
     if (!sentence) {
       if (speechQueueRef.current.length === 0 && statusRef.current === "speaking") {
         setStatus("listening");
-        // Reactivar reconocimiento si no está muteado ni en PTT manual
         if (!isMutedRef.current && recognitionRef.current) {
           try { recognitionRef.current.start(); } catch {}
         }
@@ -86,16 +137,20 @@ export default function NoraRealtimeCallModal({
       try { recognitionRef.current.stop(); } catch {}
     }
 
+    const lang = detectSentenceLanguage(sentence);
     const utterance = new SpeechSynthesisUtterance(sentence);
-    utterance.lang = "es-AR";
-    utterance.rate = 1.05;
+    utterance.lang = lang;
+    utterance.rate = 1.0;
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
+    const langPrefix = lang.split("-")[0];
     const voice =
-      voices.find(v => v.name.includes("Google") && v.lang.startsWith("es")) ||
+      voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
+      voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
+      voices.find(v => v.name.includes("Google") && v.lang.startsWith(langPrefix)) ||
       voices.find(v => v.name.includes("Sabina") || v.name.includes("Elena") || v.name.includes("Paulina") || v.name.includes("Monica")) ||
-      voices.find(v => v.lang.startsWith("es-AR") || v.lang.startsWith("es-419") || v.lang.startsWith("es"));
+      voices.find(v => v.lang.startsWith("es"));
     if (voice) utterance.voice = voice;
 
     utterance.onend = () => {
@@ -179,7 +234,7 @@ export default function NoraRealtimeCallModal({
             // Enviar historial completo de la llamada para mantener el hilo
             history: conversationHistoryRef.current.slice(0, -1), // excluir el último (userText ya lo incluye el route)
             systemPrompt:
-              "Eres Nora Itu, asistente de inteligencia artificial de MyJNexoraVisual. Tu tono es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. Hablas en español neutro latinoamericano, sin regionalismos ni modismos de ningún país específico. Cero frases corporativas repetitivas. Respuestas concisas, naturales y fluidas para una llamada telefónica profesional. Texto plano limpio, sin asteriscos, almohadillas ni formato markdown. Pronuncia todos los términos de forma completa y correcta.",
+              "Eres Nora Itu, asistente de inteligencia artificial de MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Respuestas concisas, naturales y fluidas para llamada telefónica. Texto plano limpio, sin asteriscos ni markdown.",
             mode: "general",
             deviceLocation: typeof window !== "undefined" ? (() => {
               try {
@@ -216,19 +271,14 @@ export default function NoraRealtimeCallModal({
           setAssistantText(accumulatedFull);
           sentenceBuffer += textChunk;
 
-          // Segmentar en oraciones para streaming de voz inmediato
-          const splitRegex = /([.?!;\n]+)/;
-          let match = splitRegex.exec(sentenceBuffer);
-
-          while (match && match.index !== undefined) {
-            const splitMatch = match.index + match[0].length;
-            const sentenceToSpeak = sentenceBuffer.slice(0, splitMatch).trim();
-            sentenceBuffer = sentenceBuffer.slice(splitMatch);
-
-            if (sentenceToSpeak) {
-              enqueueSentenceForSpeech(sentenceToSpeak);
+          // Segmentación basada en oraciones completas: bloquea fragmentación de palabras parciales
+          let extracted = extractNextCompleteSentence(sentenceBuffer);
+          while (extracted) {
+            if (extracted.sentence) {
+              enqueueSentenceForSpeech(extracted.sentence);
             }
-            match = splitRegex.exec(sentenceBuffer);
+            sentenceBuffer = extracted.remaining;
+            extracted = extractNextCompleteSentence(sentenceBuffer);
           }
         }
 
