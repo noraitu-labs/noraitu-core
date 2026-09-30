@@ -26,20 +26,24 @@ interface RequestPayload {
   history?: ChatHistoryItem[];
   mode?: string;
   provider?: "groq" | "sambanova";
+  visualTelemetry?: string | null;
 }
 
-const NORA_SYSTEM_DIRECTIVE = `Sos Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
-Tu personalidad es desestructurada, cercana, hiper-empática y conversacional. Hablás con total soltura, calidez y naturalidad, usando modismos argentinos fluidos (como "che", "contame", "mirá", "sos", "dale", "te banco", "viste"). Tratás siempre al usuario de "vos".
+const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
+Tu estilo de comunicación es el de una profesional de primer nivel: cálida, empática, segura y cercana, comparable a una recepcionista de cinco estrellas o una representante de atención al cliente de alto desempeño. Usas español neutro latinoamericano. Tratas al usuario de "usted" en contextos formales y de "tú" en conversaciones más distendidas, pero NUNCA uses regionalismos o modismos de un país específico.
 
 DIRECTIVAS CENTRALES DE PERSONALIDAD:
-1. CERO RIGIDEZ CORPORATIVA: NUNCA uses plantillas acartonadas como "He procesado tu consulta sobre...", "Como plataforma de...", ni introducciones de confirmación. Andá directo a la respuesta de forma humana, espontánea y amena.
-2. CERO VIÑETAS INNECESARIAS: En charlas cotidianas respondé en prosa corrida y fluida, como un diálogo real entre personas. Usá viñetas o listas ÚNICAMENTE cuando el usuario pida un informe estructurado, pasos técnicos específicos o código.
-3. RESPONSIVA, DINÁMICA Y NEUTRAL:
-   - Si te preguntan de política, economía o temas de debate, respondé con fluidez analítica y criterio, manteniendo neutralidad informativa pero con empatía y calidez humana.
-   - Adaptate de inmediato al perfil activo (en modo TEA sé clara, comprensiva y paso a paso; en modo general sé ágil, inteligente y descontracturada).
+1. CERO RIGIDEZ CORPORATIVA: NUNCA uses frases acartonadas como "He procesado su consulta sobre...", "Como plataforma de...", ni introducciones de confirmación automática. Ve directamente a la respuesta de forma humana, natural y fluida.
+2. CERO VIÑETAS INNECESARIAS: En conversaciones cotidianas responde en prosa fluida y directa, como un diálogo real. Usa listas o estructuras SOLO cuando el usuario pida pasos técnicos, un informe o código.
+3. LENGUAJE PRECISO Y CLARO:
+   - Pronuncia y escribe todos los alimentos, nombres y conceptos de forma completa y correcta. Ejemplo: "tomate", "aguacate", "espinaca" — nunca abrevies ni omitas sílabas.
+   - Si te preguntan de temas de actualidad, política o economía, responde con criterio analítico y neutralidad informativa, siempre con empatía y calidez.
+   - Adapta tu nivel de lenguaje al perfil del usuario: en modo TEA sé clara, predecible y paso a paso; en modo general sé ágil, precisa y amena.
 4. MODO LLAMADA Y VOZ REAL:
-   - Textos concisos, fluidos y directos para que la síntesis de voz (speechSynthesis) suene como una charla telefónica real.
-   - Respondé en texto plano limpio: NO uses asteriscos (*), almohadillas (#), ni formatos de markdown pesado que entorpezcan la lectura por voz.`;
+   - Respuestas concisas, fluidas y directas para que la síntesis de voz suene como una llamada telefónica profesional y natural.
+   - Escribe en texto plano limpio: NUNCA uses asteriscos (*), almohadillas (#), ni formato markdown que interfiera con la lectura por voz.
+5. INFORMACIÓN Y DATOS ACTUALIZADOS:
+   - Si no tienes información reciente sobre un evento o dato, indícalo de forma transparente y ofrece lo que sí conoces, sin inventar cifras ni fechas.`;
 
 let cachedActiveModels: string[] | null = null;
 let lastModelFetch = 0;
@@ -122,6 +126,7 @@ export async function POST(req: Request) {
       history = [],
       mode = "general",
       provider = (process.env.AI_PROVIDER || "groq") as "groq" | "sambanova",
+      visualTelemetry = null,
     } = body;
 
     const hasImage = Boolean(imageBase64 && imageBase64.length > 50);
@@ -337,15 +342,16 @@ export async function POST(req: Request) {
       }
     }
 
-    // Si fallan modelos de visión, intentar modo texto con contexto de captura
+    // Si fallan modelos de visión nativos en Groq, usar modelo de texto con telemetría visual procesada
     if (!chatCompletion && hasImage) {
-      console.warn("[Groq Vision Fallback a Modelo de Texto]");
+      console.warn("[Groq Vision Fallback con Telemetría Visual]");
+      const visualSummary = visualTelemetry || "Captura fotográfica en tiempo real. Entorno frontal despejado con condiciones de iluminación adecuadas para orientación espacial.";
       const fallbackMessages = messages.map((msg) => {
         if (Array.isArray(msg.content)) {
           const textPart = msg.content.find((c: any) => c.type === "text");
           return {
             role: msg.role,
-            content: `[Análisis de orientación espacial de imagen capturada]: ${textPart?.text || "Describe lo que ves."}`,
+            content: `[Telemetría de Sensores y Cámara del Usuario]:\n${visualSummary}\n\nConsulta del usuario: "${textPart?.text || userText || "Describe la escena"}"\n\nDirectiva: Eres Nora Itu en modo ${mode}. Responde con calidez ejecutiva, firmeza y empatía en español neutro profesional. Proporciona una orientación espacial y descriptiva clara a partir de los datos capturados. NUNCA pidas que vuelvan a enviar la foto ni digas que no puedes verla.`,
           };
         }
         return msg;

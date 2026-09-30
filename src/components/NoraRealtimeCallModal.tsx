@@ -39,6 +39,8 @@ export default function NoraRealtimeCallModal({
   const transcriptHistoryRef = useRef<string>("");
   const isMutedRef = useRef<boolean>(false);
   const statusRef = useRef<typeof status>("connecting");
+  // ── Historial conversacional persistente durante toda la llamada ──
+  const conversationHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
 
   // Sincronizar refs
   useEffect(() => {
@@ -156,6 +158,13 @@ export default function NoraRealtimeCallModal({
       setAssistantText("");
       setStatus("thinking");
 
+      // Registrar turno del usuario en el historial conversacional persistente
+      conversationHistoryRef.current.push({ role: "user", content: trimmed });
+      // Mantener máximo 20 turnos (10 intercambios) para no saturar el contexto
+      if (conversationHistoryRef.current.length > 20) {
+        conversationHistoryRef.current = conversationHistoryRef.current.slice(-20);
+      }
+
       if (abortControllerRef.current) abortControllerRef.current.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -167,8 +176,10 @@ export default function NoraRealtimeCallModal({
           body: JSON.stringify({
             userText: trimmed,
             sessionId,
+            // Enviar historial completo de la llamada para mantener el hilo
+            history: conversationHistoryRef.current.slice(0, -1), // excluir el último (userText ya lo incluye el route)
             systemPrompt:
-              "Sos Nora Itu, asistente de IA de MyJNexoraVisual. Tu tono es desestructurado, cercano, cálido y empático con modismos argentinos fluidos (che, mirá, contame, vos). Cero frases corporativas o introducciones repetitivas. Respuestas concisas, directas y ágiles para llamada telefónica real, en texto plano sin asteriscos ni numerales.",
+              "Eres Nora Itu, asistente de inteligencia artificial de MyJNexoraVisual. Tu tono es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. Hablas en español neutro latinoamericano, sin regionalismos ni modismos de ningún país específico. Cero frases corporativas repetitivas. Respuestas concisas, naturales y fluidas para una llamada telefónica profesional. Texto plano limpio, sin asteriscos, almohadillas ni formato markdown. Pronuncia todos los términos de forma completa y correcta.",
             mode: "general",
           }),
           signal: controller.signal,
@@ -215,6 +226,8 @@ export default function NoraRealtimeCallModal({
         }
 
         if (accumulatedFull.trim()) {
+          // Registrar respuesta de Nora en el historial persistente de la llamada
+          conversationHistoryRef.current.push({ role: "assistant", content: accumulatedFull.trim() });
           setCallHistory(prev => [...prev, { role: "assistant", text: accumulatedFull.trim() }]);
         }
       } catch (err: any) {
@@ -242,6 +255,8 @@ export default function NoraRealtimeCallModal({
     setAssistantText("");
     setCallHistory([]);
     speechQueueRef.current = [];
+    // Resetear historial conversacional al iniciar una llamada nueva
+    conversationHistoryRef.current = [];
     isSpeakingRef.current = false;
 
     // Cronómetro de llamada
@@ -327,7 +342,7 @@ export default function NoraRealtimeCallModal({
 
     // Saludo de bienvenida automático si inicia la llamada
     const welcomeChimeTimeout = setTimeout(() => {
-      enqueueSentenceForSpeech("¡Hola! Ya estamos comunicados. Contame en qué te puedo dar una mano hoy.");
+      enqueueSentenceForSpeech("Hola, gracias por comunicarte. Soy Nora, su asistente virtual. ¿En qué puedo ayudarle hoy?");
     }, 400);
 
     return () => {
