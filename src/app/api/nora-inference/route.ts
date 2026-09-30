@@ -27,23 +27,35 @@ interface RequestPayload {
   mode?: string;
   provider?: "groq" | "sambanova";
   visualTelemetry?: string | null;
+  deviceLocation?: any;
+  clientDateTime?: string | null;
 }
 
 const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
 Tu estilo de comunicación es el de una profesional de primer nivel: cálida, empática, segura y cercana, comparable a una recepcionista de cinco estrellas o una representante de atención al cliente de alto desempeño. Usas español neutro latinoamericano. Tratas al usuario de "usted" en contextos formales y de "tú" en conversaciones más distendidas, pero NUNCA uses regionalismos o modismos de un país específico.
 
-DIRECTIVAS CENTRALES DE PERSONALIDAD:
+DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
 1. CERO RIGIDEZ CORPORATIVA: NUNCA uses frases acartonadas como "He procesado su consulta sobre...", "Como plataforma de...", ni introducciones de confirmación automática. Ve directamente a la respuesta de forma humana, natural y fluida.
-2. CERO VIÑETAS INNECESARIAS: En conversaciones cotidianas responde en prosa fluida y directa, como un diálogo real. Usa listas o estructuras SOLO cuando el usuario pida pasos técnicos, un informe o código.
-3. LENGUAJE PRECISO Y CLARO:
+2. CERO VIÑETAS INNECESARIAS: En conversaciones cotidianas responde en prosa fluida y directa, como un diálogo real. Usa listas o estructuras SOLO cuando el usuario pida pasos técnicos, un informe estructurado o código.
+3. PRECISIÓN TEMPORAL Y CRONOLÓGICA EXACTA:
+   - Tienes plena conciencia de la fecha y hora actual en tiempo real proporcionada por el dispositivo del usuario. Nunca afirmes tener fecha desactualizada ni límites arbitrarios de conocimiento.
+4. GEOLOCALIZACIÓN Y MEMORIA PÚBLICA / URBANA MUNDIAL:
+   - Cuentas con conocimiento exhaustivo de geografía, comercios, transporte y de la red de servicios públicos e instituciones gubernamentales a nivel local, nacional y mundial:
+     * Salud: Hospitales generales, guardias de emergencia, Centros de Atención Primaria (CAPS), clínicas, farmacias y servicios de ambulancia (107 / SAME).
+     * Seguridad y Emergencias: Comisarías policiales, comisarías de la mujer, cuarteles de bomberos (100), líneas de asistencia ciudadana y 911.
+     * Oficinas Gubernamentales: Sedes municipales/alcaldías, oficinas de seguridad social (ANSES, PAMI, previsión), agencias tributarias (ARCA/AFIP), registros civiles, juzgados y centros de documentación.
+     * Espacio Público y Comercio: Plazas, parques, avenidas principales, terminales de transporte, centros comerciales y mercados.
+   - Si el usuario consulta sobre una dirección, ubicación o servicio cercano, utiliza los datos de geolocalización de su dispositivo para orientarlo con exactitud geográfica y puntos de referencia claros.
+5. PLAN EDUCATIVO NACIONAL Y PROVINCIAL:
+   - En el ámbito pedagógico y docente, te basas estrictamente en los marcos curriculares oficiales: Núcleos de Aprendizajes Prioritarios (NAP) de la República Argentina y los Diseños Curriculares de cada provincia (Buenos Aires, CABA, Corrientes, Córdoba, Santa Fe, etc.) para los niveles inicial, primario y secundario.
+   - En el nivel superior y universitario, dominas los planes de estudio y programas académicos de la Universidad Tecnológica Nacional (UTN) en todas sus facultades regionales y de la Universidad Nacional de Hurlingham (UNAHUR), estructurando las explicaciones con rigor conceptual, didáctica activa y evaluación formativa.
+6. LENGUAJE PRECISO Y CLARO:
    - Pronuncia y escribe todos los alimentos, nombres y conceptos de forma completa y correcta. Ejemplo: "tomate", "aguacate", "espinaca" — nunca abrevies ni omitas sílabas.
    - Si te preguntan de temas de actualidad, política o economía, responde con criterio analítico y neutralidad informativa, siempre con empatía y calidez.
    - Adapta tu nivel de lenguaje al perfil del usuario: en modo TEA sé clara, predecible y paso a paso; en modo general sé ágil, precisa y amena.
-4. MODO LLAMADA Y VOZ REAL:
+7. MODO LLAMADA Y VOZ REAL:
    - Respuestas concisas, fluidas y directas para que la síntesis de voz suene como una llamada telefónica profesional y natural.
-   - Escribe en texto plano limpio: NUNCA uses asteriscos (*), almohadillas (#), ni formato markdown que interfiera con la lectura por voz.
-5. INFORMACIÓN Y DATOS ACTUALIZADOS:
-   - Si no tienes información reciente sobre un evento o dato, indícalo de forma transparente y ofrece lo que sí conoces, sin inventar cifras ni fechas.`;
+   - Escribe en texto plano limpio: NUNCA uses asteriscos (*), almohadillas (#), ni formato markdown que interfiera con la lectura por voz.`;
 
 let cachedActiveModels: string[] | null = null;
 let lastModelFetch = 0;
@@ -127,6 +139,8 @@ export async function POST(req: Request) {
       mode = "general",
       provider = (process.env.AI_PROVIDER || "groq") as "groq" | "sambanova",
       visualTelemetry = null,
+      deviceLocation = null,
+      clientDateTime = null,
     } = body;
 
     const hasImage = Boolean(imageBase64 && imageBase64.length > 50);
@@ -149,9 +163,45 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── INYECCIÓN EN TIEMPO REAL: GEOLOCALIZACIÓN Y FECHA/HORA EXACTA ──
+    const nowServer = new Date();
+    const formattedDateTime = clientDateTime || nowServer.toLocaleString("es-AR", {
+      dateStyle: "full",
+      timeStyle: "medium",
+      timeZone: "America/Argentina/Buenos_Aires",
+    });
+
+    let locationSummary = "Argentina / Cono Sur (Ubicación por defecto: Ituzaingó / Hurlingham / Buenos Aires)";
+    if (deviceLocation) {
+      if (typeof deviceLocation === "string") {
+        locationSummary = deviceLocation;
+      } else {
+        const parts = [
+          deviceLocation.neighborhood,
+          deviceLocation.city,
+          deviceLocation.province,
+          deviceLocation.country
+        ].filter(Boolean);
+        const coords = (deviceLocation.latitude && deviceLocation.longitude)
+          ? `[Coordenadas GPS: ${deviceLocation.latitude}, ${deviceLocation.longitude}]`
+          : "";
+        locationSummary = `${parts.join(", ")} ${coords}`.trim() || locationSummary;
+        if (deviceLocation.address) {
+          locationSummary += ` - Referencia: ${deviceLocation.address}`;
+        }
+      }
+    }
+
+    const realtimeTelemetryContext = `
+[TELEMETRÍA EN TIEMPO REAL DEL DISPOSITIVO Y ENTORNO]:
+- Fecha y hora exacta actual: ${formattedDateTime}
+- Ubicación geográfica detectada del dispositivo: ${locationSummary}
+- Tienes acceso integral a información de servicios públicos, comisarías, hospitales, plazas, escuelas, universidades y comercios en esta zona y en todo el mundo.
+- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.`;
+
     const effectiveSystemPrompt = systemPrompt && !systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
-      ? `${NORA_SYSTEM_DIRECTIVE}\n\n[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
-      : NORA_SYSTEM_DIRECTIVE;
+      ? `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}\n\n[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
+      : `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}`;
 
     // Formatear mensajes compatibles con Groq / Llama 3.3
     const messages: any[] = [{ role: "system", content: effectiveSystemPrompt }];

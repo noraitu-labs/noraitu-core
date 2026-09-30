@@ -181,6 +181,17 @@ export default function NoraRealtimeCallModal({
             systemPrompt:
               "Eres Nora Itu, asistente de inteligencia artificial de MyJNexoraVisual. Tu tono es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. Hablas en español neutro latinoamericano, sin regionalismos ni modismos de ningún país específico. Cero frases corporativas repetitivas. Respuestas concisas, naturales y fluidas para una llamada telefónica profesional. Texto plano limpio, sin asteriscos, almohadillas ni formato markdown. Pronuncia todos los términos de forma completa y correcta.",
             mode: "general",
+            deviceLocation: typeof window !== "undefined" ? (() => {
+              try {
+                const raw = localStorage.getItem("noraitu_device_loc");
+                return raw ? JSON.parse(raw) : null;
+              } catch { return null; }
+            })() : null,
+            clientDateTime: new Date().toLocaleString("es-AR", {
+              dateStyle: "full",
+              timeStyle: "medium",
+              timeZone: "America/Argentina/Buenos_Aires",
+            }),
           }),
           signal: controller.signal,
         });

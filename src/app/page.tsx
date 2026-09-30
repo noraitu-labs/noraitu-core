@@ -201,6 +201,18 @@ function cleanRadicalForTTS(textoOriginal: string): string {
    - Persistencia dual: MongoDB Atlas Free + Neon PostgreSQL
 ══════════════════════════════════════════════════════════════════ */
 
+interface DeviceLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  city?: string;
+  province?: string;
+  country?: string;
+  neighborhood?: string;
+  address?: string;
+  timestamp?: number;
+}
+
 /**
  * Llama al motor de inferencia Cloud-Native en /api/nora-inference.
  * Devuelve un stream de texto o null si hay error.
@@ -210,6 +222,8 @@ async function callCloudInferenceStream(payload: {
   userText: string;
   imageBase64?: string | null;
   visualTelemetry?: string | null;
+  deviceLocation?: DeviceLocation | null;
+  clientDateTime?: string | null;
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   mode?: string;
   sessionId?: string;
@@ -256,16 +270,16 @@ async function* parseCloudStream(
   }
 }
 
-/** System prompts por modo con personalidad profesional neutro latinoamericano */
+/** System prompts por modo con personalidad profesional neutro latinoamericano y base curricular */
 const SYSTEM_PROMPTS: Record<string, string> = {
   general:
-    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas. Hablas en español neutro latinoamericano, sin regionalismos. Sin frases acartonadas como 'He procesado tu consulta' ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural para que suene a una conversación telefónica real. Escribe en texto plano limpio, sin asteriscos ni almohadillas. Pronuncia todos los términos de forma completa y correcta.",
+    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano, sin regionalismos. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas como 'He procesado tu consulta' ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural para que suene a una conversación telefónica real. Escribe en texto plano limpio, sin asteriscos ni almohadillas. Pronuncia todos los términos de forma completa y correcta.",
   tea:
     "Eres Nora Itu. En modo TEA acompañas con calma, contención y empatía. Explica de manera clara, predecible y paso a paso, sin sobrecarga sensorial ni metáforas confusas. Tono directo, seguro y reconfortante en español neutro. Texto plano sin caracteres especiales.",
   lazarillo:
     "Eres Nora Itu en modo Lazarillo Visual 360°. Eres atenta, protectora y precisa. Guía el espacio usando referencias de reloj (a las 12, a las 3, etc.), alertando obstáculos y aportando seguridad con tono claro y profesional. Texto limpio para voz en tiempo real.",
   docente:
-    "Eres Nora Itu en modo Docente. Explicas con pedagogía moderna, fluidez y profundidad didáctica, adaptándote a cada estudiante con calidez profesional y ejemplos claros para que el aprendizaje sea un placer.",
+    "Eres Nora Itu en modo Docente. Explicas con pedagogía moderna, fluidez y profundidad didáctica, basándote estrictamente en los Núcleos de Aprendizajes Prioritarios (NAP) de la Nación Argentina y los Diseños Curriculares oficiales de cada provincia (Buenos Aires, CABA, Corrientes, etc.) en niveles inicial, primario y secundario, así como en los planes universitarios de la UTN y la UNAHUR. Adaptas la explicación a cada estudiante con calidez profesional y ejemplos claros.",
 };
 
 
@@ -298,6 +312,7 @@ export default function NoraTitanPage() {
   /* ── Sidebar & PWA Install Prompt ── */
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [deviceLocation, setDeviceLocation] = useState<DeviceLocation | null>(null);
 
   /* ── Cámara IA ── */
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -359,6 +374,49 @@ export default function NoraTitanPage() {
     setSessionId(sid);
     localStorage.setItem("noraitu_session_id", sid);
     loadSessionMessages(sid);
+
+    // ── GEOLOCALIZACIÓN NATIVA EN EL BORDE (EDGE SENSING) ──
+    const cachedLoc = localStorage.getItem("noraitu_device_loc");
+    if (cachedLoc) {
+      try { setDeviceLocation(JSON.parse(cachedLoc)); } catch {}
+    }
+
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const acc = pos.coords.accuracy;
+          const locObj: DeviceLocation = {
+            latitude: Number(lat.toFixed(6)),
+            longitude: Number(lng.toFixed(6)),
+            accuracy: Math.round(acc),
+            timestamp: pos.timestamp,
+          };
+
+          try {
+            const geoRes = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=es`,
+              { signal: AbortSignal.timeout(4000) }
+            );
+            if (geoRes.ok) {
+              const data = await geoRes.json();
+              locObj.city = data.city || data.locality || data.principalSubdivision;
+              locObj.province = data.principalSubdivision;
+              locObj.country = data.countryName || "Argentina";
+              locObj.neighborhood = data.localityInfo?.administrative?.[3]?.name || data.locality;
+            }
+          } catch {}
+
+          setDeviceLocation(locObj);
+          localStorage.setItem("noraitu_device_loc", JSON.stringify(locObj));
+        },
+        (err) => {
+          console.warn("[Edge Geolocation Notice]:", err?.message);
+        },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 600000 }
+      );
+    }
 
     // ── STT CONTINUO (Llamada Abierta) con Noise Gate y Envío Automático al detectar pausa ──
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -737,6 +795,11 @@ export default function NoraTitanPage() {
 
       const visionPrompt = promptOverride || "Describe con precisión ejecutiva y orientación espacial lo que observas en esta imagen. Usa referencias de reloj para indicar posiciones. Sé breve y directo.";
       const systemPrompt = SYSTEM_PROMPTS[activeMode] || SYSTEM_PROMPTS.lazarillo;
+      const clientDateTime = new Date().toLocaleString("es-AR", {
+        dateStyle: "full",
+        timeStyle: "medium",
+        timeZone: "America/Argentina/Buenos_Aires",
+      });
 
       // ── VISIÓN MULTIMODAL CLOUD CON TELEMETRÍA INTEGRADA ──
       const cloudBody = await callCloudInferenceStream({
@@ -744,6 +807,8 @@ export default function NoraTitanPage() {
         userText: visionPrompt,
         imageBase64: b64,
         visualTelemetry,
+        deviceLocation,
+        clientDateTime,
         mode: activeMode,
         sessionId,
       });
@@ -1011,12 +1076,20 @@ export default function NoraTitanPage() {
         content: m.content
       }));
 
+      const clientDateTime = new Date().toLocaleString("es-AR", {
+        dateStyle: "full",
+        timeStyle: "medium",
+        timeZone: "America/Argentina/Buenos_Aires",
+      });
+
       // ── INFERENCIA CLOUD-NATIVE (Groq LPUs / SambaNova) ──
       const cloudBody = await callCloudInferenceStream({
         systemPrompt,
         userText: trimmed,
         imageBase64: img,
         visualTelemetry: img ? "Imagen adjunta enviada por el usuario en el chat para análisis." : null,
+        deviceLocation,
+        clientDateTime,
         history: chatHistory,
         mode: activeMode,
         sessionId,
@@ -1237,47 +1310,102 @@ export default function NoraTitanPage() {
         )}
       </aside>
 
+      {/* Backdrop móvil cuando el sidebar está abierto */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(3px)",
+            zIndex: 38,
+            display: typeof window !== "undefined" && window.innerWidth < 768 ? "block" : "none"
+          }}
+        />
+      )}
+
       {/* ═══════════════════════ MAIN VIEWPORT ═══════════════════════ */}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", height: "100dvh", maxHeight: "100dvh", overflow: "hidden", minWidth: 0, position: "relative" }}>
 
-        {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO ─── */}
-        <header style={{ height: "48px", minHeight: "48px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.08)", backgroundColor: `${mc.bg}f2`, backdropFilter: "blur(14px)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", zIndex: 30, gap: "6px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
+        {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO (Sin encimamientos) ─── */}
+        <header
+          style={{
+            height: "52px",
+            minHeight: "52px",
+            flexShrink: 0,
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            backgroundColor: `${mc.bg}f2`,
+            backdropFilter: "blur(14px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 10px",
+            zIndex: 30,
+            gap: "8px"
+          }}
+        >
+          {/* Bloque Izquierdo: Fijo y protegido contra cualquier solapamiento */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
             {!sidebarOpen && (
-              <button onClick={() => setSidebarOpen(true)} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#f8fafc", borderRadius: "6px", padding: "4px 6px", cursor: "pointer", flexShrink: 0 }}>
-                <ChevronRight size={14} />
+              <button
+                onClick={() => setSidebarOpen(true)}
+                title="Desplegar menú lateral"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#f8fafc",
+                  borderRadius: "7px",
+                  padding: "6px 8px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.25)"
+                }}
+              >
+                <ChevronRight size={15} />
               </button>
             )}
             <img
               src="/avatar-nora.png"
               alt="Nora"
-              className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
               style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #3f3f46", objectFit: "cover", flexShrink: 0 }}
             />
-            <span style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "0.4px" }}>NORA ITU</span>
-            {autoTEAMode && (
-              <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "12px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", whiteSpace: "nowrap" }}>AUTO</span>
-            )}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc", whiteSpace: "nowrap", letterSpacing: "0.4px" }}>NORA ITU</span>
+                {autoTEAMode && (
+                  <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "10px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", whiteSpace: "nowrap" }}>AUTO</span>
+                )}
+              </div>
+              {deviceLocation?.city && (
+                <span style={{ fontSize: "9px", color: "#94a3b8", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "2px" }}>
+                  📍 {deviceLocation.city}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Fila Horizontal con Scroll Lateral: Word, PDF, PPT, Cámara, PTT */}
+          {/* Bloque Derecho: Botones de acción con scroll libre sin invadir la flecha izquierda */}
           <div
-            className="flex nowrap overflow-x-auto gap-2 max-w-full pb-1 items-center flex-shrink-0"
             style={{
               display: "flex",
-              flexWrap: "nowrap",
-              overflowX: "auto",
-              gap: "5px",
-              paddingBottom: "1px",
               alignItems: "center",
-              flexShrink: 0,
+              gap: "5px",
+              overflowX: "auto",
+              minWidth: 0,
+              flex: 1,
+              justifyContent: "flex-end",
+              paddingLeft: "6px",
               scrollbarWidth: "none"
             }}
           >
             <button
               onClick={() => handleExportDirect("docx")}
               title="Descargar Historial en Word"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
             >
               <FileText size={11} color="#38bdf8" />
               <span>Word</span>
@@ -1285,7 +1413,7 @@ export default function NoraTitanPage() {
             <button
               onClick={() => handleExportDirect("pdf")}
               title="Descargar Historial en PDF"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
             >
               <Printer size={11} color="#818cf8" />
               <span>PDF</span>
@@ -1293,7 +1421,7 @@ export default function NoraTitanPage() {
             <button
               onClick={() => handleExportDirect("pptx")}
               title="Descargar Presentación en PPTX"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
             >
               <Presentation size={11} color="#34d399" />
               <span>PPT</span>
@@ -1301,7 +1429,7 @@ export default function NoraTitanPage() {
 
             <button
               onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
-              style={{ backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`, color: isCameraOpen ? "#fff" : mc.badgeText, border: `1px solid ${mc.accent}44`, borderRadius: "7px", padding: "4px 8px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
+              style={{ backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`, color: isCameraOpen ? "#fff" : mc.badgeText, border: `1px solid ${mc.accent}44`, borderRadius: "7px", padding: "4px 8px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap", flexShrink: 0 }}
             >
               <Camera size={11} />
               <span>{isCameraOpen ? "✕" : "Cámara"}</span>
@@ -1322,11 +1450,12 @@ export default function NoraTitanPage() {
                 alignItems: "center",
                 gap: "5px",
                 boxShadow: "0 0 12px rgba(22,163,74,0.5)",
-                whiteSpace: "nowrap"
+                whiteSpace: "nowrap",
+                flexShrink: 0
               }}
             >
               <PhoneCall size={12} className="animate-pulse" />
-              <span>Llamar a Nora</span>
+              <span>Llamar</span>
             </button>
           </div>
         </header>
