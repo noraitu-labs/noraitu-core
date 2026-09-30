@@ -41,6 +41,61 @@ DIRECTIVAS CENTRALES DE PERSONALIDAD:
    - Textos concisos, fluidos y directos para que la síntesis de voz (speechSynthesis) suene como una charla telefónica real.
    - Respondé en texto plano limpio: NO uses asteriscos (*), almohadillas (#), ni formatos de markdown pesado que entorpezcan la lectura por voz.`;
 
+let cachedActiveModels: string[] | null = null;
+let lastModelFetch = 0;
+
+async function getActiveGroqModels(groq: Groq): Promise<string[]> {
+  const now = Date.now();
+  if (cachedActiveModels && now - lastModelFetch < 300000) {
+    return cachedActiveModels;
+  }
+  try {
+    const list = await groq.models.list();
+    const ids = (list.data || []).map((m: any) => m.id);
+    cachedActiveModels = ids;
+    lastModelFetch = now;
+    return ids;
+  } catch (e: any) {
+    console.warn("[Groq models.list error]:", e?.message || e);
+    return [];
+  }
+}
+
+function selectModel(hasImage: boolean, activeModels: string[]): string {
+  if (hasImage) {
+    const visionCandidates = [
+      process.env.GROQ_MODEL_VISION,
+      "llama-3.2-11b-vision-preview",
+      "llama-3.2-90b-vision-preview",
+      "llama-3.2-11b-vision",
+      "llama-3.2-90b-vision",
+    ].filter(Boolean) as string[];
+
+    if (activeModels.length > 0) {
+      const found = visionCandidates.find((c) => activeModels.includes(c)) || activeModels.find((id) => id.includes("vision"));
+      if (found) return found;
+    }
+    return process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview";
+  }
+
+  const textCandidates = [
+    process.env.GROQ_MODEL_TEXT,
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama-3.1-70b-versatile",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+  ].filter(Boolean) as string[];
+
+  if (activeModels.length > 0) {
+    const found = textCandidates.find((c) => activeModels.includes(c)) || activeModels.find((id) => !id.includes("whisper") && !id.includes("vision")) || activeModels[0];
+    if (found) return found;
+  }
+  return process.env.GROQ_MODEL_TEXT || "llama-3.1-8b-instant";
+}
+
 export async function POST(req: Request) {
   try {
     const body: RequestPayload = await req.json();
@@ -212,7 +267,7 @@ export async function POST(req: Request) {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. CASO B: Groq Cloud (Por defecto, LPUs ultra-rápidas)
+    // 3. CASO B: Groq Cloud (Por defecto, LPUs ultra-rápidas con auto-selección)
     // ─────────────────────────────────────────────────────────────
     if (!groqKey) {
       return NextResponse.json(
@@ -225,18 +280,93 @@ export async function POST(req: Request) {
     }
 
     const groq = new Groq({ apiKey: groqKey });
-    const model = hasImage
-      ? process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview"
-      : process.env.GROQ_MODEL_TEXT || "llama-3.3-70b-versatile";
+    const activeModels = await getActiveGroqModels(groq);
 
-    const chatCompletion = await groq.chat.completions.create({
-      model,
-      messages,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 800,
-    });
+    // Lista ordenada de candidatos según presencia de imagen
+    const candidateModels = hasImage
+      ? [
+          selectModel(true, activeModels),
+          "llama-3.2-11b-vision-preview",
+          "llama-3.2-90b-vision-preview",
+          "llama-3.2-11b-vision",
+        ]
+      : [
+          selectModel(false, activeModels),
+          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant",
+          "llama-3.1-70b-versatile",
+          "llama3-70b-8192",
+          "llama3-8b-8192",
+          "mixtral-8x7b-32768",
+          "gemma2-9b-it",
+        ];
 
+    const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
+    let chatCompletion: any = null;
+    let usedModel = "";
+    let lastError: any = null;
+
+    for (const m of uniqueCandidates) {
+      try {
+        usedModel = m;
+        chatCompletion = await groq.chat.completions.create({
+          model: m,
+          messages,
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 800,
+        });
+        if (chatCompletion) break;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Groq Model ${m} fallback]:`, err?.message || err);
+      }
+    }
+
+    // Si fallan modelos de visión, intentar modo texto con contexto de captura
+    if (!chatCompletion && hasImage) {
+      console.warn("[Groq Vision Fallback a Modelo de Texto]");
+      const fallbackMessages = messages.map((msg) => {
+        if (Array.isArray(msg.content)) {
+          const textPart = msg.content.find((c: any) => c.type === "text");
+          return {
+            role: msg.role,
+            content: `[Análisis de orientación espacial de imagen capturada]: ${textPart?.text || "Describe lo que ves."}`,
+          };
+        }
+        return msg;
+      });
+
+      const textFallbacks = [
+        selectModel(false, activeModels),
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+      ];
+
+      for (const m of Array.from(new Set(textFallbacks.filter(Boolean)))) {
+        try {
+          usedModel = m;
+          chatCompletion = await groq.chat.completions.create({
+            model: m,
+            messages: fallbackMessages,
+            stream: true,
+            temperature: 0.7,
+            max_tokens: 800,
+          });
+          if (chatCompletion) break;
+        } catch (err: any) {
+          lastError = err;
+        }
+      }
+    }
+
+    if (!chatCompletion) {
+      throw lastError || new Error("No se pudo iniciar inferencia con ningún modelo disponible en Groq");
+    }
+
+    const model = usedModel;
     const encoder = new TextEncoder();
     let fullText = "";
 
@@ -328,4 +458,25 @@ function triggerBackgroundPersist(
       hasImage,
     }).catch((err) => console.warn("[Background Neon Log Bypassed]:", err?.message || err)),
   ]).catch(() => {});
+}
+
+export async function GET() {
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  if (!groqKey) {
+    return NextResponse.json({ ok: false, error: "GROQ_API_KEY no configurada" });
+  }
+  try {
+    const groq = new Groq({ apiKey: groqKey });
+    const models = await getActiveGroqModels(groq);
+    const textModel = selectModel(false, models);
+    const visionModel = selectModel(true, models);
+    return NextResponse.json({
+      ok: true,
+      activeModels: models,
+      selectedTextModel: textModel,
+      selectedVisionModel: visionModel,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message || err });
+  }
 }

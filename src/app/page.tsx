@@ -1158,9 +1158,25 @@ export default function NoraTitanPage() {
             </button>
             <button
               onClick={() => setIsCallModalOpen(true)}
-              style={{ backgroundColor: "#238636", color: "#fff", border: "none", borderRadius: "7px", padding: "4px 8px", fontSize: "10px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", boxShadow: "0 0 8px rgba(35,134,54,0.3)", whiteSpace: "nowrap" }}
+              title="Iniciar llamada de voz continua con Nora"
+              style={{
+                background: "linear-gradient(135deg, #16a34a, #15803d)",
+                color: "#ffffff",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: "8px",
+                padding: "4px 10px",
+                fontSize: "11px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                boxShadow: "0 0 12px rgba(22,163,74,0.5)",
+                whiteSpace: "nowrap"
+              }}
             >
-              <PhoneCall size={11} /><span>PTT</span>
+              <PhoneCall size={12} className="animate-pulse" />
+              <span>Llamar a Nora</span>
             </button>
           </div>
         </header>
@@ -1427,6 +1443,23 @@ export default function NoraTitanPage() {
                 aria-label="Mensaje para Nora Itu"
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "13px", lineHeight: "19px", padding: "5px 3px", resize: "none", maxHeight: "90px", minHeight: "30px" }}
               />
+
+              <button
+                onClick={() => setIsCallModalOpen(true)}
+                title="Llamada de voz continua con Nora"
+                aria-label="Llamada de voz"
+                style={{
+                  background: "rgba(34,197,94,0.15)",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                  color: "#4ade80",
+                  padding: "6px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  flexShrink: 0
+                }}
+              >
+                <PhoneCall size={17} />
+              </button>
 
               <button onClick={toggleListening} title={isListening ? "Detener dictado" : "Hablar con manos libres"} aria-label="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#64748b", padding: "6px", borderRadius: "8px", cursor: "pointer", flexShrink: 0 }}>
                 {isListening ? <MicOff size={17} /> : <Mic size={17} />}

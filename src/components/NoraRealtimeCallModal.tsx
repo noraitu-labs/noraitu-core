@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, PhoneOff, Volume2, Sparkles, Send } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Volume2, VolumeX, Sparkles, Send, Radio, MessageSquare, Loader2 } from "lucide-react";
 
 interface NoraRealtimeCallModalProps {
   isOpen: boolean;
@@ -12,70 +12,66 @@ interface NoraRealtimeCallModalProps {
 export default function NoraRealtimeCallModal({
   isOpen,
   onClose,
-  sessionId = `session_${Date.now()}`
+  sessionId = `call_${Date.now()}`
 }: NoraRealtimeCallModalProps) {
+  // Estados de llamada
+  const [callDuration, setCallDuration] = useState<number>(0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [pttMode, setPttMode] = useState<boolean>(false);
   const [isPressingPTT, setIsPressingPTT] = useState<boolean>(false);
-  const [transcript, setTranscript] = useState<string>("");
+  const [showTranscript, setShowTranscript] = useState<boolean>(true);
+
+  // Conversación
+  const [userTranscript, setUserTranscript] = useState<string>("");
   const [assistantText, setAssistantText] = useState<string>("");
-  const [status, setStatus] = useState<"idle" | "listening" | "streaming" | "speaking">("idle");
+  const [callHistory, setCallHistory] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+  const [status, setStatus] = useState<"connecting" | "listening" | "thinking" | "speaking">("connecting");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [textInput, setTextInput] = useState<string>("");
 
+  // Refs
   const recognitionRef = useRef<any>(null);
   const speechQueueRef = useRef<string[]>([]);
   const isSpeakingRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcriptHistoryRef = useRef<string>("");
+  const isMutedRef = useRef<boolean>(false);
+  const statusRef = useRef<typeof status>("connecting");
 
-  // Inicializar Web Speech Recognition nativo en espaol argentino
+  // Sincronizar refs
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
-    if (!SpeechRecognition) {
-      setErrorMsg("Tu navegador no soporta Web Speech Recognition.");
-      return;
-    }
+  // Limpieza de símbolos para voz humana natural
+  const cleanForSpeech = (text: string): string => {
+    return text
+      .replace(/[*#\-_\[\]()~`>]+/g, "")
+      .replace(/(numeral|asterisco|guion|hash|at|barra)/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "es-AR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event: any) => {
-      let currentInterim = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        currentInterim += event.results[i][0].transcript;
-      }
-      setTranscript(currentInterim);
-    };
-
-    recognition.onerror = (e: any) => {
-      console.warn("[SpeechRecognition Error]:", e.error);
-      if (e.error === "not-allowed") {
-        setErrorMsg("Permiso de micrfono denegado en el navegador.");
-      }
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      try {
-        recognition.stop();
-      } catch {}
-    };
-  }, []);
-
-  // Cola y reproduccin continua con window.speechSynthesis
+  // ── 1. PROCESADOR DE COLA TTS STREAMING ──
   const processNextSpeechSentence = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
 
-    const sentence = speechQueueRef.current.shift()?.trim();
+    const rawSentence = speechQueueRef.current.shift()?.trim();
+    const sentence = rawSentence ? cleanForSpeech(rawSentence) : "";
     if (!sentence) {
-      if (speechQueueRef.current.length === 0 && status === "speaking") {
-        setStatus("idle");
+      if (speechQueueRef.current.length === 0 && statusRef.current === "speaking") {
+        setStatus("listening");
+        // Reactivar reconocimiento si no está muteado ni en PTT manual
+        if (!isMutedRef.current && recognitionRef.current) {
+          try { recognitionRef.current.start(); } catch {}
+        }
       }
       return;
     }
@@ -83,36 +79,53 @@ export default function NoraRealtimeCallModal({
     isSpeakingRef.current = true;
     setStatus("speaking");
 
+    // Pausar reconocimiento para que Nora no se escuche a sí misma
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = "es-AR";
     utterance.rate = 1.05;
+    utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const spanishVoice = voices.find(
-      (v) => v.lang.startsWith("es-AR") || v.lang.startsWith("es-419") || v.lang.startsWith("es")
-    );
-    if (spanishVoice) utterance.voice = spanishVoice;
+    const voice =
+      voices.find(v => v.name.includes("Google") && v.lang.startsWith("es")) ||
+      voices.find(v => v.name.includes("Sabina") || v.name.includes("Elena") || v.name.includes("Paulina") || v.name.includes("Monica")) ||
+      voices.find(v => v.lang.startsWith("es-AR") || v.lang.startsWith("es-419") || v.lang.startsWith("es"));
+    if (voice) utterance.voice = voice;
 
     utterance.onend = () => {
       isSpeakingRef.current = false;
       if (speechQueueRef.current.length > 0) {
         processNextSpeechSentence();
       } else {
-        setStatus("idle");
+        setStatus("listening");
+        if (!isMutedRef.current && recognitionRef.current) {
+          try { recognitionRef.current.start(); } catch {}
+        }
       }
     };
 
     utterance.onerror = () => {
       isSpeakingRef.current = false;
-      processNextSpeechSentence();
+      if (speechQueueRef.current.length > 0) {
+        processNextSpeechSentence();
+      } else {
+        setStatus("listening");
+        if (!isMutedRef.current && recognitionRef.current) {
+          try { recognitionRef.current.start(); } catch {}
+        }
+      }
     };
 
     window.speechSynthesis.speak(utterance);
-  }, [status]);
+  }, []);
 
   const enqueueSentenceForSpeech = useCallback(
-    (textChunk: string) => {
-      speechQueueRef.current.push(textChunk);
+    (chunk: string) => {
+      speechQueueRef.current.push(chunk);
       if (!isSpeakingRef.current) {
         processNextSpeechSentence();
       }
@@ -120,143 +133,283 @@ export default function NoraRealtimeCallModal({
     [processNextSpeechSentence]
   );
 
-  // Consumo del Stream de la API
+  // ── 2. ENVÍO AL ENDPOINT DE INFERENCIA STREAMING ──
   const sendQueryToStream = useCallback(
-    async (userMessage: string) => {
-      if (!userMessage.trim()) return;
+    async (messageText: string) => {
+      const trimmed = messageText.trim();
+      if (!trimmed) return;
 
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // Parar silencios pendientes
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
       }
+
+      // Detener escucha durante inferencia
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+
+      // Añadir al historial visual de la llamada
+      setCallHistory(prev => [...prev, { role: "user", text: trimmed }]);
+      setUserTranscript("");
+      setAssistantText("");
+      setStatus("thinking");
+
+      if (abortControllerRef.current) abortControllerRef.current.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
-
-      setStatus("streaming");
-      setAssistantText("");
-      speechQueueRef.current = [];
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-      isSpeakingRef.current = false;
 
       try {
         const response = await fetch("/api/nora-inference", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userText: userMessage.trim(),
+            userText: trimmed,
             sessionId,
-            systemPrompt: "Sos Nora Itu, asistente de IA de MyJNexoraVisual. Tu tono es desestructurado, cercano, cálido y empático con modismos argentinos fluidos (che, mirá, contame, vos). Cero frases corporativas o introducciones repetitivas. Respuestas concisas, directas y ágiles para llamada telefónica real, en texto plano sin asteriscos ni numerales.",
+            systemPrompt:
+              "Sos Nora Itu, asistente de IA de MyJNexoraVisual. Tu tono es desestructurado, cercano, cálido y empático con modismos argentinos fluidos (che, mirá, contame, vos). Cero frases corporativas o introducciones repetitivas. Respuestas concisas, directas y ágiles para llamada telefónica real, en texto plano sin asteriscos ni numerales.",
             mode: "general",
           }),
-          signal: controller.signal
+          signal: controller.signal,
         });
 
         if (!response.ok || !response.body) {
-          throw new Error(`Error en stream: ${response.statusText}`);
+          throw new Error(`Respuesta no-OK del servidor (${response.status})`);
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let sentenceBuffer = "";
+        let accumulatedFull = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          // /api/nora-inference devuelve texto plano en chunks (sin prefijo data:)
-          const chunk = decoder.decode(value, { stream: true });
-          if (!chunk) continue;
+          const textChunk = decoder.decode(value, { stream: true });
+          if (!textChunk) continue;
 
-          // Limpiar símbolos para TTS fluido
-          const cleaned = chunk.replace(/[*#_~`>]+/g, "");
-          setAssistantText((prev) => prev + cleaned);
-          sentenceBuffer += cleaned;
+          accumulatedFull += textChunk;
+          setAssistantText(accumulatedFull);
+          sentenceBuffer += textChunk;
 
-          // Encolar por oraciones completas para TTS continuo
-          const splitMatch = sentenceBuffer.search(/[.?!;\n]/);
-          if (splitMatch !== -1) {
-            const sentenceToSpeak = sentenceBuffer.slice(0, splitMatch + 1);
-            sentenceBuffer = sentenceBuffer.slice(splitMatch + 1);
-            enqueueSentenceForSpeech(sentenceToSpeak);
+          // Segmentar en oraciones para streaming de voz inmediato
+          const splitRegex = /([.?!;\n]+)/;
+          let match = splitRegex.exec(sentenceBuffer);
+
+          while (match && match.index !== undefined) {
+            const splitMatch = match.index + match[0].length;
+            const sentenceToSpeak = sentenceBuffer.slice(0, splitMatch).trim();
+            sentenceBuffer = sentenceBuffer.slice(splitMatch);
+
+            if (sentenceToSpeak) {
+              enqueueSentenceForSpeech(sentenceToSpeak);
+            }
+            match = splitRegex.exec(sentenceBuffer);
           }
         }
 
         if (sentenceBuffer.trim()) {
           enqueueSentenceForSpeech(sentenceBuffer.trim());
         }
+
+        if (accumulatedFull.trim()) {
+          setCallHistory(prev => [...prev, { role: "assistant", text: accumulatedFull.trim() }]);
+        }
       } catch (err: any) {
         if (err.name !== "AbortError") {
-          console.error("[Stream Reader Error]:", err);
-          setErrorMsg("Error al conectar con Nora Itu.");
-          setStatus("idle");
+          console.error("[Call Stream Error]:", err);
+          setErrorMsg("Error de conexión durante la llamada.");
+          setStatus("listening");
+          if (!isMutedRef.current && recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch {}
+          }
         }
       }
     },
     [sessionId, enqueueSentenceForSpeech]
   );
 
-  const startPTT = useCallback(() => {
-    if (!recognitionRef.current) return;
+  // ── 3. INICIALIZAR RECONOCIMIENTO CONTINUO AL ABRIR LA LLAMADA ──
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
     setErrorMsg(null);
-    setTranscript("");
-    setIsPressingPTT(true);
-    setStatus("listening");
-
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    isSpeakingRef.current = false;
+    setStatus("connecting");
+    setCallDuration(0);
+    setUserTranscript("");
+    setAssistantText("");
+    setCallHistory([]);
     speechQueueRef.current = [];
+    isSpeakingRef.current = false;
 
-    try {
-      recognitionRef.current.start();
-    } catch {}
-  }, []);
+    // Cronómetro de llamada
+    callTimerRef.current = setInterval(() => {
+      setCallDuration(d => d + 1);
+    }, 1000);
 
-  const stopPTT = useCallback(() => {
-    if (!recognitionRef.current) return;
-    setIsPressingPTT(false);
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    try {
-      recognitionRef.current.stop();
-    } catch {}
+    if (!SpeechRecognition) {
+      setErrorMsg("Tu navegador no soporta reconocimiento de voz continuo.");
+      return;
+    }
 
-    setTimeout(() => {
-      setTranscript((current) => {
-        if (current.trim()) {
-          sendQueryToStream(current.trim());
+    const rec = new SpeechRecognition();
+    rec.lang = "es-AR";
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onstart = () => {
+      if (statusRef.current !== "speaking" && statusRef.current !== "thinking") {
+        setStatus("listening");
+      }
+    };
+
+    rec.onresult = (event: any) => {
+      let interim = "";
+      let final = "";
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += t;
         } else {
-          setStatus("idle");
+          interim += t;
         }
-        return current;
-      });
-    }, 250);
-  }, [sendQueryToStream]);
+      }
 
-  const handleClose = () => {
+      const currentSpeech = (final || interim).trim();
+      if (!currentSpeech) return;
+
+      setUserTranscript(currentSpeech);
+      transcriptHistoryRef.current = currentSpeech;
+
+      // Si está en modo PTT, esperamos a que suelte el botón
+      if (pttMode) return;
+
+      // Detección de pausa natural en llamada manos libres:
+      // Reiniciar el timer de silencio en cada palabra dicha
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+      silenceTimerRef.current = setTimeout(() => {
+        const textToSend = transcriptHistoryRef.current.trim();
+        if (textToSend && statusRef.current === "listening") {
+          sendQueryToStream(textToSend);
+          transcriptHistoryRef.current = "";
+        }
+      }, 850); // 850ms de pausa natural indican fin de frase en conversación real
+    };
+
+    rec.onerror = (e: any) => {
+      if (e.error === "no-speech") return;
+      if (e.error === "not-allowed") {
+        setErrorMsg("Permiso de micrófono denegado.");
+      }
+    };
+
+    rec.onend = () => {
+      // Si la llamada sigue activa y no está hablando Nora ni muteado el mic, reactivarlo
+      if (isOpen && statusRef.current === "listening" && !isMutedRef.current && !pttMode) {
+        try { rec.start(); } catch {}
+      }
+    };
+
+    recognitionRef.current = rec;
+
+    // Conectar llamada de inmediato
+    try {
+      rec.start();
+      setStatus("listening");
+    } catch {}
+
+    // Saludo de bienvenida automático si inicia la llamada
+    const welcomeChimeTimeout = setTimeout(() => {
+      enqueueSentenceForSpeech("¡Hola! Ya estamos comunicados. Contame en qué te puedo dar una mano hoy.");
+    }, 400);
+
+    return () => {
+      clearTimeout(welcomeChimeTimeout);
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [isOpen, pttMode, sendQueryToStream, enqueueSentenceForSpeech]);
+
+  // ── 4. CONTROLES DE LA LLAMADA ──
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      if (status === "listening" && recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch {}
+      }
+    } else {
+      setIsMuted(true);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    }
+  };
+
+  const handleEndCall = () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
     if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
+      try { recognitionRef.current.stop(); } catch {}
     }
-    isSpeakingRef.current = false;
-    speechQueueRef.current = [];
-    setStatus("idle");
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     onClose();
   };
 
-  const handleSendText = (e: React.FormEvent) => {
+  // Manejo de PTT Manual (si el usuario activa ese modo)
+  const handlePttDown = () => {
+    if (!pttMode || !recognitionRef.current) return;
+    setIsPressingPTT(true);
+    setStatus("listening");
+    setUserTranscript("");
+    transcriptHistoryRef.current = "";
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    try { recognitionRef.current.start(); } catch {}
+  };
+
+  const handlePttUp = () => {
+    if (!pttMode || !recognitionRef.current) return;
+    setIsPressingPTT(false);
+    try { recognitionRef.current.stop(); } catch {}
+    setTimeout(() => {
+      const text = transcriptHistoryRef.current.trim();
+      if (text) {
+        sendQueryToStream(text);
+      } else {
+        setStatus("listening");
+      }
+    }, 200);
+  };
+
+  const handleSendManualText = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!textInput.trim() || status === "streaming") return;
+    if (!textInput.trim() || status === "thinking") return;
     const msg = textInput.trim();
     setTextInput("");
-    setTranscript(msg);
     sendQueryToStream(msg);
+  };
+
+  const formatTimer = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
   if (!isOpen) return null;
@@ -266,56 +419,85 @@ export default function NoraRealtimeCallModal({
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        backdropFilter: "blur(12px)",
+        backgroundColor: "rgba(3, 7, 18, 0.88)",
+        backdropFilter: "blur(18px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 9999,
         padding: "16px",
-        fontFamily: "system-ui, -apple-system, sans-serif"
+        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       }}
     >
       <div
         style={{
-          backgroundColor: "#0d1117",
-          border: "1px solid #21262d",
-          borderRadius: "24px",
+          backgroundColor: "#0b0f19",
+          border: "1px solid rgba(255, 255, 255, 0.12)",
+          borderRadius: "28px",
           width: "100%",
-          maxWidth: "480px",
+          maxWidth: "460px",
           padding: "24px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          color: "#f0f6fc",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)"
+          color: "#f8fafc",
+          boxShadow: "0 30px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px rgba(99, 102, 241, 0.15)",
+          position: "relative",
+          overflow: "hidden"
         }}
       >
+        {/* Cabecera de la llamada */}
         <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Sparkles size={20} color="#a855f7" />
-            <span style={{ fontWeight: 700, fontSize: "17px" }}>Nora Itu Live</span>
-            <span style={{ fontSize: "11px", backgroundColor: "#1f6feb22", color: "#58a6ff", border: "1px solid #1f6feb44", padding: "2px 8px", borderRadius: "12px" }}>
-              Neon Core
+            <span
+              style={{
+                width: "10px",
+                height: "10px",
+                borderRadius: "50%",
+                backgroundColor: status === "listening" ? "#22c55e" : status === "speaking" ? "#a855f7" : "#eab308",
+                boxShadow: status === "listening" ? "0 0 10px #22c55e" : "0 0 10px #a855f7"
+              }}
+            />
+            <span style={{ fontWeight: 800, fontSize: "16px", letterSpacing: "0.3px" }}>Llamada con Nora</span>
+            <span style={{ fontSize: "11px", backgroundColor: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+              {formatTimer(callDuration)}
             </span>
           </div>
-          <button
-            onClick={handleClose}
-            style={{
-              background: "#21262d",
-              border: "none",
-              borderRadius: "50%",
-              width: "32px",
-              height: "32px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#8b949e",
-              cursor: "pointer"
-            }}
-          >
-            <PhoneOff size={16} />
-          </button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              onClick={() => setShowTranscript(s => !s)}
+              title={showTranscript ? "Ocultar texto" : "Ver texto"}
+              style={{
+                background: showTranscript ? "rgba(255,255,255,0.1)" : "none",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "8px",
+                padding: "6px",
+                color: "#94a3b8",
+                cursor: "pointer"
+              }}
+            >
+              <MessageSquare size={15} />
+            </button>
+            <button
+              onClick={handleEndCall}
+              title="Cerrar llamada"
+              style={{
+                background: "rgba(239, 68, 68, 0.2)",
+                border: "1px solid rgba(239, 68, 68, 0.4)",
+                borderRadius: "50%",
+                width: "32px",
+                height: "32px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#f87171",
+                cursor: "pointer"
+              }}
+            >
+              <PhoneOff size={15} />
+            </button>
+          </div>
         </div>
 
         {errorMsg && (
@@ -324,119 +506,247 @@ export default function NoraRealtimeCallModal({
           </div>
         )}
 
-        <div
-          style={{
-            width: "100%",
-            minHeight: "180px",
-            maxHeight: "240px",
-            backgroundColor: "#161b22",
-            border: "1px solid #30363d",
-            borderRadius: "16px",
-            padding: "16px",
-            overflowY: "auto",
-            marginBottom: "16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            fontSize: "14px"
-          }}
-        >
-          {transcript && (
-            <div>
-              <span style={{ color: "#58a6ff", fontWeight: 600 }}>T: </span>
-              <span style={{ color: "#c9d1d9" }}>{transcript}</span>
-            </div>
-          )}
-          {assistantText ? (
-            <div>
-              <span style={{ color: "#d2a8ff", fontWeight: 600 }}>Nora: </span>
-              <span style={{ color: "#f0f6fc" }}>{assistantText}</span>
-            </div>
-          ) : (
-            !transcript && (
-              <div style={{ color: "#6e7681", margin: "auto", textAlign: "center", fontSize: "13px" }}>
-                Presiona y mantn el botn PTT para hablar con Nora o escribe abajo.
+        {/* ─── ESFERA DE AUDIO REACTIVA / NORA AVATAR ─── */}
+        <div style={{ position: "relative", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Ondas pulsantes de fondo */}
+          <div
+            style={{
+              position: "absolute",
+              width: status === "speaking" ? "140px" : status === "listening" ? "125px" : "110px",
+              height: status === "speaking" ? "140px" : status === "listening" ? "125px" : "110px",
+              borderRadius: "50%",
+              backgroundColor: status === "speaking" ? "rgba(168, 85, 247, 0.25)" : status === "listening" ? "rgba(34, 197, 94, 0.2)" : "rgba(99, 102, 241, 0.15)",
+              animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+              transition: "all 0.3s ease"
+            }}
+          />
+
+          <div
+            style={{
+              position: "relative",
+              width: "90px",
+              height: "90px",
+              borderRadius: "50%",
+              border: `3px solid ${status === "speaking" ? "#c084fc" : status === "listening" ? "#4ade80" : "#6366f1"}`,
+              boxShadow: `0 0 25px ${status === "speaking" ? "rgba(192,132,252,0.5)" : status === "listening" ? "rgba(74,222,128,0.5)" : "rgba(99,102,241,0.3)"}`,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#111827",
+              transition: "all 0.3s ease"
+            }}
+          >
+            <img
+              src="/avatar-nora.png"
+              alt="Nora"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+            />
+            {status === "thinking" && (
+              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Loader2 size={28} className="animate-spin" color="#c084fc" />
               </div>
-            )
+            )}
+          </div>
+        </div>
+
+        {/* Estado conversacional dinámico */}
+        <div style={{ textAlign: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: status === "speaking" ? "#c084fc" : status === "listening" ? "#4ade80" : status === "thinking" ? "#e3b341" : "#94a3b8" }}>
+            {status === "listening" && (isMuted ? "Micrófono Silenciado" : "● Nora te escucha con atención...")}
+            {status === "speaking" && "● Nora te está hablando..."}
+            {status === "thinking" && "● Nora está pensando la respuesta..."}
+            {status === "connecting" && "● Conectando llamada..."}
+          </div>
+          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+            {!pttMode ? "Llamada manos libres activa · Hablá normalmente" : "Modo PTT activado · Mantené presionado para hablar"}
+          </div>
+        </div>
+
+        {/* ─── PANEL DE TRANSCRIPCIÓN CONVERSACIONAL EN VIVO ─── */}
+        {showTranscript && (
+          <div
+            style={{
+              width: "100%",
+              minHeight: "130px",
+              maxHeight: "180px",
+              backgroundColor: "rgba(15, 23, 42, 0.7)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              borderRadius: "16px",
+              padding: "12px 14px",
+              overflowY: "auto",
+              marginBottom: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              fontSize: "13px"
+            }}
+          >
+            {callHistory.map((item, idx) => (
+              <div key={idx} style={{ lineHeight: "1.4" }}>
+                <span style={{ fontWeight: 700, color: item.role === "user" ? "#38bdf8" : "#c084fc" }}>
+                  {item.role === "user" ? "Vos: " : "Nora: "}
+                </span>
+                <span style={{ color: "#e2e8f0" }}>{item.text}</span>
+              </div>
+            ))}
+
+            {/* Texto en progreso */}
+            {userTranscript && (
+              <div style={{ lineHeight: "1.4", fontStyle: "italic", opacity: 0.9 }}>
+                <span style={{ fontWeight: 700, color: "#38bdf8" }}>Vos (hablando): </span>
+                <span style={{ color: "#93c5fd" }}>{userTranscript}</span>
+              </div>
+            )}
+            {status === "speaking" && assistantText && !callHistory.some(h => h.text === assistantText) && (
+              <div style={{ lineHeight: "1.4" }}>
+                <span style={{ fontWeight: 700, color: "#c084fc" }}>Nora: </span>
+                <span style={{ color: "#f8fafc" }}>{assistantText}</span>
+              </div>
+            )}
+
+            {callHistory.length === 0 && !userTranscript && !assistantText && (
+              <div style={{ color: "#64748b", margin: "auto", textAlign: "center", fontSize: "12px" }}>
+                Hablá con libertad. Nora te escucha y responde de inmediato.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── CONTROLES PRINCIPALES DE LLAMADA ─── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginBottom: "16px", width: "100%" }}>
+          {/* Silenciar micrófono */}
+          <button
+            onClick={toggleMute}
+            title={isMuted ? "Activar micrófono" : "Silenciar micrófono"}
+            style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "50%",
+              border: isMuted ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.15)",
+              backgroundColor: isMuted ? "rgba(239,68,68,0.2)" : "rgba(30,41,59,0.8)",
+              color: isMuted ? "#f87171" : "#f8fafc",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+          </button>
+
+          {/* Botón PTT Opcional si el modo PTT está activo */}
+          {pttMode ? (
+            <button
+              onMouseDown={handlePttDown}
+              onMouseUp={handlePttUp}
+              onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
+              onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "50%",
+                border: "none",
+                backgroundColor: isPressingPTT ? "#dc2626" : "#16a34a",
+                color: "#ffffff",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: isPressingPTT ? "0 0 25px rgba(220,38,38,0.7)" : "0 6px 20px rgba(22,163,74,0.4)",
+                transform: isPressingPTT ? "scale(0.95)" : "scale(1)",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <Radio size={24} />
+              <span style={{ fontSize: "10px", fontWeight: 700, marginTop: "2px" }}>
+                {isPressingPTT ? "SOLTÁ" : "HABLAR"}
+              </span>
+            </button>
+          ) : (
+            /* Botón de Finalizar Llamada en manos libres */
+            <button
+              onClick={handleEndCall}
+              title="Cortar llamada"
+              style={{
+                width: "68px",
+                height: "68px",
+                borderRadius: "50%",
+                border: "none",
+                backgroundColor: "#dc2626",
+                color: "#ffffff",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 8px 25px rgba(220, 38, 38, 0.45)",
+                transition: "transform 0.15s ease",
+              }}
+            >
+              <PhoneOff size={24} />
+              <span style={{ fontSize: "9.5px", fontWeight: 700, marginTop: "2px" }}>CORTAR</span>
+            </button>
           )}
+
+          {/* Toggle PTT / Manos Libres */}
+          <button
+            onClick={() => setPttMode(p => !p)}
+            title={pttMode ? "Cambiar a Manos Libres" : "Cambiar a Push To Talk"}
+            style={{
+              width: "48px",
+              height: "48px",
+              borderRadius: "50%",
+              border: pttMode ? "2px solid #38bdf8" : "1px solid rgba(255,255,255,0.15)",
+              backgroundColor: pttMode ? "rgba(56,189,248,0.2)" : "rgba(30,41,59,0.8)",
+              color: pttMode ? "#38bdf8" : "#94a3b8",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <Radio size={19} />
+          </button>
         </div>
 
-        <div style={{ marginBottom: "16px", fontSize: "12px", fontWeight: 600, color: status === "listening" ? "#58a6ff" : status === "streaming" ? "#e3b341" : status === "speaking" ? "#d2a8ff" : "#8b949e" }}>
-          {status === "listening" && "● Escuchando tu voz..."}
-          {status === "streaming" && "● Conectando con Nora Itu..."}
-          {status === "speaking" && "● Nora est respondiendo..."}
-          {status === "idle" && "Listo para hablar"}
-        </div>
-
-        {/* Botn Push-To-Talk */}
-        <button
-          onMouseDown={startPTT}
-          onMouseUp={stopPTT}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            startPTT();
-          }}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            stopPTT();
-          }}
-          style={{
-            width: "90px",
-            height: "90px",
-            borderRadius: "50%",
-            border: "none",
-            outline: "none",
-            backgroundColor: isPressingPTT ? "#da3633" : "#238636",
-            color: "#ffffff",
-            cursor: "pointer",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: isPressingPTT ? "0 0 25px rgba(218, 54, 51, 0.7)" : "0 8px 24px rgba(35, 134, 54, 0.4)",
-            transform: isPressingPTT ? "scale(0.94)" : "scale(1)",
-            transition: "all 0.15s ease",
-            userSelect: "none",
-            marginBottom: "16px"
-          }}
-        >
-          <Mic size={28} />
-          <span style={{ fontSize: "11px", fontWeight: 700, marginTop: "4px" }}>
-            {isPressingPTT ? "SOLT" : "PTT"}
-          </span>
-        </button>
-
-        {/* Input alternativo por texto */}
-        <form onSubmit={handleSendText} style={{ width: "100%", display: "flex", gap: "8px" }}>
+        {/* Input de texto complementario por si el usuario prefiere escribir algo puntual */}
+        <form onSubmit={handleSendManualText} style={{ width: "100%", display: "flex", gap: "8px" }}>
           <input
             type="text"
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="O escribe un mensaje..."
+            placeholder="O escribe algo aquí durante la llamada..."
             style={{
               flex: 1,
-              backgroundColor: "#161b22",
-              border: "1px solid #30363d",
-              borderRadius: "10px",
-              padding: "10px 14px",
-              color: "#f0f6fc",
-              fontSize: "13px",
+              backgroundColor: "rgba(15, 23, 42, 0.6)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: "12px",
+              padding: "9px 12px",
+              color: "#f8fafc",
+              fontSize: "12.5px",
               outline: "none"
             }}
           />
           <button
             type="submit"
-            disabled={!textInput.trim() || status === "streaming"}
+            disabled={!textInput.trim() || status === "thinking"}
             style={{
-              backgroundColor: textInput.trim() ? "#1f6feb" : "#21262d",
+              backgroundColor: textInput.trim() ? "#6366f1" : "rgba(255,255,255,0.06)",
               border: "none",
-              borderRadius: "10px",
+              borderRadius: "12px",
               padding: "0 14px",
               color: "#ffffff",
               cursor: textInput.trim() ? "pointer" : "default"
             }}
           >
-            <Send size={15} />
+            <Send size={14} />
           </button>
         </form>
       </div>
