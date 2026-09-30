@@ -115,14 +115,14 @@ function inferClientSemantic(input: string, mode: string = "general", hasImage: 
     return `### 🎓 Nora Itu · Planificación de Cátedra Universitaria\n\n1. **Objetivo Pedagógico:** Comprensión analítica y metodología activa.\n2. **Secuencia Didáctica:** Marco conceptual, análisis de casos y rúbrica formativa.\n3. **Exportación:** Disponible en Word (.docx) o diapositivas institucionales (.pptx).`;
   }
 
-  // 9. Documentos
+  // 9. Documentos — redirige a la IA para respuesta enriquecida
   if (q.includes("informe") || q.includes("documento") || q.includes("presentacion") || q.includes("presentación")) {
-    return `### 📄 Nora Itu · Documento Formal Estructurado\n\n**TÍTULO:** INFORME EJECUTIVO DE GESTIÓN Y CONTENIDOS\n**ORGANIZACIÓN:** MyJNexoraVisual · Nora Itu\n**FECHA:** ${new Date().toLocaleDateString("es-AR")}\n\n#### 1. Resumen Ejecutivo\nDocumento institucional preparado para exportación local inmediata en Word (.docx), PDF de alta calidad o Presentaciones (.pptx).\n\n#### 2. Ejes de Implementación\n- Accesibilidad universal (TEA y Lazarillo 360°).\n- Arquitectura de nube sin APIs de terceros a costo cero.\n- Síntesis humana en español neutro latino.\n\n*Instrucción:* Utiliza los botones superiores de la cabecera para descargar este archivo.`;
+    return ""; // Deja pasar al modelo AI sin respuesta hardcodeada
   }
 
   // 10. Ayuda General
   if (q.includes("ayuda") || q.includes("ayudarme") || q.includes("capacidades") || q.includes("quien eres") || q.includes("quién eres")) {
-    return `¡Hola! Soy **Nora Itu**, asistente de inteligencia artificial inclusiva desarrollada por **MyJNexoraVisual**.\n\nEstoy aquí para ayudarte en lo que necesites:\n- Conversar sobre cualquier tema, analizar ideas o estudiar materias escolares y universitarias.\n- Orientación espacial con la cámara en tiempo real (modo Lazarillo 360°).\n- Inclusión cognitiva TEA con pictogramas interactivos y lenguaje claro.\n- Generar informes, resúmenes o documentos cuando me lo solicites.\n\n¿En qué puedo asistirte hoy?`;
+    return `¡Hola! Soy **Nora Itu**, asistente de inteligencia artificial inclusiva desarrollada por **MyJNexoraVisual**.\n\nEstoy aquí para ayudarte en lo que necesites:\n- Conversar sobre cualquier tema, analizar ideas o estudiar materias escolares y universitarias.\n- Orientación espacial con la cámara en tiempo real (modo Lazarillo 360°).\n- Inclusión cognitiva TEA con pictogramas interactivos y lenguaje claro.\n- Generar informes, resúmenes o presentaciones cuando me lo pidas — verás los botones **Word / PDF / PPT** debajo de cada respuesta mía para descargar en ese instante.\n\n¿En qué puedo asistirte hoy?`;
   }
 
   // 11. Diálogo Contextual Fluido
@@ -1504,7 +1504,7 @@ export default function NoraTitanPage() {
             </div>
           </div>
 
-          {/* Bloque Derecho: Botones de acción responsivos (sin encimamientos) */}
+          {/* Bloque Derecho: Solo Cámara + Llamada — exports integrados en cada mensaje (estilo ChatGPT) */}
           <div
             style={{
               display: "flex",
@@ -1515,90 +1515,6 @@ export default function NoraTitanPage() {
               justifyContent: "flex-end",
             }}
           >
-            {/* Desktop: Botones individuales de exportación */}
-            <div className="hidden md:flex items-center gap-1.5">
-              <button
-                onClick={() => handleExportDirect("docx")}
-                title="Descargar Historial en Word"
-                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
-              >
-                <FileText size={12} color="#38bdf8" />
-                <span>Word</span>
-              </button>
-              <button
-                onClick={() => handleExportDirect("pdf")}
-                title="Descargar Historial en PDF"
-                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
-              >
-                <Printer size={12} color="#818cf8" />
-                <span>PDF</span>
-              </button>
-              <button
-                onClick={() => handleExportDirect("pptx")}
-                title="Descargar Presentación en PPTX"
-                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
-              >
-                <Presentation size={12} color="#34d399" />
-                <span>PPT</span>
-              </button>
-            </div>
-
-            {/* Mobile: Menú colapsable para documentos para no saturar la barra */}
-            <div className="md:hidden relative">
-              <button
-                onClick={() => setIsExportMenuOpen(prev => !prev)}
-                title="Exportar documentos"
-                aria-label="Exportar documentos"
-                style={{
-                  backgroundColor: isExportMenuOpen ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.06)",
-                  color: isExportMenuOpen ? "#38bdf8" : "#94a3b8",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: "7px",
-                  padding: "5px 7px",
-                  fontSize: "10.5px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "3px"
-                }}
-              >
-                <FileText size={12} color="#38bdf8" />
-                <span className="text-[10.5px]">Docs</span>
-              </button>
-
-              {isExportMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)} />
-                  <div
-                    className="absolute right-0 top-full mt-1.5 w-36 bg-[#0f172a]/95 backdrop-blur-xl border border-white/15 rounded-xl p-1.5 shadow-2xl z-50 flex flex-col gap-1"
-                    style={{ animation: "fadeIn 0.15s ease-out" }}
-                  >
-                    <button
-                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("docx"); }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                    >
-                      <FileText size={13} color="#38bdf8" />
-                      <span>Exportar Word</span>
-                    </button>
-                    <button
-                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("pdf"); }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                    >
-                      <Printer size={13} color="#818cf8" />
-                      <span>Exportar PDF</span>
-                    </button>
-                    <button
-                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("pptx"); }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                    >
-                      <Presentation size={13} color="#34d399" />
-                      <span>Exportar PPT</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
 
             {/* Botón de Cámara (Compacto en móvil, completo en PC) */}
             <button
