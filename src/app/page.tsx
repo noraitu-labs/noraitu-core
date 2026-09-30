@@ -1562,7 +1562,7 @@ export default function NoraTitanPage() {
             </div>
           </div>
 
-          {/* Bloque Derecho: Solo Cámara + Llamada — exports integrados en cada mensaje (estilo ChatGPT) */}
+          {/* Bloque Derecho: Cámara + Llamada */}
           <div
             style={{
               display: "flex",
@@ -1574,7 +1574,7 @@ export default function NoraTitanPage() {
             }}
           >
 
-            {/* Botón de Compartir por WhatsApp */}
+            {/* Botón de Compartir: solo icono siempre — no ocupa espacio de Cámara/Llamada */}
             <button
               onClick={() => {
                 const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
@@ -1583,26 +1583,21 @@ export default function NoraTitanPage() {
               title="Compartir Nora por WhatsApp"
               aria-label="Compartir"
               style={{
-                backgroundColor: "rgba(34,197,94,0.15)",
+                backgroundColor: "rgba(34,197,94,0.12)",
                 color: "#4ade80",
-                border: "1px solid rgba(34,197,94,0.3)",
+                border: "1px solid rgba(34,197,94,0.25)",
                 borderRadius: "7px",
-                padding: "5px 9px",
-                fontSize: "10.5px",
-                fontWeight: 600,
+                padding: "5px 7px",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
-                gap: "4px",
-                whiteSpace: "nowrap",
                 flexShrink: 0
               }}
             >
               <Share2 size={13} />
-              <span className="hidden sm:inline">Compartir</span>
             </button>
 
-            {/* Botón de Cámara (Compacto en móvil, completo en PC) */}
+            {/* Botón de Cámara */}
             <button
               onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
               title={isCameraOpen ? "Cerrar cámara" : "Abrir cámara"}
@@ -1624,7 +1619,7 @@ export default function NoraTitanPage() {
               }}
             >
               <Camera size={13} />
-              <span className="hidden sm:inline">{isCameraOpen ? "✕" : "Cámara"}</span>
+              <span>{isCameraOpen ? "✕" : "Cámara"}</span>
             </button>
 
             {/* Botón de Llamada de Voz Continua */}
@@ -1719,102 +1714,113 @@ export default function NoraTitanPage() {
           </div>
         )}
 
-        {/* ═══════════════ WORKSPACE CONCURRENTE: CÁMARA Y/O CHAT ═══════════════ */}
-        <div className={`flex-1 min-h-0 w-full overflow-hidden flex ${isCameraOpen ? "flex-col md:flex-row" : "flex-col"} relative`}>
-
-          {/* ─── Panel de Cámara Integrado: 50% en PC (side-by-side), 36vh apilado arriba en celular ─── */}
-          {isCameraOpen && (
-            <section className="w-full md:w-1/2 h-[36vh] md:h-full flex-shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-white/10 bg-[#070b14] overflow-hidden transition-all duration-300 z-20">
-              <div className="px-3 py-2 bg-slate-900/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-sky-400">
+        {/* ═══════════════ MODAL CÁMARA IA — Panel propio flotante (no corta el chat) ═══════════════ */}
+        {isCameraOpen && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 80,
+              backgroundColor: "rgba(3,7,18,0.82)",
+              backdropFilter: "blur(8px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "12px",
+            }}
+          >
+            <section
+              style={{
+                width: "100%",
+                maxWidth: "520px",
+                maxHeight: "92dvh",
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "#070b14",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "16px",
+                overflow: "hidden",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.8)",
+              }}
+            >
+              {/* Header del modal de cámara */}
+              <div style={{ padding: "10px 14px", backgroundColor: "rgba(15,23,42,0.9)", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "11px", fontWeight: 700, color: "#38bdf8" }}>
                   <Camera size={13} />
                   <span>CÁMARA IA {autoVisionActive && "· LAZARILLO (5s)"}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <button
                     onClick={flipCamera}
                     title="Girar cámara"
-                    style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#f8fafc", borderRadius: "5px", padding: "4px 8px", cursor: "pointer" }}
+                    style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#f8fafc", borderRadius: "5px", padding: "5px 9px", cursor: "pointer", display: "flex", alignItems: "center" }}
                   >
-                    <FlipHorizontal size={12} />
+                    <FlipHorizontal size={13} />
                   </button>
                   <button
                     onClick={stopCamera}
                     title="Cerrar cámara"
-                    style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: "5px", padding: "4px 8px", cursor: "pointer" }}
+                    style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: "5px", padding: "5px 9px", cursor: "pointer", display: "flex", alignItems: "center" }}
                   >
-                    <X size={12} />
+                    <X size={13} />
                   </button>
                 </div>
               </div>
 
-              {/* Visor de Video Inteligente con auto-ajuste fluido */}
-              <div className="flex-1 min-h-0 relative bg-black flex items-center justify-center overflow-hidden">
+              {/* Visor de Video */}
+              <div style={{ flex: 1, minHeight: 0, position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 <video
                   ref={videoRef}
                   playsInline
                   muted
-                  className="w-full h-full object-contain"
-                  style={{ transform: facingMode === "user" ? "scaleX(-1)" : "none" }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", transform: facingMode === "user" ? "scaleX(-1)" : "none", minHeight: "240px", maxHeight: "50dvh" }}
                 />
                 <canvas ref={canvasRef} style={{ display: "none" }} />
                 {cameraCapturing && (
-                  <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-10">
-                    <Loader2 size={24} className="animate-spin text-sky-400" />
-                    <span className="text-xs font-semibold text-white">Analizando imagen con Nora...</span>
+                  <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", zIndex: 10 }}>
+                    <Loader2 size={24} className="animate-spin" style={{ color: "#38bdf8" }} />
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#fff" }}>Analizando con Nora...</span>
                   </div>
                 )}
               </div>
 
-              {/* Resumen de Visión en Tiempo Real */}
+              {/* Análisis en tiempo real */}
               {cameraAnalysis && (
-                <div className="px-3 py-2 bg-slate-900/90 border-t border-white/10 text-xs text-slate-200 max-h-24 overflow-y-auto flex-shrink-0 leading-relaxed">
-                  <span className="font-bold text-sky-400">Visión Nora: </span>
-                  {cameraAnalysis}
+                <div style={{ padding: "8px 14px", backgroundColor: "rgba(15,23,42,0.9)", borderTop: "1px solid rgba(255,255,255,0.1)", fontSize: "11.5px", color: "#cbd5e1", maxHeight: "80px", overflowY: "auto", lineHeight: 1.5, flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700, color: "#38bdf8" }}>Visión Nora: </span>{cameraAnalysis}
                 </div>
               )}
 
-              {/* Barra de Acciones de la Cámara */}
-              <div className="px-3 py-2 bg-slate-950/90 border-t border-white/10 flex items-center justify-between gap-2 flex-shrink-0 flex-wrap">
-                <div className="flex items-center gap-2">
+              {/* Acciones */}
+              <div style={{ padding: "10px 14px", backgroundColor: "rgba(2,6,23,0.95)", borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexShrink: 0, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <button
                     onClick={() => analyzeCameraSnapshot()}
                     disabled={cameraCapturing}
-                    style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 700, cursor: cameraCapturing ? "not-allowed" : "pointer", opacity: cameraCapturing ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px" }}
+                    style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "11px", fontWeight: 700, cursor: cameraCapturing ? "not-allowed" : "pointer", opacity: cameraCapturing ? 0.5 : 1, display: "flex", alignItems: "center", gap: "5px" }}
                   >
-                    <Sparkles size={12} />
-                    <span>Analizar</span>
+                    <Sparkles size={12} /><span>Analizar</span>
                   </button>
                   <button
                     onClick={toggleAutoVision}
-                    style={{
-                      backgroundColor: autoVisionActive ? "#dc2626" : "rgba(34,197,94,0.15)",
-                      color: autoVisionActive ? "#fff" : "#4ade80",
-                      border: `1px solid ${autoVisionActive ? "#ef4444" : "rgba(34,197,94,0.4)"}`,
-                      borderRadius: "6px",
-                      padding: "5px 10px",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px"
-                    }}
+                    style={{ backgroundColor: autoVisionActive ? "#dc2626" : "rgba(34,197,94,0.15)", color: autoVisionActive ? "#fff" : "#4ade80", border: `1px solid ${autoVisionActive ? "#ef4444" : "rgba(34,197,94,0.4)"}`, borderRadius: "6px", padding: "6px 12px", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
                   >
-                    <Eye size={12} />
-                    <span>{autoVisionActive ? "Detener" : "Continuo"}</span>
+                    <Eye size={12} /><span>{autoVisionActive ? "Detener" : "Continuo"}</span>
                   </button>
                 </div>
                 <button
                   onClick={attachSnapshotToChat}
-                  style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "#f8fafc", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                  style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "#f8fafc", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "6px", padding: "6px 12px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
                 >
-                  <ImageIcon size={12} />
-                  <span>Adjuntar</span>
+                  <ImageIcon size={12} /><span>Adjuntar al chat</span>
                 </button>
               </div>
             </section>
-          )}
+          </div>
+        )}
+
+        {/* ═══════════════ WORKSPACE: CHAT (siempre 100% — la cámara ya no lo corta) ═══════════════ */}
+        <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col relative">
 
           {/* ─── DRAG & DROP OVERLAY ─── */}
           {isDragging && (
@@ -1824,8 +1830,8 @@ export default function NoraTitanPage() {
             </div>
           )}
 
-          {/* ─── PANEL DE CHAT PRINCIPAL: 50% EN PC SI CÁMARA ESTÁ ABIERTA (100% SI NO), RESTO EN MOBILE ─── */}
-          <section className={`flex-1 min-h-0 flex flex-col ${isCameraOpen ? "w-full md:w-1/2" : "w-full"} overflow-hidden bg-transparent`}>
+          {/* ─── PANEL DE CHAT PRINCIPAL (siempre 100%) ─── */}
+          <section className="flex-1 min-h-0 flex flex-col w-full overflow-hidden bg-transparent">
             {/* Contenedor con Scroll Aislado de Mensajes */}
             <div
               className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 flex flex-col gap-3.5"
