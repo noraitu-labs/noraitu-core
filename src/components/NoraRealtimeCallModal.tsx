@@ -40,9 +40,16 @@ export default function NoraRealtimeCallModal({
   const isMutedRef = useRef<boolean>(false);
   const statusRef = useRef<typeof status>("connecting");
   // ── Historial conversacional persistente durante toda la llamada ──
+  // IMPORTANTE: Este ref NO se debe limpiar en cada re-render del useEffect.
+  // Solo se limpia cuando isOpen pasa de false a true (nueva llamada).
   const conversationHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const isCallInitializedRef = useRef<boolean>(false);
+  const pttModeRef = useRef<boolean>(false);
 
   // Sincronizar refs
+  useEffect(() => {
+    pttModeRef.current = pttMode;
+  }, [pttMode]);
   useEffect(() => {
     isMutedRef.current = isMuted;
   }, [isMuted]);
@@ -234,7 +241,7 @@ export default function NoraRealtimeCallModal({
             // Enviar historial completo de la llamada para mantener el hilo
             history: conversationHistoryRef.current.slice(0, -1), // excluir el último (userText ya lo incluye el route)
             systemPrompt:
-              "Eres Nora Itu, asistente de inteligencia artificial de MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Respuestas concisas, naturales y fluidas para llamada telefónica. Texto plano limpio, sin asteriscos ni markdown.",
+              "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. MODO LLAMADA TELEFÓNICA ACTIVO. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. REGLA ABSOLUTA: Hablas EXCLUSIVAMENTE en ESPAÑOL NEUTRO LATINOAMERICANO. Las siguientes palabras están PROHIBIDAS: 'che', 'sos', 'tenés', 'podés', 'laburar', 'posta', 'copado', 'boludo', 'dale', 'mirá', 'pibe'. Usa SIEMPRE: 'tienes', 'puedes', 'eres', 'sabes'. Todas las palabras deben ser COMPLETAS: 'corporativo' (no 'corporivo'), 'tomate', 'chocolate', 'zapatillas'. Dominas una Matriz de Idiomas con diccionarios perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar o distorsionar palabras. Eres traductora de élite si el usuario cambia de idioma. Respuestas concisas, fluidas y naturales para llamada. Texto plano limpio, sin asteriscos ni markdown.",
             mode: "general",
             deviceLocation: typeof window !== "undefined" ? (() => {
               try {
@@ -314,11 +321,16 @@ export default function NoraRealtimeCallModal({
     setCallDuration(0);
     setUserTranscript("");
     setAssistantText("");
-    setCallHistory([]);
     speechQueueRef.current = [];
-    // Resetear historial conversacional al iniciar una llamada nueva
-    conversationHistoryRef.current = [];
     isSpeakingRef.current = false;
+
+    // Solo reiniciar el historial si esta es una NUEVA llamada (isOpen acaba de pasar a true)
+    // Evitar borrar el historial en re-renders causados por cambios de pttMode u otras deps
+    if (!isCallInitializedRef.current) {
+      conversationHistoryRef.current = [];
+      setCallHistory([]);
+      isCallInitializedRef.current = true;
+    }
 
     // Cronómetro de llamada
     callTimerRef.current = setInterval(() => {
@@ -364,7 +376,7 @@ export default function NoraRealtimeCallModal({
       transcriptHistoryRef.current = currentSpeech;
 
       // Si está en modo PTT, esperamos a que suelte el botón
-      if (pttMode) return;
+      if (pttModeRef.current) return;
 
       // Detección de pausa natural en llamada manos libres:
       // Reiniciar el timer de silencio en cada palabra dicha
@@ -388,7 +400,7 @@ export default function NoraRealtimeCallModal({
 
     rec.onend = () => {
       // Si la llamada sigue activa y no está hablando Nora ni muteado el mic, reactivarlo
-      if (isOpen && statusRef.current === "listening" && !isMutedRef.current && !pttMode) {
+      if (isOpen && statusRef.current === "listening" && !isMutedRef.current && !pttModeRef.current) {
         try { rec.start(); } catch {}
       }
     };
@@ -416,8 +428,15 @@ export default function NoraRealtimeCallModal({
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
+      // Cuando isOpen era true al montar este efecto y ahora se desmonta porque isOpen → false,
+      // marcamos para reinicio limpio la próxima llamada.
+      // Si isOpen sigue true (efecto se re-ejecutó por pttMode), NO tocamos el flag.
+      if (!isOpen) {
+        isCallInitializedRef.current = false;
+      }
     };
-  }, [isOpen, pttMode, sendQueryToStream, enqueueSentenceForSpeech]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // ── 4. CONTROLES DE LA LLAMADA ──
   const toggleMute = () => {

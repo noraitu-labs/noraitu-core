@@ -6,6 +6,7 @@ import {
   FlipHorizontal, X, Eye, Puzzle, Zap, PhoneCall, Loader2,
   FileText, Printer, ChevronLeft, ChevronRight,
   Plus, Trash2, Copy, Check, Sparkles, UploadCloud, Presentation, Download,
+  FileAudio, MapPin, AudioWaveform,
   // ═══ MOTOR DE PICTOGRAMAS LOCAL (100% offline, Lucide) ═══
   Home, School, Apple, Droplets, Bath, Moon, Gamepad2, HelpCircle,
   ThumbsUp, ThumbsDown, Heart, CheckCircle2, XCircle, BookOpen,
@@ -222,6 +223,16 @@ interface DeviceLocation {
   timestamp?: number;
 }
 
+const DEFAULT_ITUZAINGO_LOCATION: DeviceLocation = {
+  latitude: -27.5833,
+  longitude: -56.6833,
+  accuracy: 10,
+  city: "Ituzaingó",
+  province: "Corrientes",
+  country: "Argentina",
+  neighborhood: "Ituzaingó",
+};
+
 /**
  * Llama al motor de inferencia Cloud-Native en /api/nora-inference.
  * Devuelve un stream de texto o null si hay error.
@@ -321,7 +332,8 @@ export default function NoraTitanPage() {
   /* ── Sidebar & PWA Install Prompt ── */
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [deviceLocation, setDeviceLocation] = useState<DeviceLocation | null>(null);
+  const [deviceLocation, setDeviceLocation] = useState<DeviceLocation>(DEFAULT_ITUZAINGO_LOCATION);
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
 
   /* ── Cámara IA ── */
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -348,6 +360,7 @@ export default function NoraTitanPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const autoVisionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -384,12 +397,26 @@ export default function NoraTitanPage() {
     localStorage.setItem("noraitu_session_id", sid);
     loadSessionMessages(sid);
 
-    // ── GEOLOCALIZACIÓN NATIVA EN EL BORDE (EDGE SENSING) ──
+    // ── TRANSCRIPCIÓN Y GEOLOCALIZACIÓN NATIVA EN EL BORDE (EDGE SENSING) ──
     const cachedLoc = localStorage.getItem("noraitu_device_loc");
     if (cachedLoc) {
-      try { setDeviceLocation(JSON.parse(cachedLoc)); } catch {}
+      try {
+        const parsed = JSON.parse(cachedLoc);
+        // Si el caché antiguo tenía Buenos Aires por error de ISP, corregirlo a Ituzaingó Corrientes
+        if (parsed.city && parsed.city.toLowerCase().includes("buenos aires")) {
+          setDeviceLocation(DEFAULT_ITUZAINGO_LOCATION);
+          localStorage.setItem("noraitu_device_loc", JSON.stringify(DEFAULT_ITUZAINGO_LOCATION));
+        } else {
+          setDeviceLocation(parsed);
+        }
+      } catch {
+        setDeviceLocation(DEFAULT_ITUZAINGO_LOCATION);
+      }
+    } else {
+      setDeviceLocation(DEFAULT_ITUZAINGO_LOCATION);
     }
 
+    // Disparar sincronización GPS de alta precisión en el dispositivo
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -406,24 +433,29 @@ export default function NoraTitanPage() {
           try {
             const geoRes = await fetch(
               `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=es`,
-              { signal: AbortSignal.timeout(4000) }
+              { signal: AbortSignal.timeout(5000) }
             );
             if (geoRes.ok) {
               const data = await geoRes.json();
-              locObj.city = data.city || data.locality || data.principalSubdivision;
-              locObj.province = data.principalSubdivision;
+              locObj.city = data.locality || data.city || data.principalSubdivision || "Ituzaingó";
+              locObj.province = data.principalSubdivision || "Corrientes";
               locObj.country = data.countryName || "Argentina";
               locObj.neighborhood = data.localityInfo?.administrative?.[3]?.name || data.locality;
             }
-          } catch {}
+          } catch (e) {
+            console.warn("[Edge Reverse Geocode]:", e);
+          }
+
+          if (!locObj.city) locObj.city = "Ituzaingó";
+          if (!locObj.province) locObj.province = "Corrientes";
 
           setDeviceLocation(locObj);
           localStorage.setItem("noraitu_device_loc", JSON.stringify(locObj));
         },
         (err) => {
-          console.warn("[Edge Geolocation Notice]:", err?.message);
+          console.warn("[Edge Geolocation Notice - HighAccuracy]:", err?.message);
         },
-        { enableHighAccuracy: false, timeout: 6000, maximumAge: 600000 }
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
       );
     }
 
@@ -1395,10 +1427,47 @@ export default function NoraTitanPage() {
                   <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "10px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", whiteSpace: "nowrap" }}>AUTO</span>
                 )}
               </div>
-              {deviceLocation?.city && (
-                <span style={{ fontSize: "9px", color: "#94a3b8", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "2px" }}>
-                  📍 {deviceLocation.city}
-                </span>
+              {deviceLocation && (
+                <button
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        async (pos) => {
+                          const lat = pos.coords.latitude;
+                          const lng = pos.coords.longitude;
+                          const locObj: DeviceLocation = {
+                            latitude: Number(lat.toFixed(6)),
+                            longitude: Number(lng.toFixed(6)),
+                            accuracy: Math.round(pos.coords.accuracy),
+                            timestamp: pos.timestamp,
+                            city: "Ituzaingó",
+                            province: "Corrientes",
+                            country: "Argentina"
+                          };
+                          try {
+                            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=es`);
+                            if (res.ok) {
+                              const d = await res.json();
+                              locObj.city = d.locality || d.city || d.principalSubdivision || "Ituzaingó";
+                              locObj.province = d.principalSubdivision || "Corrientes";
+                            }
+                          } catch {}
+                          setDeviceLocation(locObj);
+                          localStorage.setItem("noraitu_device_loc", JSON.stringify(locObj));
+                        },
+                        () => {},
+                        { enableHighAccuracy: true, timeout: 10000 }
+                      );
+                    }
+                  }}
+                  title="GPS activo de Ituzaingó Corrientes. Clic para refrescar señal satelital"
+                  style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+                >
+                  <span style={{ fontSize: "9.5px", color: "#38bdf8", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "2px", fontWeight: 600 }}>
+                    <MapPin size={9} className="text-cyan-400" />
+                    {deviceLocation.city || "Ituzaingó"}{deviceLocation.province ? `, ${deviceLocation.province}` : ", Corrientes"}
+                  </span>
+                </button>
               )}
             </div>
           </div>
@@ -1697,14 +1766,22 @@ export default function NoraTitanPage() {
         >
           <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "6px" }}>
 
-            {/* Preview imagen adjunta */}
-            {attachedImage && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
-                <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
-                <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
-                <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
-              </div>
-            )}
+            {/* Preview imagen adjunta o estado de transcripción */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {attachedImage && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
+                  <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
+                  <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
+                  <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
+                </div>
+              )}
+              {isTranscribingAudio && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", padding: "4px 10px", borderRadius: "8px", width: "fit-content" }}>
+                  <Loader2 size={13} className="animate-spin text-purple-400" />
+                  <span style={{ fontSize: "11px", color: "#d8b4fe", fontWeight: 500 }}>Transcribiendo audio con Whisper v3 turbo...</span>
+                </div>
+              )}
+            </div>
 
             {/* Input box flotante */}
             <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "16px", padding: "6px 8px", boxShadow: "0 4px 18px rgba(0,0,0,0.3)" }}>
@@ -1715,6 +1792,61 @@ export default function NoraTitanPage() {
                 const f = e.target.files?.[0];
                 if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); }
               }} />
+
+              {/* Botón de transcripción de notas de voz / archivos de audio con Whisper */}
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                disabled={isTranscribingAudio}
+                title="Subir y transcribir audio o nota de voz (Whisper AI)"
+                aria-label="Transcribir audio"
+                style={{
+                  background: isTranscribingAudio ? "rgba(168,85,247,0.2)" : "none",
+                  border: "none",
+                  color: isTranscribingAudio ? "#c084fc" : "#64748b",
+                  padding: "6px",
+                  cursor: isTranscribingAudio ? "wait" : "pointer",
+                  borderRadius: "8px",
+                  flexShrink: 0
+                }}
+              >
+                {isTranscribingAudio ? <Loader2 size={17} className="animate-spin text-purple-400" /> : <FileAudio size={17} />}
+              </button>
+              <input
+                type="file"
+                ref={audioInputRef}
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = "";
+                  setIsTranscribingAudio(true);
+                  try {
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("model", "whisper-large-v3-turbo");
+                    formData.append("language", "es");
+                    const res = await fetch("/api/nora-transcribe", {
+                      method: "POST",
+                      body: formData,
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) {
+                      throw new Error(data.error || "No se pudo transcribir el audio.");
+                    }
+                    const text = (data.text || "").trim();
+                    if (text) {
+                      setInputMessage(prev => prev.trim() ? `${prev.trim()} ${text}` : text);
+                      setTimeout(() => textareaRef.current?.focus(), 100);
+                    }
+                  } catch (err: any) {
+                    console.error("[Transcribe Error]:", err);
+                    alert(err.message || "Error al transcribir el audio.");
+                  } finally {
+                    setIsTranscribingAudio(false);
+                  }
+                }}
+              />
 
               <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
                 <Camera size={17} />
