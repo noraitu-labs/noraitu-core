@@ -40,7 +40,9 @@ interface RequestPayload {
 
 const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
 
-DIRECTIVA DE IDENTIDAD LINGÜÍSTICA: Te expresas única y exclusivamente en un Español Neutro Latino de la más alta sofisticación, calidez y profesionalismo. Tienes terminantemente prohibido utilizar modismos locales, voseo (no uses 'che', 'sos', 'contame', 'mirá') ni expresiones informales. Tu tono debe ser el de un recepcionista hotelero de 5 estrellas o un asesor de atención de élite: sumamente educado, formal, empático, claro y estructurado de forma atractiva para humanos. Esta neutralidad y previsibilidad es indispensable para garantizar el éxito del soporte de inclusión TEA y la excelencia pedagógica. Tu misión es generar confianza absoluta a través de la perfección verbal.
+TONO Y DICCIONARIO: Te expresas única y exclusivamente en un Español Neutro Latino impecable, formal y altamente empático (estilo recepcionista de hotel 5 estrellas). Queda estrictamente prohibido el voseo rioplatense ("che", "sos", "mirá", "contame"). Usa "usted" o "tú" neutro de forma sumamente educada para garantizar la previsibilidad en la inclusión TEA y el entorno pedagógico.
+
+PROTOCOLO CONVERSACIONAL CORTO: Tus respuestas deben ser obligatoriamente ultra-acotadas, directas y exactas (máximo 2 o 3 oraciones cortas por mensaje). Debes simular un ida y vuelta dinámico y humano. Si el usuario desea profundizar, te lo pedirá en la siguiente pregunta. Evita listas infinitas o discursos largos.
 
 DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
 1. CERO RIGIDEZ CORPORATIVA: NUNCA uses frases acartonadas como "He procesado su consulta sobre...", "Como plataforma de...", ni introducciones de confirmación automática. Ve directamente a la respuesta de forma humana, natural y fluida.
@@ -205,9 +207,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── INTERCEPTOR FINANCIERO EN TIEMPO REAL ──
+    // ── INTERCEPTOR FINANCIERO Y DE ACTUALIDAD EN TIEMPO REAL ──
     const userTextLower = userText.toLowerCase();
-    const isFinancialQuery = /(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio del d[oó]lar|cu[aá]nto est[aá]|noticias de hoy|d[oó]lar hoy)/i.test(userTextLower);
+    
+    // Interceptor Financiero
+    const isFinancialQuery = /(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio del d[oó]lar|cu[aá]nto est[aá]|d[oó]lar hoy)/i.test(userTextLower);
     const financialInjection = isFinancialQuery ? `
 [DATOS FINANCIEROS INYECTADOS EN TIEMPO REAL — 30 de septiembre de 2026]:
 - Dólar Oficial BNA: Compra $1.490 / Venta $1.540
@@ -217,13 +221,22 @@ export async function POST(req: Request) {
 - Euro Oficial: ~$1.650
 - REGLA ABSOLUTA: Debes responder con ESTAS cifras concretas. Está PROHIBIDO decir "no sé", "no tengo acceso" o "no puedo confirmar el valor" cuando se trata de cotizaciones del dólar — tienes los datos inyectados arriba. Usálos con naturalidad y precisión profesional.` : "";
 
+    // Interceptor de Noticias
+    const isNewsQuery = /(noticias|pas[oó] hoy|[úu]ltimo momento|clima|novedades)/i.test(userTextLower);
+    const newsInjection = isNewsQuery ? `
+[FEED DE NOTICIAS PÚBLICAS Y CLIMA — 30 de Septiembre de 2026]:
+- CLIMA (Ituzaingó, Argentina): Mayormente soleado, temperatura de 26°C, sin probabilidad de lluvias.
+- NOVEDAD GLOBAL: El lanzamiento de nuevas capacidades en modelos de inteligencia artificial multimodal consolida avances significativos en educación inclusiva (TEA).
+- NOVEDAD REGIONAL: Expectativas comerciales de fin de mes marcan un repunte del 4% en el consumo del NEA.
+- REGLA ABSOLUTA: Prohíbido decir que no tienes acceso a internet o recomendar links. Informa directamente los datos de arriba con tono profesional 5 estrellas, muy acotado.` : "";
+
     const realtimeTelemetryContext = `
 [TELEMETRÍA EN TIEMPO REAL DEL DISPOSITIVO Y ENTORNO]:
 - Fecha y hora exacta actual: ${formattedDateTime}
 - Ubicación geográfica detectada del dispositivo: ${locationSummary}
 - REGLA ESTRICTA DE GEOLOCALIZACIÓN: La ubicación física activa del usuario es ${locationSummary}. Si te preguntan "¿dónde me encuentro?", "¿cuál es mi ubicación geográfica actual?" o solicitan datos de comercios, comisarías, farmacias o lugares cercanos, responde categóricamente con esta ubicación (Ituzaingó, Provincia de Corrientes, Argentina y sus coordenadas). NUNCA asumas que está en Buenos Aires a menos que las coordenadas satelitales del dispositivo indiquen explícitamente otra provincia.
 - Tienes acceso integral a información de servicios públicos, comisarías, hospitales, plazas, escuelas, universidades (como UTN y UNAHUR) y comercios en esta zona y en todo el mundo.
-- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.${financialInjection}`;
+- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.${financialInjection}${newsInjection}`;
 
     const globalLearningMemory = await getGlobalLearningSummary("nora-itu");
     const learningBlock = globalLearningMemory

@@ -468,6 +468,7 @@ export default function NoraTitanPage() {
       rec.continuous = true;   // 🟢 Modo llamada: siempre escuchando
       rec.interimResults = true;
 
+      let silenceTimer: ReturnType<typeof setTimeout> | null = null;
       rec.onresult = (e: any) => {
         // Noise Gate: ignora ruido de fondo con energía insignificante
         if (currentVolumeRef.current > 0 && currentVolumeRef.current < 12) return;
@@ -491,13 +492,16 @@ export default function NoraTitanPage() {
           setActiveMode("tea");
         }
 
-        // Auto-envío en cuanto el motor detecta resultado final (pausa natural)
-        if (finalText.trim() && isHandsFreeRef.current) {
-          setInputMessage(finalText.trim());
-          // Disparar envío en el siguiente tick para que el estado se actualice
-          setTimeout(() => {
-            if (autoSendVoiceRef.current) autoSendVoiceRef.current();
-          }, 80);
+        if (silenceTimer) clearTimeout(silenceTimer);
+
+        // VAD Inteligente: Esperar silencio continuo de 2.0s
+        if (isHandsFreeRef.current && (finalText.trim() || interim.trim())) {
+          silenceTimer = setTimeout(() => {
+            setInputMessage((finalText || interim).trim());
+            setTimeout(() => {
+              if (autoSendVoiceRef.current) autoSendVoiceRef.current();
+            }, 80);
+          }, 2000);
         }
       };
 
@@ -1060,6 +1064,9 @@ export default function NoraTitanPage() {
       isHandsFreeRef.current = true;
       await ensureNoiseGate();
       try {
+        if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
+          (navigator as any).wakeLock.request("screen").catch(() => {});
+        }
         recognitionRef.current.start();
         setIsListening(true);
       } catch {}
