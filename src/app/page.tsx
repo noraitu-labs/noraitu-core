@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Bot, User, Send, Mic, MicOff, Camera, Image as ImageIcon, Volume2, VolumeX,
   FlipHorizontal, X, Eye, Puzzle, Zap, PhoneCall, Loader2,
-  FileText, Printer, ChevronLeft, ChevronRight,
+  FileText, Printer, ChevronLeft, ChevronRight, Menu,
   Plus, Trash2, Copy, Check, Sparkles, UploadCloud, Presentation, Download,
   FileAudio, MapPin, AudioWaveform,
   // ═══ MOTOR DE PICTOGRAMAS LOCAL (100% offline, Lucide) ═══
@@ -193,13 +193,13 @@ function cleanRadicalForTTS(textoOriginal: string): string {
     .trim();
 }
 
-// Detección automática del idioma para síntesis fonética nativa
+// Detección estricta de idioma para TTS (evita falsos positivos con palabras comunes como 'para', 'con', 'la')
 function detectTextLanguage(text: string): string {
   const t = text.toLowerCase();
-  if (/\b(the|and|is|you|that|this|with|for|are|have|from|in|what|how|hello|thank|welcome|please|world)\b/i.test(t)) return "en-US";
-  if (/\b(você|voce|não|nao|com|para|uma|este|obrigado|muito|tudo|fazer|olá|ola|bom|dia|senhor)\b/i.test(t)) return "pt-BR";
-  if (/\b(le|la|les|des|du|avec|pour|dans|est|vous|nous|merci|bonjour|s'il|oui|non|monde)\b/i.test(t)) return "fr-FR";
-  if (/\b(il|lo|la|i|gli|le|di|con|per|sono|grazie|ciao|questo|bene|perché|perche|mondo)\b/i.test(t)) return "it-IT";
+  if (/\b(habla en inglés|speak in english|how are you|what is|thank you very much|good morning|can you help me)\b/i.test(t)) return "en-US";
+  if (/\b(fala em português|como você está|tudo bem|muito obrigado|bom dia|fazer uma pergunta)\b/i.test(t)) return "pt-BR";
+  if (/\b(parle en français|comment allez-vous|merci beaucoup|bonjour|s'il vous plaît)\b/i.test(t)) return "fr-FR";
+  if (/\b(parla in italiano|come stai|grazie mille|buongiorno|per favore)\b/i.test(t)) return "it-IT";
   return "es-419";
 }
 
@@ -1234,8 +1234,9 @@ export default function NoraTitanPage() {
       {/* ═══════════════════════ SIDEBAR PWA ═══════════════════════ */}
       <aside
         style={{
-          width: sidebarOpen ? "270px" : "0",
-          minWidth: sidebarOpen ? "270px" : "0",
+          width: sidebarOpen ? "275px" : "0",
+          minWidth: sidebarOpen ? "275px" : "0",
+          maxWidth: "85vw",
           transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s cubic-bezier(0.4,0,0.2,1)",
           overflow: "hidden",
           backgroundColor: "#0d1322",
@@ -1243,8 +1244,9 @@ export default function NoraTitanPage() {
           display: "flex",
           flexDirection: "column",
           flexShrink: 0,
-          zIndex: 40
+          zIndex: 50
         }}
+        className={sidebarOpen ? "fixed md:relative inset-y-0 left-0 z-50 md:z-40 shadow-2xl md:shadow-none" : ""}
       >
         {/* Header sidebar */}
         <div style={{ padding: "14px 12px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1361,15 +1363,38 @@ export default function NoraTitanPage() {
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+        />
+      )}
+
+      {/* Pestaña flotante lateral accesible en mobile para nunca perder acceso al panel */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          title="Abrir panel"
+          aria-label="Abrir panel lateral"
+          className="md:hidden"
           style={{
             position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            backdropFilter: "blur(3px)",
-            zIndex: 38,
-            display: typeof window !== "undefined" && window.innerWidth < 768 ? "block" : "none"
+            left: 0,
+            top: "55%",
+            transform: "translateY(-50%)",
+            backgroundColor: "rgba(13, 19, 34, 0.95)",
+            border: "1px solid rgba(99, 102, 241, 0.4)",
+            borderLeft: "none",
+            borderRadius: "0 8px 8px 0",
+            padding: "8px 5px",
+            color: "#818cf8",
+            cursor: "pointer",
+            zIndex: 35,
+            boxShadow: "2px 4px 12px rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
           }}
-        />
+        >
+          <ChevronRight size={14} />
+        </button>
       )}
 
       {/* ═══════════════════════ MAIN VIEWPORT ═══════════════════════ */}
@@ -1394,27 +1419,26 @@ export default function NoraTitanPage() {
         >
           {/* Bloque Izquierdo: Fijo y protegido contra cualquier solapamiento */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-            {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                title="Desplegar menú lateral"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  color: "#f8fafc",
-                  borderRadius: "7px",
-                  padding: "6px 8px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.25)"
-                }}
-              >
-                <ChevronRight size={15} />
-              </button>
-            )}
+            <button
+              onClick={() => setSidebarOpen(s => !s)}
+              title={sidebarOpen ? "Ocultar panel" : "Abrir panel de control"}
+              aria-label="Menú panel lateral"
+              style={{
+                background: sidebarOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                color: sidebarOpen ? "#818cf8" : "#f8fafc",
+                borderRadius: "7px",
+                padding: "6px 8px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.25)"
+              }}
+            >
+              <Menu size={16} />
+            </button>
             <img
               src="/avatar-nora.png"
               alt="Nora"
@@ -1519,7 +1543,14 @@ export default function NoraTitanPage() {
               <span>{isCameraOpen ? "✕" : "Cámara"}</span>
             </button>
             <button
-              onClick={() => setIsCallModalOpen(true)}
+              onClick={() => {
+                if (recognitionRef.current) {
+                  try { recognitionRef.current.stop(); } catch {}
+                }
+                setIsListening(false);
+                isHandsFreeRef.current = false;
+                setIsCallModalOpen(true);
+              }}
               title="Iniciar llamada de voz continua con Nora"
               style={{
                 background: "linear-gradient(135deg, #16a34a, #15803d)",
@@ -1901,31 +1932,68 @@ export default function NoraTitanPage() {
               </button>
             </div>
 
-            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual ═══ */}
-            <div style={{ textAlign: "center", paddingTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              <span
-                className="text-[10px] md:text-[11px] font-medium tracking-wide text-zinc-400 bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent opacity-95 select-all inline-block"
+            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual (Multilínea y WhatsApp visible) ═══ */}
+            <div
+              style={{
+                textAlign: "center",
+                paddingTop: "4px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "2px",
+                lineHeight: "1.3"
+              }}
+            >
+              <div
                 style={{
-                  fontSize: "10.5px",
-                  fontWeight: 500,
+                  fontSize: "10px",
+                  fontWeight: 600,
                   letterSpacing: "0.02em",
                   background: "linear-gradient(to right, #818cf8, #d8b4fe, #22d3ee)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   userSelect: "all",
-                  display: "inline-block",
                   textShadow: "0 0 10px rgba(99,102,241,0.25)"
                 }}
               >
-                © MyJNexoraVisual | Soporte: noraitudev@gmail.com | WhatsApp: +54 9 3786 41-4533
-              </span>
+                © MyJNexoraVisual • Soporte: noraitudev@gmail.com
+              </div>
+              <a
+                href="https://wa.me/5493786414533"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Contactar vía WhatsApp directo"
+                style={{
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  color: "#38bdf8",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  userSelect: "all"
+                }}
+              >
+                <span>WhatsApp:</span>
+                <span style={{ color: "#4ade80", letterSpacing: "0.02em" }}>+54 9 3786 41-4533</span>
+              </a>
             </div>
           </div>
         </footer>
       </main>
 
       {/* ─── Modal Llamada PTT ─── */}
-      <NoraRealtimeCallModal isOpen={isCallModalOpen} onClose={() => setIsCallModalOpen(false)} sessionId={sessionId} />
+      <NoraRealtimeCallModal
+        isOpen={isCallModalOpen}
+        onClose={() => {
+          setIsCallModalOpen(false);
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+          }
+        }}
+        sessionId={sessionId}
+      />
     </div>
   );
 }

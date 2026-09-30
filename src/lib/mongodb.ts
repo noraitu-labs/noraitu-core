@@ -195,3 +195,145 @@ export async function getRecentMessages(
     return [];
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+//  MEMORIA COGNITIVA PROGRESIVA — APRENDIZAJE ACUMULATIVO DÍA A DÍA
+// ══════════════════════════════════════════════════════════════
+
+export interface NoraLearnedInsight {
+  topic: string;
+  insight: string;
+  category: "usuario" | "preferencias" | "ituzaingo_local" | "academico" | "vocabulario" | "general";
+  learnedAt: string;
+  relevanceScore?: number;
+}
+
+export interface NoraGlobalLearningDoc {
+  _id?: string;
+  agentId: string;
+  updatedAt: Date;
+  totalInteractions: number;
+  insights: NoraLearnedInsight[];
+  summaryPrompt: string;
+}
+
+let cachedGlobalSummary: { text: string; timestamp: number } | null = null;
+
+export async function getGlobalLearningCollection(): Promise<Collection<NoraGlobalLearningDoc> | null> {
+  try {
+    const conn = await connectMongo();
+    if (!conn) return null;
+    return conn.db.collection<NoraGlobalLearningDoc>("nora_global_learning");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Obtiene la síntesis de aprendizajes acumulados para enriquecer el System Prompt en tiempo real.
+ * Cuenta con caché de 60 segundos y timeout de 1200ms para latencia cero.
+ */
+export async function getGlobalLearningSummary(agentId: string = "nora-itu"): Promise<string> {
+  const now = Date.now();
+  if (cachedGlobalSummary && now - cachedGlobalSummary.timestamp < 60000) {
+    return cachedGlobalSummary.text;
+  }
+
+  try {
+    const timeoutPromise = new Promise<string>((resolve) =>
+      setTimeout(() => resolve(cachedGlobalSummary?.text || ""), 1200)
+    );
+
+    const fetchPromise = (async () => {
+      const col = await getGlobalLearningCollection();
+      if (!col) return cachedGlobalSummary?.text || "";
+
+      const doc = await col.findOne({ agentId });
+      if (!doc || !doc.summaryPrompt) {
+        const defaultPrompt =
+          "- Preferencias aprendidas: Hablar siempre en español neutro profesional, sin modismos ni 'che'.\n" +
+          "- Localización núcleo: Ituzaingó, Corrientes, Argentina (cerca de Represa Yacyretá, Río Paraná).\n" +
+          "- Entorno académico: Conexión formativa con UTN (Universidad Tecnológica Nacional) y UNAHUR.\n" +
+          "- Identidad del creador: MyJNexoraVisual, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
+        return defaultPrompt;
+      }
+
+      cachedGlobalSummary = { text: doc.summaryPrompt, timestamp: now };
+      return doc.summaryPrompt;
+    })();
+
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } catch (err) {
+    console.warn("[Global Learning Get Bypassed]:", (err as Error)?.message || err);
+    return cachedGlobalSummary?.text || "";
+  }
+}
+
+/**
+ * Registra un aprendizaje adquirido y regenera el bloque sintético de memoria.
+ */
+export async function recordLearnedInsight(
+  insight: NoraLearnedInsight,
+  agentId: string = "nora-itu"
+): Promise<boolean> {
+  try {
+    const col = await getGlobalLearningCollection();
+    if (!col) return false;
+
+    await col.updateOne(
+      { agentId },
+      {
+        $push: {
+          insights: {
+            $each: [insight],
+            $slice: -60, // Conservar los 60 aprendizajes más recientes y relevantes
+          },
+        } as any,
+        $inc: { totalInteractions: 1 },
+        $set: { updatedAt: new Date() },
+        $setOnInsert: {
+          agentId,
+          summaryPrompt: "",
+        },
+      },
+      { upsert: true }
+    );
+
+    // Invalidar caché local para que la próxima inferencia lea la actualización
+    cachedGlobalSummary = null;
+    return true;
+  } catch (err) {
+    console.warn("[Record Learned Insight Fail-Safe]:", (err as Error)?.message || err);
+    return false;
+  }
+}
+
+/**
+ * Actualiza la síntesis consolidada de memoria de aprendizaje en MongoDB.
+ */
+export async function updateLearningSummary(
+  summaryText: string,
+  agentId: string = "nora-itu"
+): Promise<boolean> {
+  try {
+    const col = await getGlobalLearningCollection();
+    if (!col) return false;
+
+    await col.updateOne(
+      { agentId },
+      {
+        $set: {
+          summaryPrompt: summaryText,
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    cachedGlobalSummary = { text: summaryText, timestamp: Date.now() };
+    return true;
+  } catch (err) {
+    console.warn("[Update Learning Summary Fail-Safe]:", (err as Error)?.message || err);
+    return false;
+  }
+}

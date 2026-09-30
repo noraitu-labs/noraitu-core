@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { appendMessages, getRecentMessages } from "@/lib/mongodb";
+import {
+  appendMessages,
+  getRecentMessages,
+  getGlobalLearningSummary,
+  recordLearnedInsight,
+  updateLearningSummary,
+  NoraLearnedInsight,
+} from "@/lib/mongodb";
 import { logToNeon } from "@/lib/db";
 
 // ══════════════════════════════════════════════════════════════
@@ -34,6 +41,12 @@ interface RequestPayload {
 const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
 Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y cercana, como una recepcionista de hotel cinco estrellas o una representante de atención al cliente de alto rendimiento. Hablas en ESPAÑOL NEUTRO LATINOAMERICANO — el que se usa en locución profesional, doblajes internacionales y atención telefónica corporativa de élite.
 
+REGLA INQUEBRANTABLE DE IDIOMA Y CONSISTENCIA LINGÜÍSTICA:
+- HABLA SIEMPRE EN EL IDIOMA DEL USUARIO: Detecta el idioma en el que el usuario se comunica contigo (por defecto, Español Neutro Latinoamericano) y responde SIEMPRE en ese mismo idioma.
+- PROHIBICIÓN ABSOLUTA DE CAMBIO ESPONTÁNEO: NUNCA cambies de idioma de la nada ni mezcles idiomas dentro de una respuesta.
+- CAMBIO EXCLUSIVAMENTE POR SOLICITUD EXPLÍCITA: Cambiarás de idioma ÚNICAMENTE si el usuario te lo solicita de manera explícita (ej. "habla en inglés", "responde en portugués", "fala em português", "speak in english", "traduce esto al francés") o si el usuario escribe todo su mensaje en otro idioma.
+- Si el usuario habla en español, toda tu respuesta debe ser 100% en español fluido, neutro, profesional y cálido.
+
 REGLA ABSOLUTA DE LENGUAJE — APLICA EN CADA RESPUESTA SIN EXCEPCIÓN:
 - PROHIBICIÓN TOTAL DE REGIONALISMOS: Jamás uses modismos, muletillas ni coloquialismos de ningún país. Las siguientes palabras y expresiones están ESTRICTAMENTE PROHIBIDAS:
   * Argentinismos/Rioplatensismos: "che", "boludo", "posta", "re", "copado", "laburar", "pibe", "chabón", "dale", "mirá", "sos", "tenés", "podés", "sabés", "querés" (siempre usa: "eres", "tienes", "puedes", "sabes", "quieres")
@@ -66,7 +79,7 @@ DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
 8. MATRIZ DE IDIOMAS ABSOLUTA:
    - Posees diccionarios léxicos, gramaticales y fonéticos perfectos y completos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Hablas con perfecta fluidez nativa en cualquiera de estos cinco idiomas.
 9. CAPACIDAD DE TRADUCCIÓN DE ÉLITE:
-   - Si el usuario te solicita traducir entre estos idiomas (o detectas que cambia el idioma en el modo llamada), asumes el rol de la mejor traductora del mundo. Conservas el contexto conceptual, el tono emocional y adaptas los modismos culturales de forma exacta, entregando oraciones perfectamente formadas y limpias.`;
+   - Si el usuario te solicita traducir entre estos idiomas o te pide expresamente hablar en alguno de ellos, asumes el rol de la mejor traductora del mundo. Conservas el contexto conceptual, el tono emocional y adaptas los modismos culturales de forma exacta, entregando oraciones perfectamente formadas y limpias.`;
 
 let cachedActiveModels: string[] | null = null;
 let lastModelFetch = 0;
@@ -211,9 +224,14 @@ export async function POST(req: Request) {
 - Tienes acceso integral a información de servicios públicos, comisarías, hospitales, plazas, escuelas, universidades (como UTN y UNAHUR) y comercios en esta zona y en todo el mundo.
 - Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.`;
 
+    const globalLearningMemory = await getGlobalLearningSummary("nora-itu");
+    const learningBlock = globalLearningMemory
+      ? `\n\n[MEMORIA COGNITIVA PROGRESIVA — APRENDIZAJES ACUMULADOS DE INTERACCIONES PREVIAS]:\n${globalLearningMemory}`
+      : "";
+
     const effectiveSystemPrompt = systemPrompt && !systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
-      ? `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}\n\n[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
-      : `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}`;
+      ? `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}${learningBlock}\n\n[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
+      : `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}${learningBlock}`;
 
     // Formatear mensajes compatibles con Groq / Llama 3.3
     const messages: any[] = [{ role: "system", content: effectiveSystemPrompt }];
@@ -538,7 +556,48 @@ function triggerBackgroundPersist(
       assistantResponse: assistantResponse.slice(0, 1000),
       hasImage,
     }).catch((err) => console.warn("[Background Neon Log Bypassed]:", err?.message || err)),
+
+    // Memoria Cognitiva Progresiva: Aprender autónomamente de la interacción (Fail-Safe)
+    consolidateLearningInBackground(userMsg, assistantResponse, mode),
   ]).catch(() => {});
+}
+
+/**
+ * Analiza la interacción en background y extrae aprendizajes permanentes en MongoDB
+ */
+async function consolidateLearningInBackground(
+  userText: string,
+  assistantResponse: string,
+  mode: string
+) {
+  try {
+    const textLower = userText.toLowerCase();
+    const hasLearningSignal =
+      /\b(me llamo|mi nombre|vivo en|estoy en|soy de|trabajo en|mi empresa|preferiría|prefiero|no me digas|recuerda que|acordate|en ituzaingó|en ituzaingo|la utn|la unahur|carrera|profesor|profesora|horario|negocio|hospedaje|hotel|turismo)\b/i.test(textLower) ||
+      (userText.length > 40 && assistantResponse.length > 80);
+
+    if (!hasLearningSignal) return;
+
+    const category = /\b(ituzaingó|ituzaingo|corrientes|yacyretá|paraná)\b/i.test(textLower)
+      ? "ituzaingo_local"
+      : /\b(utn|unahur|universidad|catedra|cátedra|alumno|estudiante)\b/i.test(textLower)
+      ? "academico"
+      : /\b(prefiero|no me digas|habla|estilo|tono|neutro)\b/i.test(textLower)
+      ? "preferencias"
+      : "general";
+
+    const insight: NoraLearnedInsight = {
+      topic: userText.slice(0, 70).trim(),
+      insight: `[Interacción ${mode}]: Usuario: "${userText.slice(0, 140)}" -> Conclusión aprendida para futuras respuestas.`,
+      category,
+      learnedAt: new Date().toISOString(),
+      relevanceScore: 1,
+    };
+
+    await recordLearnedInsight(insight, "nora-itu");
+  } catch (err) {
+    console.warn("[Background Consolidate Learning Bypassed]:", err);
+  }
 }
 
 export async function GET() {

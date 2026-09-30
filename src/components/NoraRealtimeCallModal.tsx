@@ -40,11 +40,13 @@ export default function NoraRealtimeCallModal({
   const isMutedRef = useRef<boolean>(false);
   const statusRef = useRef<typeof status>("connecting");
   // ── Historial conversacional persistente durante toda la llamada ──
-  // IMPORTANTE: Este ref NO se debe limpiar en cada re-render del useEffect.
-  // Solo se limpia cuando isOpen pasa de false a true (nueva llamada).
   const conversationHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const isCallInitializedRef = useRef<boolean>(false);
   const pttModeRef = useRef<boolean>(false);
+  // ── Control estricto de vida de la llamada y micrófono ──
+  const isCallAliveRef = useRef<boolean>(false);
+  // ── Idioma activo de la llamada (estable, nunca cambia de la nada) ──
+  const callLanguageRef = useRef<string>("es-419");
 
   // Sincronizar refs
   useEffect(() => {
@@ -58,17 +60,26 @@ export default function NoraRealtimeCallModal({
     statusRef.current = status;
   }, [status]);
 
-  // Detección automática de idioma para los 5 idiomas principales
-  const detectSentenceLanguage = (text: string): string => {
+  // Detección estricta de idioma: NUNCA usar palabras cortas compartidas ("para", "con", "la", "le")
+  const checkExplicitLanguageChange = (text: string): string | null => {
     const t = text.toLowerCase();
-    if (/\b(the|and|is|you|that|this|with|for|are|have|from|in|what|how|hello|thank|welcome|please|world)\b/i.test(t)) return "en-US";
-    if (/\b(você|voce|não|nao|com|para|uma|este|obrigado|muito|tudo|fazer|olá|ola|bom|dia|senhor)\b/i.test(t)) return "pt-BR";
-    if (/\b(le|la|les|des|du|avec|pour|dans|est|vous|nous|merci|bonjour|s'il|oui|non|monde)\b/i.test(t)) return "fr-FR";
-    if (/\b(il|lo|la|i|gli|le|di|con|per|sono|grazie|ciao|questo|bene|perché|perche|mondo)\b/i.test(t)) return "it-IT";
-    return "es-419";
+    // Comandos explícitos de cambio de idioma
+    if (/\b(habla|responde|cambia|puedes hablar|speak)\s+(en\s+)?(inglés|ingles|english)\b/i.test(t)) return "en-US";
+    if (/\b(habla|responde|cambia|fala|fale)\s+(en\s+)?(portugués|portugues|portuguese|português)\b/i.test(t)) return "pt-BR";
+    if (/\b(habla|responde|cambia|parle)\s+(en\s+)?(francés|frances|french|français)\b/i.test(t)) return "fr-FR";
+    if (/\b(habla|responde|cambia|parla)\s+(en\s+)?(italiano|italian)\b/i.test(t)) return "it-IT";
+    if (/\b(habla|responde|cambia)\s+(en\s+)?(español|castellano|spanish)\b/i.test(t)) return "es-419";
+
+    // Detección por frases completas características de alta confianza
+    if (/\b(how are you|what is|thank you very much|good morning|good afternoon|can you help me|nice to meet you|i would like to)\b/i.test(t)) return "en-US";
+    if (/\b(como você está|tudo bem|muito obrigado|bom dia|boa tarde|fazer uma pergunta|você pode)\b/i.test(t)) return "pt-BR";
+    if (/\b(comment allez-vous|merci beaucoup|bonjour|s'il vous plaît|je voudrais|bonne journée)\b/i.test(t)) return "fr-FR";
+    if (/\b(come stai|grazie mille|buongiorno|per favore|vorrei sapere|buona giornata)\b/i.test(t)) return "it-IT";
+
+    return null;
   };
 
-  // Limpieza segura de símbolos sin mutilar palabras que contengan "at", "barra", etc.
+  // Limpieza segura de símbolos sin mutilar palabras
   const cleanForSpeech = (text: string): string => {
     return text
       .replace(/[*#_~`>\[\]\(\)\{\}\\]+/g, " ")
@@ -119,9 +130,10 @@ export default function NoraRealtimeCallModal({
     return null;
   };
 
-  // ── 1. PROCESADOR DE COLA TTS STREAMING MULTI-IDIOMA ──
+  // ── 1. PROCESADOR DE COLA TTS STREAMING CON IDIOMA ESTABLE ──
   const processNextSpeechSentence = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (!isCallAliveRef.current) return;
     if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
 
     const rawSentence = speechQueueRef.current.shift()?.trim();
@@ -129,7 +141,7 @@ export default function NoraRealtimeCallModal({
     if (!sentence) {
       if (speechQueueRef.current.length === 0 && statusRef.current === "speaking") {
         setStatus("listening");
-        if (!isMutedRef.current && recognitionRef.current) {
+        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
           try { recognitionRef.current.start(); } catch {}
         }
       }
@@ -144,7 +156,8 @@ export default function NoraRealtimeCallModal({
       try { recognitionRef.current.stop(); } catch {}
     }
 
-    const lang = detectSentenceLanguage(sentence);
+    // Usar el idioma establecido para la llamada (sin cambios espontáneos de voz)
+    const lang = callLanguageRef.current || "es-419";
     const utterance = new SpeechSynthesisUtterance(sentence);
     utterance.lang = lang;
     utterance.rate = 1.0;
@@ -162,11 +175,12 @@ export default function NoraRealtimeCallModal({
 
     utterance.onend = () => {
       isSpeakingRef.current = false;
+      if (!isCallAliveRef.current) return;
       if (speechQueueRef.current.length > 0) {
         processNextSpeechSentence();
       } else {
         setStatus("listening");
-        if (!isMutedRef.current && recognitionRef.current) {
+        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
           try { recognitionRef.current.start(); } catch {}
         }
       }
@@ -174,11 +188,12 @@ export default function NoraRealtimeCallModal({
 
     utterance.onerror = () => {
       isSpeakingRef.current = false;
+      if (!isCallAliveRef.current) return;
       if (speechQueueRef.current.length > 0) {
         processNextSpeechSentence();
       } else {
         setStatus("listening");
-        if (!isMutedRef.current && recognitionRef.current) {
+        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
           try { recognitionRef.current.start(); } catch {}
         }
       }
@@ -214,6 +229,12 @@ export default function NoraRealtimeCallModal({
         try { recognitionRef.current.stop(); } catch {}
       }
 
+      // Detectar si el usuario pide explícitamente cambiar de idioma en la llamada
+      const requestedLang = checkExplicitLanguageChange(trimmed);
+      if (requestedLang) {
+        callLanguageRef.current = requestedLang;
+      }
+
       // Añadir al historial visual de la llamada
       setCallHistory(prev => [...prev, { role: "user", text: trimmed }]);
       setUserTranscript("");
@@ -241,7 +262,7 @@ export default function NoraRealtimeCallModal({
             // Enviar historial completo de la llamada para mantener el hilo
             history: conversationHistoryRef.current.slice(0, -1), // excluir el último (userText ya lo incluye el route)
             systemPrompt:
-              "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. MODO LLAMADA TELEFÓNICA ACTIVO. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. REGLA ABSOLUTA: Hablas EXCLUSIVAMENTE en ESPAÑOL NEUTRO LATINOAMERICANO. Las siguientes palabras están PROHIBIDAS: 'che', 'sos', 'tenés', 'podés', 'laburar', 'posta', 'copado', 'boludo', 'dale', 'mirá', 'pibe'. Usa SIEMPRE: 'tienes', 'puedes', 'eres', 'sabes'. Todas las palabras deben ser COMPLETAS: 'corporativo' (no 'corporivo'), 'tomate', 'chocolate', 'zapatillas'. Dominas una Matriz de Idiomas con diccionarios perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar o distorsionar palabras. Eres traductora de élite si el usuario cambia de idioma. Respuestas concisas, fluidas y naturales para llamada. Texto plano limpio, sin asteriscos ni markdown.",
+              "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. MODO LLAMADA TELEFÓNICA ACTIVO. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. REGLA INQUEBRANTABLE DE IDIOMA: Mantén SIEMPRE el idioma en el que el usuario te habla (por defecto Español Neutro Latinoamericano). NUNCA cambies de idioma espontáneamente ni mezcles idiomas. Solo cambia si el usuario te lo solicita explícitamente (ej: 'háblame en inglés', 'speak english'). Las siguientes palabras están PROHIBIDAS: 'che', 'sos', 'tenés', 'podés', 'laburar', 'posta', 'copado', 'boludo', 'dale', 'mirá', 'pibe'. Usa SIEMPRE: 'tienes', 'puedes', 'eres', 'sabes'. Todas las palabras deben ser COMPLETAS: 'corporativo' (no 'corporivo'), 'tomate', 'chocolate', 'zapatillas'. Dominas una Matriz de Idiomas con diccionarios perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar o distorsionar palabras. Respuestas concisas, fluidas y naturales para llamada. Texto plano limpio, sin asteriscos ni markdown.",
             mode: "general",
             deviceLocation: typeof window !== "undefined" ? (() => {
               try {
@@ -303,7 +324,7 @@ export default function NoraRealtimeCallModal({
           console.error("[Call Stream Error]:", err);
           setErrorMsg("Error de conexión durante la llamada.");
           setStatus("listening");
-          if (!isMutedRef.current && recognitionRef.current) {
+          if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
             try { recognitionRef.current.start(); } catch {}
           }
         }
@@ -314,8 +335,12 @@ export default function NoraRealtimeCallModal({
 
   // ── 3. INICIALIZAR RECONOCIMIENTO CONTINUO AL ABRIR LA LLAMADA ──
   useEffect(() => {
-    if (!isOpen || typeof window === "undefined") return;
+    if (!isOpen || typeof window === "undefined") {
+      isCallAliveRef.current = false;
+      return;
+    }
 
+    isCallAliveRef.current = true;
     setErrorMsg(null);
     setStatus("connecting");
     setCallDuration(0);
@@ -324,12 +349,12 @@ export default function NoraRealtimeCallModal({
     speechQueueRef.current = [];
     isSpeakingRef.current = false;
 
-    // Solo reiniciar el historial si esta es una NUEVA llamada (isOpen acaba de pasar a true)
-    // Evitar borrar el historial en re-renders causados por cambios de pttMode u otras deps
+    // Solo reiniciar el historial si esta es una NUEVA llamada
     if (!isCallInitializedRef.current) {
       conversationHistoryRef.current = [];
       setCallHistory([]);
       isCallInitializedRef.current = true;
+      callLanguageRef.current = "es-419";
     }
 
     // Cronómetro de llamada
@@ -351,12 +376,13 @@ export default function NoraRealtimeCallModal({
     rec.interimResults = true;
 
     rec.onstart = () => {
-      if (statusRef.current !== "speaking" && statusRef.current !== "thinking") {
+      if (isCallAliveRef.current && statusRef.current !== "speaking" && statusRef.current !== "thinking") {
         setStatus("listening");
       }
     };
 
     rec.onresult = (event: any) => {
+      if (!isCallAliveRef.current) return;
       let interim = "";
       let final = "";
 
@@ -378,17 +404,16 @@ export default function NoraRealtimeCallModal({
       // Si está en modo PTT, esperamos a que suelte el botón
       if (pttModeRef.current) return;
 
-      // Detección de pausa natural en llamada manos libres:
-      // Reiniciar el timer de silencio en cada palabra dicha
+      // Detección de pausa natural en llamada manos libres
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
       silenceTimerRef.current = setTimeout(() => {
         const textToSend = transcriptHistoryRef.current.trim();
-        if (textToSend && statusRef.current === "listening") {
+        if (textToSend && isCallAliveRef.current && statusRef.current === "listening") {
           sendQueryToStream(textToSend);
           transcriptHistoryRef.current = "";
         }
-      }, 850); // 850ms de pausa natural indican fin de frase en conversación real
+      }, 850);
     };
 
     rec.onerror = (e: any) => {
@@ -399,8 +424,9 @@ export default function NoraRealtimeCallModal({
     };
 
     rec.onend = () => {
-      // Si la llamada sigue activa y no está hablando Nora ni muteado el mic, reactivarlo
-      if (isOpen && statusRef.current === "listening" && !isMutedRef.current && !pttModeRef.current) {
+      // Si la llamada NO está viva, detener inmediatamente y NUNCA reactivar
+      if (!isCallAliveRef.current) return;
+      if (statusRef.current === "listening" && !isMutedRef.current && !pttModeRef.current) {
         try { rec.start(); } catch {}
       }
     };
@@ -415,25 +441,32 @@ export default function NoraRealtimeCallModal({
 
     // Saludo de bienvenida automático si inicia la llamada
     const welcomeChimeTimeout = setTimeout(() => {
-      enqueueSentenceForSpeech("Hola, gracias por comunicarte. Soy Nora, su asistente virtual. ¿En qué puedo ayudarle hoy?");
+      if (isCallAliveRef.current) {
+        enqueueSentenceForSpeech("Hola, gracias por comunicarte. Soy Nora, su asistente virtual. ¿En qué puedo ayudarle hoy?");
+      }
     }, 400);
 
     return () => {
+      // LIMPIEZA ABSOLUTA AL CERRAR O DESMONTAR EL MODAL
+      isCallAliveRef.current = false;
+      isCallInitializedRef.current = false;
       clearTimeout(welcomeChimeTimeout);
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
+        const r = recognitionRef.current;
+        recognitionRef.current = null;
+        r.onend = null;
+        r.onerror = null;
+        r.onresult = null;
+        try { r.abort(); } catch {}
+        try { r.stop(); } catch {}
       }
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
-      // Cuando isOpen era true al montar este efecto y ahora se desmonta porque isOpen → false,
-      // marcamos para reinicio limpio la próxima llamada.
-      // Si isOpen sigue true (efecto se re-ejecutó por pttMode), NO tocamos el flag.
-      if (!isOpen) {
-        isCallInitializedRef.current = false;
-      }
+      speechQueueRef.current = [];
+      isSpeakingRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -442,7 +475,7 @@ export default function NoraRealtimeCallModal({
   const toggleMute = () => {
     if (isMuted) {
       setIsMuted(false);
-      if (status === "listening" && recognitionRef.current) {
+      if (status === "listening" && isCallAliveRef.current && recognitionRef.current) {
         try { recognitionRef.current.start(); } catch {}
       }
     } else {
@@ -454,15 +487,36 @@ export default function NoraRealtimeCallModal({
   };
 
   const handleEndCall = () => {
+    // 1. Apagar flag de vida inmediatamente
+    isCallAliveRef.current = false;
+    isCallInitializedRef.current = false;
+
+    // 2. Abortar petición de red si está en vuelo
     if (abortControllerRef.current) abortControllerRef.current.abort();
+
+    // 3. Detener y purgar síntesis de voz
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    speechQueueRef.current = [];
+    isSpeakingRef.current = false;
+
+    // 4. Detener y desvincular reconocimiento de voz
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      const r = recognitionRef.current;
+      recognitionRef.current = null;
+      r.onend = null;
+      r.onerror = null;
+      r.onresult = null;
+      try { r.abort(); } catch {}
+      try { r.stop(); } catch {}
     }
+
+    // 5. Limpiar temporizadores
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // 6. Notificar al componente padre
     onClose();
   };
 
@@ -511,6 +565,7 @@ export default function NoraRealtimeCallModal({
 
   return (
     <div
+      onClick={handleEndCall}
       style={{
         position: "fixed",
         inset: 0,
@@ -525,6 +580,7 @@ export default function NoraRealtimeCallModal({
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: "#0b0f19",
           border: "1px solid rgba(255, 255, 255, 0.12)",
