@@ -78,22 +78,37 @@ function selectModel(hasImage: boolean, activeModels: string[]): string {
     return process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview";
   }
 
+  // Conversational text candidates (prioritizing high-power, fast conversational LLMs)
   const textCandidates = [
     process.env.GROQ_MODEL_TEXT,
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile",
+    "allam-2-7b",
     "llama3-70b-8192",
     "llama3-8b-8192",
     "mixtral-8x7b-32768",
     "gemma2-9b-it",
   ].filter(Boolean) as string[];
 
-  if (activeModels.length > 0) {
-    const found = textCandidates.find((c) => activeModels.includes(c)) || activeModels.find((id) => !id.includes("whisper") && !id.includes("vision")) || activeModels[0];
+  // Filter out whisper, guard, prompt-guard, safeguard
+  const validConversationalModels = activeModels.filter(
+    (id) =>
+      !id.includes("whisper") &&
+      !id.includes("guard") &&
+      !id.includes("prompt") &&
+      !id.includes("vision")
+  );
+
+  if (validConversationalModels.length > 0) {
+    const found = textCandidates.find((c) => validConversationalModels.includes(c));
     if (found) return found;
+    return validConversationalModels[0];
   }
-  return process.env.GROQ_MODEL_TEXT || "llama-3.1-8b-instant";
+
+  return process.env.GROQ_MODEL_TEXT || "openai/gpt-oss-120b";
 }
 
 export async function POST(req: Request) {
@@ -292,13 +307,12 @@ export async function POST(req: Request) {
         ]
       : [
           selectModel(false, activeModels),
+          "openai/gpt-oss-120b",
+          "openai/gpt-oss-20b",
+          "qwen/qwen3.8-27b",
+          "allam-2-7b",
           "llama-3.3-70b-versatile",
           "llama-3.1-8b-instant",
-          "llama-3.1-70b-versatile",
-          "llama3-70b-8192",
-          "llama3-8b-8192",
-          "mixtral-8x7b-32768",
-          "gemma2-9b-it",
         ];
 
     const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
@@ -339,10 +353,9 @@ export async function POST(req: Request) {
 
       const textFallbacks = [
         selectModel(false, activeModels),
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama3-8b-8192",
-        "mixtral-8x7b-32768",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
       ];
 
       for (const m of Array.from(new Set(textFallbacks.filter(Boolean)))) {
