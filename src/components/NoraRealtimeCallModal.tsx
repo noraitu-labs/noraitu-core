@@ -146,7 +146,7 @@ export default function NoraRealtimeCallModal({
           body: JSON.stringify({
             userText: userMessage.trim(),
             sessionId,
-            systemPrompt: "Eres Nora Itu, asistente de IA inclusiva de MyJNexoraVisual. Responde de forma directa, fluida y en español. Sin asteriscos ni almohadillas. Simula una llamada telefónica real.",
+            systemPrompt: "Sos Nora Itu, asistente de IA de MyJNexoraVisual. Tu tono es desestructurado, cercano, cálido y empático con modismos argentinos fluidos (che, mirá, contame, vos). Cero frases corporativas o introducciones repetitivas. Respuestas concisas, directas y ágiles para llamada telefónica real, en texto plano sin asteriscos ni numerales.",
             mode: "general",
           }),
           signal: controller.signal
