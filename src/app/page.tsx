@@ -260,30 +260,6 @@ const SYSTEM_PROMPTS: Record<string, string> = {
   docente:   "Eres Nora Itu. Responde con rigor académico, estructura pedagógica y ejemplos concretos. Siempre en español.",
 };
 
-/** Logging fire-and-forget a Neon (no bloquea la UI) */
-function logToNeonAsync(payload: { sessionId: string; userMessage: string; assistantResponse: string; hasImage: boolean }) {
-  fetch("/api/noraitu-stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }).catch(() => { /* silencioso */ });
-}
-
-/** Persistencia fire-and-forget en MongoDB */
-function logToMongoAsync(payload: {
-  sessionId: string;
-  userMessage: string;
-  assistantResponse: string;
-  imageBase64?: string | null;
-  mode: string;
-  latencyMs?: number;
-}) {
-  fetch("/api/nora-memory", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...payload, model: payload.imageBase64 ? "llama-3.2-11b-vision" : "llama-3.3-70b-versatile" }),
-  }).catch(() => { /* silencioso */ });
-}
 
 /* ─────────────── DETECCIÓN ECOLALIA / TEA AUTO ─────────────── */
 function detectEcholaliaPattern(text: string): boolean {
@@ -343,6 +319,7 @@ export default function NoraTitanPage() {
   const recognitionRef = useRef<any>(null);
   const autoVisionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const autoSendVoiceRef = useRef<(() => void) | null>(null); // Callback para envío automático por voz
 
   // Noise Gate Refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -375,32 +352,60 @@ export default function NoraTitanPage() {
     localStorage.setItem("noraitu_session_id", sid);
     loadSessionMessages(sid);
 
-    // STT Nativo con Aislamiento de Sonido Externo (Noise Gate)
+    // ── STT CONTINUO (Llamada Abierta) con Noise Gate y Envío Automático al detectar pausa ──
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SR) {
       const rec = new SR();
       rec.lang = "es-419";
-      rec.continuous = false;
+      rec.continuous = true;   // 🟢 Modo llamada: siempre escuchando
       rec.interimResults = true;
 
       rec.onresult = (e: any) => {
-        // Filtro de Umbral de Energía (Noise Gate): Si el volumen ambiente es insignificante, ignorar ruido
-        if (currentVolumeRef.current > 0 && currentVolumeRef.current < 12) {
-          return;
+        // Noise Gate: ignora ruido de fondo con energía insignificante
+        if (currentVolumeRef.current > 0 && currentVolumeRef.current < 12) return;
+
+        let interim = "";
+        let finalText = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const transcript = e.results[i][0].transcript;
+          if (e.results[i].isFinal) {
+            finalText += transcript;
+          } else {
+            interim += transcript;
+          }
         }
 
-        let t = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
-        setInputMessage(t);
+        // Mostrar texto interino en tiempo real
+        if (interim || finalText) setInputMessage(finalText || interim);
 
-        if (detectEcholaliaPattern(t) && !autoTEAMode) {
+        if (detectEcholaliaPattern(finalText || interim) && !autoTEAMode) {
           setAutoTEAMode(true);
           setActiveMode("tea");
         }
+
+        // Auto-envío en cuanto el motor detecta resultado final (pausa natural)
+        if (finalText.trim() && isHandsFreeRef.current) {
+          setInputMessage(finalText.trim());
+          // Disparar envío en el siguiente tick para que el estado se actualice
+          setTimeout(() => {
+            if (autoSendVoiceRef.current) autoSendVoiceRef.current();
+          }, 80);
+        }
       };
 
-      rec.onend = () => setIsListening(false);
-      rec.onerror = () => setIsListening(false);
+      rec.onend = () => {
+        // Si sigue en modo manos libres, reiniciar automáticamente (simula llamada continua)
+        if (isHandsFreeRef.current) {
+          try { rec.start(); } catch {}
+        } else {
+          setIsListening(false);
+        }
+      };
+      rec.onerror = (e: any) => {
+        if (e.error === "no-speech") return; // ignorar silencio prolongado
+        setIsListening(false);
+        isHandsFreeRef.current = false;
+      };
       recognitionRef.current = rec;
     }
 
@@ -831,7 +836,7 @@ export default function NoraTitanPage() {
         mode: activeMode,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       }]);
-      if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode) {
+      if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current) {
         speakText(canned, assistantMsgId);
       }
       return;
@@ -867,7 +872,7 @@ export default function NoraTitanPage() {
         // Fallback local semántico si el servicio en la nube no responde
         const localFallback = inferClientSemantic(trimmed, activeMode, Boolean(img));
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
-        if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode) {
+        if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current) {
           speakText(localFallback, assistantMsgId);
         }
         setIsLoading(false);
@@ -887,25 +892,27 @@ export default function NoraTitanPage() {
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
       }
 
-      if (full && (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode)) {
+      // ── TTS Automático (llama continua): siempre habla en modo manos libres, o en modos de asistencia ──
+      if (full && (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current)) {
         speakText(full, assistantMsgId);
       }
 
-      // ── PERSISTENCIA ASÍNCRONA (no bloquea la UI) ──
-      const latencyMs = Date.now() - t0;
-      logToNeonAsync({ sessionId, userMessage: trimmed, assistantResponse: full.slice(0, 1000), hasImage: Boolean(img) });
-      logToMongoAsync({ sessionId, userMessage: trimmed, assistantResponse: full, imageBase64: img, mode: activeMode, latencyMs });
+      // ── Persistencia ya gestionada de forma automática por /api/nora-inference (fire-and-forget interno) ──
+      void (Date.now() - t0); // latencia registrada en el servidor cloud
 
     } catch {
       const localFallback = inferClientSemantic(trimmed, activeMode, Boolean(img));
       setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
-      if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode) {
+      if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current) {
         speakText(localFallback, assistantMsgId);
       }
     } finally {
       setIsLoading(false);
     }
   }
+
+  // Enganchar autoSendVoiceRef al handleSendMessage para que el STT continuo pueda llamarlo
+  autoSendVoiceRef.current = handleSendMessage;
 
   function copyToClipboard(id: string, text: string) {
     navigator.clipboard.writeText(text);

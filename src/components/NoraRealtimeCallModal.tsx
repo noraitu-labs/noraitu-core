@@ -140,12 +140,14 @@ export default function NoraRealtimeCallModal({
       isSpeakingRef.current = false;
 
       try {
-        const response = await fetch("/api/noraitu-stream", {
+        const response = await fetch("/api/nora-inference", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userMessage: userMessage.trim(),
-            sessionId
+            userText: userMessage.trim(),
+            sessionId,
+            systemPrompt: "Eres Nora Itu, asistente de IA inclusiva de MyJNexoraVisual. Responde de forma directa, fluida y en español. Sin asteriscos ni almohadillas. Simula una llamada telefónica real.",
+            mode: "general",
           }),
           signal: controller.signal
         });
@@ -162,30 +164,21 @@ export default function NoraRealtimeCallModal({
           const { done, value } = await reader.read();
           if (done) break;
 
+          // /api/nora-inference devuelve texto plano en chunks (sin prefijo data:)
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          if (!chunk) continue;
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ")) continue;
+          // Limpiar símbolos para TTS fluido
+          const cleaned = chunk.replace(/[*#_~`>]+/g, "");
+          setAssistantText((prev) => prev + cleaned);
+          sentenceBuffer += cleaned;
 
-            const payload = trimmed.replace(/^data:\s*/, "");
-            if (payload === "[DONE]") break;
-
-            try {
-              const parsed = JSON.parse(payload);
-              if (parsed.text) {
-                setAssistantText((prev) => prev + parsed.text);
-                sentenceBuffer += parsed.text;
-
-                const splitIndex = sentenceBuffer.search(/[.?!;\n]/);
-                if (splitIndex !== -1) {
-                  const sentenceToSpeak = sentenceBuffer.slice(0, splitIndex + 1);
-                  sentenceBuffer = sentenceBuffer.slice(splitIndex + 1);
-                  enqueueSentenceForSpeech(sentenceToSpeak);
-                }
-              }
-            } catch {}
+          // Encolar por oraciones completas para TTS continuo
+          const splitMatch = sentenceBuffer.search(/[.?!;\n]/);
+          if (splitMatch !== -1) {
+            const sentenceToSpeak = sentenceBuffer.slice(0, splitMatch + 1);
+            sentenceBuffer = sentenceBuffer.slice(splitMatch + 1);
+            enqueueSentenceForSpeech(sentenceToSpeak);
           }
         }
 
