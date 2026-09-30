@@ -47,6 +47,8 @@ export default function NoraRealtimeCallModal({
   const isCallAliveRef = useRef<boolean>(false);
   // ── Idioma activo de la llamada (estable, nunca cambia de la nada) ──
   const callLanguageRef = useRef<string>("es-419");
+  // ── Indicador de si el stream HTTP sigue leyendo chunks del LLM ──
+  const isStreamActiveRef = useRef<boolean>(false);
 
   // Sincronizar refs
   useEffect(() => {
@@ -59,6 +61,32 @@ export default function NoraRealtimeCallModal({
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  // ── Activador y validador de estado para micrófono con auto-recuperación ──
+  const activateMicrophoneSafely = useCallback(() => {
+    if (!isCallAliveRef.current || isMutedRef.current || pttModeRef.current) return;
+    if (isSpeakingRef.current || isStreamActiveRef.current) return;
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (err: any) {
+        if (!err?.message?.includes("already started")) {
+          setTimeout(() => {
+            if (
+              isCallAliveRef.current &&
+              statusRef.current === "listening" &&
+              !isSpeakingRef.current &&
+              !isStreamActiveRef.current &&
+              !isMutedRef.current
+            ) {
+              try { recognitionRef.current?.start(); } catch {}
+            }
+          }, 200);
+        }
+      }
+    }
+  }, []);
 
   // Detección estricta de idioma: NUNCA usar palabras cortas compartidas ("para", "con", "la", "le")
   const checkExplicitLanguageChange = (text: string): string | null => {
@@ -139,11 +167,12 @@ export default function NoraRealtimeCallModal({
     const rawSentence = speechQueueRef.current.shift()?.trim();
     const sentence = rawSentence ? cleanForSpeech(rawSentence) : "";
     if (!sentence) {
-      if (speechQueueRef.current.length === 0 && statusRef.current === "speaking") {
+      if (speechQueueRef.current.length > 0) {
+        processNextSpeechSentence();
+      } else if (!isStreamActiveRef.current) {
+        isSpeakingRef.current = false;
         setStatus("listening");
-        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
-          try { recognitionRef.current.start(); } catch {}
-        }
+        activateMicrophoneSafely();
       }
       return;
     }
@@ -164,13 +193,14 @@ export default function NoraRealtimeCallModal({
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const langPrefix = lang.split("-")[0];
+    const langPrefix = lang.split("-")[0].toLowerCase();
     const voice =
       voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
       voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
-      voices.find(v => v.name.includes("Google") && v.lang.startsWith(langPrefix)) ||
-      voices.find(v => v.name.includes("Sabina") || v.name.includes("Elena") || v.name.includes("Paulina") || v.name.includes("Monica")) ||
-      voices.find(v => v.lang.startsWith("es"));
+      voices.find(v => v.name.toLowerCase().includes("google") && v.lang.toLowerCase().startsWith(langPrefix)) ||
+      voices.find(v => v.name.toLowerCase().includes("sabina") || v.name.toLowerCase().includes("elena") || v.name.toLowerCase().includes("paulina") || v.name.toLowerCase().includes("monica")) ||
+      voices.find(v => v.lang.toLowerCase().startsWith("es-419") || v.lang.toLowerCase().startsWith("es-us")) ||
+      voices.find(v => v.lang.toLowerCase().startsWith("es"));
     if (voice) utterance.voice = voice;
 
     utterance.onend = () => {
@@ -178,11 +208,12 @@ export default function NoraRealtimeCallModal({
       if (!isCallAliveRef.current) return;
       if (speechQueueRef.current.length > 0) {
         processNextSpeechSentence();
-      } else {
+      } else if (!isStreamActiveRef.current) {
+        // Toda la respuesta (red + oraciones) ha culminado
         setStatus("listening");
-        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
-          try { recognitionRef.current.start(); } catch {}
-        }
+        activateMicrophoneSafely();
+      } else {
+        setStatus("thinking");
       }
     };
 
@@ -191,16 +222,16 @@ export default function NoraRealtimeCallModal({
       if (!isCallAliveRef.current) return;
       if (speechQueueRef.current.length > 0) {
         processNextSpeechSentence();
-      } else {
+      } else if (!isStreamActiveRef.current) {
         setStatus("listening");
-        if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
-          try { recognitionRef.current.start(); } catch {}
-        }
+        activateMicrophoneSafely();
+      } else {
+        setStatus("thinking");
       }
     };
 
     window.speechSynthesis.speak(utterance);
-  }, []);
+  }, [activateMicrophoneSafely]);
 
   const enqueueSentenceForSpeech = useCallback(
     (chunk: string) => {
@@ -251,6 +282,7 @@ export default function NoraRealtimeCallModal({
       if (abortControllerRef.current) abortControllerRef.current.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      isStreamActiveRef.current = true;
 
       try {
         const response = await fetch("/api/nora-inference", {
@@ -324,13 +356,18 @@ export default function NoraRealtimeCallModal({
           console.error("[Call Stream Error]:", err);
           setErrorMsg("Error de conexión durante la llamada.");
           setStatus("listening");
-          if (isCallAliveRef.current && !isMutedRef.current && recognitionRef.current) {
-            try { recognitionRef.current.start(); } catch {}
-          }
+          activateMicrophoneSafely();
+        }
+      } finally {
+        isStreamActiveRef.current = false;
+        // Si Nora finalizó la locución y no hay oraciones en cola, reactivar el micrófono inmediatamente
+        if (!isSpeakingRef.current && speechQueueRef.current.length === 0) {
+          setStatus("listening");
+          activateMicrophoneSafely();
         }
       }
     },
-    [sessionId, enqueueSentenceForSpeech]
+    [sessionId, enqueueSentenceForSpeech, activateMicrophoneSafely]
   );
 
   // ── 3. INICIALIZAR RECONOCIMIENTO CONTINUO AL ABRIR LA LLAMADA ──
@@ -424,14 +461,22 @@ export default function NoraRealtimeCallModal({
     };
 
     rec.onend = () => {
-      // Si la llamada NO está viva, detener inmediatamente y NUNCA reactivar
+      // Si la llamada sigue viva y estamos en modo escucha, reactivar automáticamente
       if (!isCallAliveRef.current) return;
-      if (statusRef.current === "listening" && !isMutedRef.current && !pttModeRef.current) {
+      if (statusRef.current === "listening" && !isSpeakingRef.current && !isStreamActiveRef.current && !isMutedRef.current && !pttModeRef.current) {
         try { rec.start(); } catch {}
       }
     };
 
     recognitionRef.current = rec;
+
+    // Pre-cargar voces nativas del navegador
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
 
     // Conectar llamada de inmediato
     try {
@@ -446,11 +491,36 @@ export default function NoraRealtimeCallModal({
       }
     }, 400);
 
+    // ── WATCHDOG / VALIDADOR DE ESTADO: MANTIENE EL BUCLE CONTINUO ACTIVO ──
+    const voiceWatchdog = setInterval(() => {
+      if (!isCallAliveRef.current) return;
+
+      // 1. Evitar que Chrome suspenda SpeechSynthesis a los 15s
+      if (isSpeakingRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
+        if (window.speechSynthesis.paused) {
+          try { window.speechSynthesis.resume(); } catch {}
+        }
+      }
+
+      // 2. Validador de escucha: si Nora finalizó y no estamos en mute ni PTT, asegurar que el micrófono está activo
+      if (
+        statusRef.current === "listening" &&
+        !isSpeakingRef.current &&
+        !isStreamActiveRef.current &&
+        !isMutedRef.current &&
+        !pttModeRef.current
+      ) {
+        activateMicrophoneSafely();
+      }
+    }, 1200);
+
     return () => {
       // LIMPIEZA ABSOLUTA AL CERRAR O DESMONTAR EL MODAL
       isCallAliveRef.current = false;
       isCallInitializedRef.current = false;
+      isStreamActiveRef.current = false;
       clearTimeout(welcomeChimeTimeout);
+      clearInterval(voiceWatchdog);
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (recognitionRef.current) {

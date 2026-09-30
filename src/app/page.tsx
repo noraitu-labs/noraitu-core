@@ -334,6 +334,7 @@ export default function NoraTitanPage() {
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [deviceLocation, setDeviceLocation] = useState<DeviceLocation>(DEFAULT_ITUZAINGO_LOCATION);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   /* ── Cámara IA ── */
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -975,29 +976,8 @@ export default function NoraTitanPage() {
     const lang = detectTextLanguage(textoLimpio);
     const utt = new SpeechSynthesisUtterance(textoLimpio);
     utt.lang = lang;
-    utt.rate = 0.98;
+    utt.rate = 1.0;
     utt.pitch = 1.0;
-
-    const doSpeak = () => {
-      const voices = window.speechSynthesis.getVoices();
-      const langPrefix = lang.split("-")[0];
-      const matchVoice =
-        voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
-        voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
-        voices.find(v => v.name.includes("Google") && v.lang.startsWith(langPrefix)) ||
-        voices.find(v => v.name.includes("Sabina") || v.name.includes("Elena") || v.name.includes("Paulina") || v.name.includes("Monica")) ||
-        voices.find(v => v.lang.startsWith("es-419") || v.lang.startsWith("es-MX") || v.lang.startsWith("es-US")) ||
-        voices.find(v => v.lang.startsWith("es"));
-      if (matchVoice) { utt.voice = matchVoice; }
-      window.speechSynthesis.speak(utt);
-    };
-
-    const voicesList = window.speechSynthesis.getVoices();
-    if (voicesList && voicesList.length > 0) {
-      doSpeak();
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => { doSpeak(); };
-    }
 
     // Al comenzar a hablar: apagar micrófono para evitar retroalimentación acústica
     utt.onstart = () => {
@@ -1020,17 +1000,45 @@ export default function NoraTitanPage() {
             recognitionRef.current?.start();
             setIsListening(true);
           } catch {}
-        }, 350);
+        }, 300);
       }
     };
 
     utt.onerror = () => {
       setIsSpeaking(false);
       setSpeakingMsgId(null);
+      if (isHandsFreeRef.current) {
+        setTimeout(() => {
+          try {
+            ensureNoiseGate();
+            recognitionRef.current?.start();
+            setIsListening(true);
+          } catch {}
+        }, 300);
+      }
     };
 
-    speechUtteranceRef.current = utt;
-    window.speechSynthesis.speak(utt);
+    const doSpeak = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const langPrefix = lang.split("-")[0].toLowerCase();
+      const matchVoice =
+        voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
+        voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
+        voices.find(v => v.name.toLowerCase().includes("google") && v.lang.toLowerCase().startsWith(langPrefix)) ||
+        voices.find(v => v.name.toLowerCase().includes("sabina") || v.name.toLowerCase().includes("elena") || v.name.toLowerCase().includes("paulina") || v.name.toLowerCase().includes("monica")) ||
+        voices.find(v => v.lang.toLowerCase().startsWith("es-419") || v.lang.toLowerCase().startsWith("es-us")) ||
+        voices.find(v => v.lang.toLowerCase().startsWith("es"));
+      if (matchVoice) { utt.voice = matchVoice; }
+      speechUtteranceRef.current = utt;
+      window.speechSynthesis.speak(utt);
+    };
+
+    const voicesList = window.speechSynthesis.getVoices();
+    if (voicesList && voicesList.length > 0) {
+      doSpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => { doSpeak(); };
+    }
   }
 
   /* ──────────────── STT: Conmutación y Noise Gate ──────────── */
@@ -1496,52 +1504,128 @@ export default function NoraTitanPage() {
             </div>
           </div>
 
-          {/* Bloque Derecho: Botones de acción con scroll libre sin invadir la flecha izquierda */}
+          {/* Bloque Derecho: Botones de acción responsivos (sin encimamientos) */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "5px",
-              overflowX: "auto",
+              gap: "6px",
               minWidth: 0,
-              flex: 1,
+              flexShrink: 0,
               justifyContent: "flex-end",
-              paddingLeft: "6px",
-              scrollbarWidth: "none"
             }}
           >
-            <button
-              onClick={() => handleExportDirect("docx")}
-              title="Descargar Historial en Word"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
-            >
-              <FileText size={11} color="#38bdf8" />
-              <span>Word</span>
-            </button>
-            <button
-              onClick={() => handleExportDirect("pdf")}
-              title="Descargar Historial en PDF"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
-            >
-              <Printer size={11} color="#818cf8" />
-              <span>PDF</span>
-            </button>
-            <button
-              onClick={() => handleExportDirect("pptx")}
-              title="Descargar Presentación en PPTX"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 7px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap", flexShrink: 0 }}
-            >
-              <Presentation size={11} color="#34d399" />
-              <span>PPT</span>
-            </button>
+            {/* Desktop: Botones individuales de exportación */}
+            <div className="hidden md:flex items-center gap-1.5">
+              <button
+                onClick={() => handleExportDirect("docx")}
+                title="Descargar Historial en Word"
+                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
+              >
+                <FileText size={12} color="#38bdf8" />
+                <span>Word</span>
+              </button>
+              <button
+                onClick={() => handleExportDirect("pdf")}
+                title="Descargar Historial en PDF"
+                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
+              >
+                <Printer size={12} color="#818cf8" />
+                <span>PDF</span>
+              </button>
+              <button
+                onClick={() => handleExportDirect("pptx")}
+                title="Descargar Presentación en PPTX"
+                style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "7px", padding: "4px 8px", fontSize: "10.5px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}
+              >
+                <Presentation size={12} color="#34d399" />
+                <span>PPT</span>
+              </button>
+            </div>
 
+            {/* Mobile: Menú colapsable para documentos para no saturar la barra */}
+            <div className="md:hidden relative">
+              <button
+                onClick={() => setIsExportMenuOpen(prev => !prev)}
+                title="Exportar documentos"
+                aria-label="Exportar documentos"
+                style={{
+                  backgroundColor: isExportMenuOpen ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.06)",
+                  color: isExportMenuOpen ? "#38bdf8" : "#94a3b8",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "7px",
+                  padding: "5px 7px",
+                  fontSize: "10.5px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "3px"
+                }}
+              >
+                <FileText size={12} color="#38bdf8" />
+                <span className="text-[10.5px]">Docs</span>
+              </button>
+
+              {isExportMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)} />
+                  <div
+                    className="absolute right-0 top-full mt-1.5 w-36 bg-[#0f172a]/95 backdrop-blur-xl border border-white/15 rounded-xl p-1.5 shadow-2xl z-50 flex flex-col gap-1"
+                    style={{ animation: "fadeIn 0.15s ease-out" }}
+                  >
+                    <button
+                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("docx"); }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                    >
+                      <FileText size={13} color="#38bdf8" />
+                      <span>Exportar Word</span>
+                    </button>
+                    <button
+                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("pdf"); }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                    >
+                      <Printer size={13} color="#818cf8" />
+                      <span>Exportar PDF</span>
+                    </button>
+                    <button
+                      onClick={() => { setIsExportMenuOpen(false); handleExportDirect("pptx"); }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                    >
+                      <Presentation size={13} color="#34d399" />
+                      <span>Exportar PPT</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Botón de Cámara (Compacto en móvil, completo en PC) */}
             <button
               onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
-              style={{ backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`, color: isCameraOpen ? "#fff" : mc.badgeText, border: `1px solid ${mc.accent}44`, borderRadius: "7px", padding: "4px 8px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap", flexShrink: 0 }}
+              title={isCameraOpen ? "Cerrar cámara" : "Abrir cámara"}
+              aria-label="Cámara"
+              style={{
+                backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`,
+                color: isCameraOpen ? "#fff" : mc.badgeText,
+                border: `1px solid ${isCameraOpen ? "#ef4444" : `${mc.accent}44`}`,
+                borderRadius: "7px",
+                padding: "5px 9px",
+                fontSize: "10.5px",
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                whiteSpace: "nowrap",
+                flexShrink: 0
+              }}
             >
-              <Camera size={11} />
-              <span>{isCameraOpen ? "✕" : "Cámara"}</span>
+              <Camera size={13} />
+              <span className="hidden sm:inline">{isCameraOpen ? "✕" : "Cámara"}</span>
             </button>
+
+            {/* Botón de Llamada de Voz Continua */}
             <button
               onClick={() => {
                 if (recognitionRef.current) {
@@ -1552,24 +1636,25 @@ export default function NoraTitanPage() {
                 setIsCallModalOpen(true);
               }}
               title="Iniciar llamada de voz continua con Nora"
+              aria-label="Llamada de voz continua"
               style={{
                 background: "linear-gradient(135deg, #16a34a, #15803d)",
                 color: "#ffffff",
                 border: "1px solid rgba(255,255,255,0.2)",
                 borderRadius: "8px",
-                padding: "4px 10px",
+                padding: "5px 10px",
                 fontSize: "11px",
                 fontWeight: 700,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: "5px",
-                boxShadow: "0 0 12px rgba(22,163,74,0.5)",
+                boxShadow: "0 0 12px rgba(22,163,74,0.4)",
                 whiteSpace: "nowrap",
                 flexShrink: 0
               }}
             >
-              <PhoneCall size={12} className="animate-pulse" />
+              <PhoneCall size={13} className="animate-pulse" />
               <span>Llamar</span>
             </button>
           </div>
@@ -1632,151 +1717,190 @@ export default function NoraTitanPage() {
           </div>
         )}
 
-        {/* ─── Cámara IA Multimodal (Desplegable) ─── */}
-        {isCameraOpen && (
-          <div style={{ padding: "8px 12px 0", flexShrink: 0 }}>
-            <div style={{ borderRadius: "12px", border: `1px solid ${mc.accent}44`, overflow: "hidden", backgroundColor: "#0d1322" }}>
-              <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "10px", fontWeight: 700, color: mc.badgeText }}>
-                  <Camera size={11} />
+        {/* ═══════════════ WORKSPACE CONCURRENTE: CÁMARA Y/O CHAT ═══════════════ */}
+        <div className={`flex-1 min-h-0 w-full overflow-hidden flex ${isCameraOpen ? "flex-col md:flex-row" : "flex-col"} relative`}>
+
+          {/* ─── Panel de Cámara Integrado: 50% en PC (side-by-side), 36vh apilado arriba en celular ─── */}
+          {isCameraOpen && (
+            <section className="w-full md:w-1/2 h-[36vh] md:h-full flex-shrink-0 flex flex-col border-b md:border-b-0 md:border-r border-white/10 bg-[#070b14] overflow-hidden transition-all duration-300 z-20">
+              <div className="px-3 py-2 bg-slate-900/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-sky-400">
+                  <Camera size={13} />
                   <span>CÁMARA IA {autoVisionActive && "· LAZARILLO (5s)"}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <button onClick={flipCamera} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#f8fafc", borderRadius: "5px", padding: "3px 6px", cursor: "pointer" }}>
-                    <FlipHorizontal size={11} />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={flipCamera}
+                    title="Girar cámara"
+                    style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#f8fafc", borderRadius: "5px", padding: "4px 8px", cursor: "pointer" }}
+                  >
+                    <FlipHorizontal size={12} />
                   </button>
-                  <button onClick={stopCamera} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "3px" }}>
-                    <X size={13} />
+                  <button
+                    onClick={stopCamera}
+                    title="Cerrar cámara"
+                    style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: "5px", padding: "4px 8px", cursor: "pointer" }}
+                  >
+                    <X size={12} />
                   </button>
                 </div>
               </div>
 
-              <div style={{ position: "relative", backgroundColor: "#000", maxHeight: "180px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                <video ref={videoRef} playsInline muted style={{ width: "100%", maxHeight: "180px", objectFit: "contain", transform: facingMode === "user" ? "scaleX(-1)" : "none" }} />
+              {/* Visor de Video Inteligente con auto-ajuste fluido */}
+              <div className="flex-1 min-h-0 relative bg-black flex items-center justify-center overflow-hidden">
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                  style={{ transform: facingMode === "user" ? "scaleX(-1)" : "none" }}
+                />
                 <canvas ref={canvasRef} style={{ display: "none" }} />
                 {cameraCapturing && (
-                  <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.65)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-                    <Loader2 size={18} className="animate-spin" color={mc.badgeText} />
-                    <span style={{ fontSize: "11px", color: "#fff", fontWeight: 600 }}>Analizando imagen...</span>
+                  <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-10">
+                    <Loader2 size={24} className="animate-spin text-sky-400" />
+                    <span className="text-xs font-semibold text-white">Analizando imagen con Nora...</span>
                   </div>
                 )}
               </div>
 
+              {/* Resumen de Visión en Tiempo Real */}
               {cameraAnalysis && (
-                <div style={{ padding: "6px 10px", backgroundColor: "rgba(0,0,0,0.4)", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: "11px", color: "#e2e8f0", lineHeight: 1.5, maxHeight: "70px", overflowY: "auto" }}>
-                  <span style={{ fontWeight: 700, color: mc.badgeText }}>Visión Nora: </span>{cameraAnalysis}
+                <div className="px-3 py-2 bg-slate-900/90 border-t border-white/10 text-xs text-slate-200 max-h-24 overflow-y-auto flex-shrink-0 leading-relaxed">
+                  <span className="font-bold text-sky-400">Visión Nora: </span>
+                  {cameraAnalysis}
                 </div>
               )}
 
-              <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "4px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <button onClick={() => analyzeCameraSnapshot()} disabled={cameraCapturing} style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "10px", fontWeight: 700, cursor: cameraCapturing ? "not-allowed" : "pointer", opacity: cameraCapturing ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px" }}>
-                    <Sparkles size={11} /><span>Analizar</span>
+              {/* Barra de Acciones de la Cámara */}
+              <div className="px-3 py-2 bg-slate-950/90 border-t border-white/10 flex items-center justify-between gap-2 flex-shrink-0 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => analyzeCameraSnapshot()}
+                    disabled={cameraCapturing}
+                    style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 700, cursor: cameraCapturing ? "not-allowed" : "pointer", opacity: cameraCapturing ? 0.5 : 1, display: "flex", alignItems: "center", gap: "4px" }}
+                  >
+                    <Sparkles size={12} />
+                    <span>Analizar</span>
                   </button>
-                  <button onClick={toggleAutoVision} style={{ backgroundColor: autoVisionActive ? "#dc2626" : "rgba(34,197,94,0.15)", color: autoVisionActive ? "#fff" : "#4ade80", border: `1px solid ${autoVisionActive ? "#ef4444" : "rgba(34,197,94,0.4)"}`, borderRadius: "6px", padding: "5px 10px", fontSize: "10px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <Eye size={11} /><span>{autoVisionActive ? "Detener" : "Continuo"}</span>
+                  <button
+                    onClick={toggleAutoVision}
+                    style={{
+                      backgroundColor: autoVisionActive ? "#dc2626" : "rgba(34,197,94,0.15)",
+                      color: autoVisionActive ? "#fff" : "#4ade80",
+                      border: `1px solid ${autoVisionActive ? "#ef4444" : "rgba(34,197,94,0.4)"}`,
+                      borderRadius: "6px",
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                  >
+                    <Eye size={12} />
+                    <span>{autoVisionActive ? "Detener" : "Continuo"}</span>
                   </button>
                 </div>
-                <button onClick={attachSnapshotToChat} style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "#f8fafc", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "6px", padding: "5px 10px", fontSize: "10px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
-                  <ImageIcon size={11} /><span>Adjuntar</span>
+                <button
+                  onClick={attachSnapshotToChat}
+                  style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "#f8fafc", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                >
+                  <ImageIcon size={12} />
+                  <span>Adjuntar</span>
                 </button>
               </div>
+            </section>
+          )}
+
+          {/* ─── DRAG & DROP OVERLAY ─── */}
+          {isDragging && (
+            <div style={{ position: "absolute", inset: 0, zIndex: 60, backgroundColor: `${mc.accent}22`, backdropFilter: "blur(6px)", border: `2px dashed ${mc.accent}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+              <UploadCloud size={38} color={mc.badgeText} />
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Suelta tu imagen para análisis</div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ─── DRAG & DROP OVERLAY ─── */}
-        {isDragging && (
-          <div style={{ position: "absolute", inset: 0, zIndex: 60, backgroundColor: `${mc.accent}22`, backdropFilter: "blur(6px)", border: `2px dashed ${mc.accent}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-            <UploadCloud size={38} color={mc.badgeText} />
-            <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Suelta tu imagen para análisis</div>
-          </div>
-        )}
-
-        {/* ─── 2. HISTORIAL DE MENSAJES (Altura Fija Controlada & Scroll Aislado) ─── */}
-        <div
-          className="h-[calc(100vh-180px)] md:h-[calc(100vh-140px)] overflow-y-auto overscroll-contain"
-          style={{
-            flex: 1,
-            height: "calc(100dvh - 180px)",
-            maxHeight: "calc(100dvh - 180px)",
-            overflowY: "auto",
-            overflowX: "hidden",
-            overscrollBehavior: "contain",
-            WebkitOverflowScrolling: "touch",
-            padding: "14px 12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "14px"
-          }}
-        >
-          <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
-            {messages.map(msg => {
-              const isUser = msg.role === "user";
-              return (
-                <div key={msg.id} style={{ display: "flex", flexDirection: isUser ? "row-reverse" : "row", gap: "8px", alignItems: "flex-start" }}>
-                  {isUser ? (
-                    <div
-                      className="w-7 h-7 md:w-8 md:h-8 rounded-full flex-shrink-0"
-                      style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                    >
-                      <User size={15} color="#fff" />
-                    </div>
-                  ) : (
-                    <img
-                      src="/avatar-nora.png"
-                      alt="Nora"
-                      className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
-                      style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #3f3f46", objectFit: "cover", flexShrink: 0 }}
-                    />
-                  )}
-
-                  <div style={{ maxWidth: "86%", minWidth: 0, backgroundColor: isUser ? "rgba(37,99,235,0.15)" : "rgba(15,23,42,0.75)", border: isUser ? "1px solid rgba(59,130,246,0.3)" : `1px solid ${mc.border}`, borderRadius: "12px", padding: "10px 13px", lineHeight: (activeMode === "tea" || autoTEAMode) ? 1.7 : 1.55, fontSize: (activeMode === "tea" || autoTEAMode) ? "14px" : "13px", boxShadow: "0 2px 12px rgba(0,0,0,0.2)", wordBreak: "break-word" }}>
-                    {msg.imageBase64 && (
-                      <div style={{ marginBottom: "8px" }}>
-                        <img src={msg.imageBase64} alt="Adjunto" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "7px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} />
-                      </div>
-                    )}
-                    <div style={{ whiteSpace: "pre-wrap" }}>
-                      {(msg.content ? renderizarTextoLimpio(msg.content) : "") || (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: "#94a3b8" }}>
-                          <Loader2 size={12} className="animate-spin" /> Procesando con Nora Itu...
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Footer del Mensaje: Timestamp + Herramientas */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: "4px" }}>
-                      <span style={{ fontSize: "9.5px", color: "#475569" }}>{msg.timestamp}</span>
-                      {!isUser && msg.content && (
+          {/* ─── PANEL DE CHAT PRINCIPAL: 50% EN PC SI CÁMARA ESTÁ ABIERTA (100% SI NO), RESTO EN MOBILE ─── */}
+          <section className={`flex-1 min-h-0 flex flex-col ${isCameraOpen ? "w-full md:w-1/2" : "w-full"} overflow-hidden bg-transparent`}>
+            {/* Contenedor con Scroll Aislado de Mensajes */}
+            <div
+              className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 flex flex-col gap-3.5"
+              style={{
+                WebkitOverflowScrolling: "touch",
+              }}
+            >
+              <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
+                {messages.map(msg => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <div key={msg.id} style={{ display: "flex", flexDirection: isUser ? "row-reverse" : "row", gap: "8px", alignItems: "flex-start" }}>
+                      {isUser ? (
                         <div
-                          className="flex nowrap overflow-x-auto gap-1 max-w-full pb-1 items-center"
-                          style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "3px", maxWidth: "100%", scrollbarWidth: "none" }}
+                          className="w-7 h-7 md:w-8 md:h-8 rounded-full flex-shrink-0"
+                          style={{ width: "28px", height: "28px", borderRadius: "50%", backgroundColor: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
                         >
-                          <button onClick={() => exportToWord("informe_nora_itu", "Reporte Nora Itu", msg.content)} title="Word" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
-                            <FileText size={10} color="#38bdf8" /><span>Word</span>
-                          </button>
-                          <button onClick={() => exportToPdf("Reporte Nora Itu", msg.content)} title="PDF" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
-                            <Printer size={10} color="#818cf8" /><span>PDF</span>
-                          </button>
-                          <button onClick={() => exportToPptx("presentacion_nora_itu", "Presentación Nora Itu", msg.content)} title="PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
-                            <Presentation size={10} color="#34d399" /><span>PPT</span>
-                          </button>
-                          <button onClick={() => speakText(msg.content, msg.id)} title="Escuchar voz" style={{ background: "none", border: "none", color: isSpeaking && speakingMsgId === msg.id ? mc.badgeText : "#64748b", cursor: "pointer", padding: "2px" }}>
-                            {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                          </button>
-                          <button onClick={() => copyToClipboard(msg.id, msg.content)} title="Copiar" style={{ background: "none", border: "none", color: copiedId === msg.id ? "#22c55e" : "#64748b", cursor: "pointer", padding: "2px" }}>
-                            {copiedId === msg.id ? <Check size={11} /> : <Copy size={11} />}
-                          </button>
+                          <User size={15} color="#fff" />
                         </div>
+                      ) : (
+                        <img
+                          src="/avatar-nora.png"
+                          alt="Nora"
+                          className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
+                          style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #3f3f46", objectFit: "cover", flexShrink: 0 }}
+                        />
                       )}
+
+                      <div style={{ maxWidth: "86%", minWidth: 0, backgroundColor: isUser ? "rgba(37,99,235,0.15)" : "rgba(15,23,42,0.75)", border: isUser ? "1px solid rgba(59,130,246,0.3)" : `1px solid ${mc.border}`, borderRadius: "12px", padding: "10px 13px", lineHeight: (activeMode === "tea" || autoTEAMode) ? 1.7 : 1.55, fontSize: (activeMode === "tea" || autoTEAMode) ? "14px" : "13px", boxShadow: "0 2px 12px rgba(0,0,0,0.2)", wordBreak: "break-word" }}>
+                        {msg.imageBase64 && (
+                          <div style={{ marginBottom: "8px" }}>
+                            <img src={msg.imageBase64} alt="Adjunto" style={{ maxWidth: "100%", maxHeight: "200px", borderRadius: "7px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} />
+                          </div>
+                        )}
+                        <div style={{ whiteSpace: "pre-wrap" }}>
+                          {(msg.content ? renderizarTextoLimpio(msg.content) : "") || (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: "#94a3b8" }}>
+                              <Loader2 size={12} className="animate-spin" /> Procesando con Nora Itu...
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Footer del Mensaje: Timestamp + Herramientas */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", paddingTop: "6px", borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: "4px" }}>
+                          <span style={{ fontSize: "9.5px", color: "#475569" }}>{msg.timestamp}</span>
+                          {!isUser && msg.content && (
+                            <div
+                              className="flex nowrap overflow-x-auto gap-1 max-w-full pb-1 items-center"
+                              style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "3px", maxWidth: "100%", scrollbarWidth: "none" }}
+                            >
+                              <button onClick={() => exportToWord("informe_nora_itu", "Reporte Nora Itu", msg.content)} title="Word" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                                <FileText size={10} color="#38bdf8" /><span>Word</span>
+                              </button>
+                              <button onClick={() => exportToPdf("Reporte Nora Itu", msg.content)} title="PDF" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                                <Printer size={10} color="#818cf8" /><span>PDF</span>
+                              </button>
+                              <button onClick={() => exportToPptx("presentacion_nora_itu", "Presentación Nora Itu", msg.content)} title="PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                                <Presentation size={10} color="#34d399" /><span>PPT</span>
+                              </button>
+                              <button onClick={() => speakText(msg.content, msg.id)} title="Escuchar voz" style={{ background: "none", border: "none", color: isSpeaking && speakingMsgId === msg.id ? mc.badgeText : "#64748b", cursor: "pointer", padding: "2px" }}>
+                                {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                              </button>
+                              <button onClick={() => copyToClipboard(msg.id, msg.content)} title="Copiar" style={{ background: "none", border: "none", color: copiedId === msg.id ? "#22c55e" : "#64748b", cursor: "pointer", padding: "2px" }}>
+                                {copiedId === msg.id ? <Check size={11} /> : <Copy size={11} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={chatEndRef} />
-          </div>
+                  );
+                })}
+                <div ref={chatEndRef} />
+              </div>
+            </div>
+          </section>
+
         </div>
 
         {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
