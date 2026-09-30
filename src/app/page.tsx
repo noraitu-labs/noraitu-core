@@ -800,6 +800,10 @@ export default function NoraTitanPage() {
     }
     setIsCameraOpen(false);
     stopAutoVision();
+    // Liberar síntesis de voz al cerrar la cámara para evitar conflictos WebRTC
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
   }, [cameraStream]);
 
   function flipCamera() {
@@ -1077,6 +1081,29 @@ export default function NoraTitanPage() {
     }
   }
 
+  /* ── Descarga directa TXT / CSV por mensaje ── */
+  function exportMsgAsTxt(content: string, filename: string = "nora_respuesta") {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filename}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function exportMsgAsCsv(content: string, filename: string = "nora_datos") {
+    const rows = content.split("\n").map(line => `"${line.replace(/"/g, '""')}"`);
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filename}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
   /* ──────────────── SEND MESSAGE ──────────────── */
   async function handleSendMessage() {
     const trimmed = inputMessage.trim();
@@ -1126,7 +1153,7 @@ export default function NoraTitanPage() {
     try {
       const t0 = Date.now();
       const systemPrompt = SYSTEM_PROMPTS[activeMode] || SYSTEM_PROMPTS.general;
-      const chatHistory = messages.slice(-6).map(m => ({
+      const chatHistory = messages.slice(-12).map(m => ({
         role: (m.role === "assistant" ? "assistant" : "user") as "assistant" | "user",
         content: m.content
       }));
@@ -1798,6 +1825,12 @@ export default function NoraTitanPage() {
                               </button>
                               <button onClick={() => exportToPptx("presentacion_nora_itu", "Presentación Nora Itu", msg.content)} title="PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
                                 <Presentation size={10} color="#34d399" /><span>PPT</span>
+                              </button>
+                              <button onClick={() => exportMsgAsTxt(msg.content)} title="Descargar como TXT" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                                <FileText size={10} color="#e2e8f0" /><span>TXT</span>
+                              </button>
+                              <button onClick={() => exportMsgAsCsv(msg.content)} title="Descargar como CSV" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                                <FileText size={10} color="#fbbf24" /><span>CSV</span>
                               </button>
                               <button onClick={() => speakText(msg.content, msg.id)} title="Escuchar voz" style={{ background: "none", border: "none", color: isSpeaking && speakingMsgId === msg.id ? mc.badgeText : "#64748b", cursor: "pointer", padding: "2px" }}>
                                 {isSpeaking && speakingMsgId === msg.id ? <VolumeX size={12} /> : <Volume2 size={12} />}

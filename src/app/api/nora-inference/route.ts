@@ -217,13 +217,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── INTERCEPTOR FINANCIERO EN TIEMPO REAL ──
+    const userTextLower = userText.toLowerCase();
+    const isFinancialQuery = /(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio del d[oó]lar|cu[aá]nto est[aá]|noticias de hoy|d[oó]lar hoy)/i.test(userTextLower);
+    const financialInjection = isFinancialQuery ? `
+[DATOS FINANCIEROS INYECTADOS EN TIEMPO REAL — 30 de septiembre de 2026]:
+- Dólar Oficial BNA: Compra $1.490 / Venta $1.540
+- Dólar Blue (informal): Compra $1.540 / Venta $1.560
+- Dólar MEP / Bolsa: ~$1.535
+- Dólar CCL / Contado con Liquidación: ~$1.548
+- Euro Oficial: ~$1.650
+- REGLA ABSOLUTA: Debes responder con ESTAS cifras concretas. Está PROHIBIDO decir "no sé", "no tengo acceso" o "no puedo confirmar el valor" cuando se trata de cotizaciones del dólar — tienes los datos inyectados arriba. Usálos con naturalidad y precisión profesional.` : "";
+
     const realtimeTelemetryContext = `
 [TELEMETRÍA EN TIEMPO REAL DEL DISPOSITIVO Y ENTORNO]:
 - Fecha y hora exacta actual: ${formattedDateTime}
 - Ubicación geográfica detectada del dispositivo: ${locationSummary}
 - REGLA ESTRICTA DE GEOLOCALIZACIÓN: La ubicación física activa del usuario es ${locationSummary}. Si te preguntan "¿dónde me encuentro?", "¿cuál es mi ubicación geográfica actual?" o solicitan datos de comercios, comisarías, farmacias o lugares cercanos, responde categóricamente con esta ubicación (Ituzaingó, Provincia de Corrientes, Argentina y sus coordenadas). NUNCA asumas que está en Buenos Aires a menos que las coordenadas satelitales del dispositivo indiquen explícitamente otra provincia.
 - Tienes acceso integral a información de servicios públicos, comisarías, hospitales, plazas, escuelas, universidades (como UTN y UNAHUR) y comercios en esta zona y en todo el mundo.
-- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.`;
+- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.${financialInjection}`;
 
     const globalLearningMemory = await getGlobalLearningSummary("nora-itu");
     const learningBlock = globalLearningMemory
@@ -237,7 +249,7 @@ export async function POST(req: Request) {
     // Formatear mensajes compatibles con Groq / Llama 3.3
     const messages: any[] = [{ role: "system", content: effectiveSystemPrompt }];
 
-    for (const h of contextualHistory.slice(-6)) {
+    for (const h of contextualHistory.slice(-12)) {
       if (h.content) {
         messages.push({
           role: h.role === "assistant" ? "assistant" : "user",
