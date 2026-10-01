@@ -50,6 +50,27 @@ export default function NoraRealtimeCallModal({
   // ── Indicador de si el stream HTTP sigue leyendo chunks del LLM ──
   const isStreamActiveRef = useRef<boolean>(false);
 
+  // ── Audio Hardware Unlocker: desbloquea Autoplay Policy en iOS/Android ──
+  useEffect(() => {
+    if (isOpen) {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (audioContext.state === "suspended") {
+          const unlock = () => {
+            audioContext.resume().then(() => {
+              window.removeEventListener("click", unlock);
+              window.removeEventListener("touchstart", unlock);
+            }).catch(() => {});
+          };
+          window.addEventListener("click", unlock);
+          window.addEventListener("touchstart", unlock);
+        }
+      } catch (e) {
+        console.warn("AudioContext init bypassed:", e);
+      }
+    }
+  }, [isOpen]);
+
   // Sincronizar refs
   useEffect(() => {
     pttModeRef.current = pttMode;
