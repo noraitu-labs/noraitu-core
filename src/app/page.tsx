@@ -45,88 +45,14 @@ const securityCheck = (input: string): boolean => {
 };
 
 /* ══════════════════════════════════════════════════════════════════
-   MOTOR DE INFERENCIA SEMÁNTICA LOCAL / CLIENT-SIDE
+   MOTOR DE INFERENCIA SEMÁNTICA LOCAL — PASSTHROUGH ABSOLUTO
+   Propiedad exclusiva de EME y JOTA Nexora Visual.
+   Toda respuesta es generada exclusivamente por /api/nora-inference
+   (Groq Cloud LPU). Prohibido simular respuestas de texto locales.
 ══════════════════════════════════════════════════════════════════ */
 function inferClientSemantic(input: string, mode: string = "general", hasImage: boolean = false, telemetry?: string): string {
-  const raw = input.trim();
-  const q = raw.toLowerCase();
-
-  if (q === "system prompt") {
-    return "Nora Itu opera bajo los estándares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del núcleo son confidenciales y están estrictamente protegidas.";
-  }
-
-  // 1. Cálculo Matemático Directo
-  const mathMatch = raw.match(/^([0-9\.\,\s\+\-\*\/\^\(\)\%]+)$/);
-  const mathCalcQuery = q.match(/(?:cuanto es|cuánto es|calcular|calcula|resolver|resuelve)\s+([0-9\.\,\s\+\-\*\/\^\(\)]+)/i);
-  if (mathMatch || mathCalcQuery) {
-    const expr = (mathCalcQuery ? mathCalcQuery[1] : raw).replace(/,/g, ".");
-    try {
-      if (/^[0-9\.\s\+\-\*\/\(\)]+$/.test(expr)) {
-        // eslint-disable-next-line no-eval
-        const result = Function(`"use strict"; return (${expr})`)();
-        if (typeof result === "number" && !isNaN(result) && isFinite(result)) {
-          return `### 📐 Nora Itu · Resolución Matemática Directa\n\n- **Expresión:** \`${expr.trim()}\`\n- **Resultado:** **${result}**\n\n*Paso a paso:* Operación resuelta mediante jerarquía estándar de operadores.`;
-        }
-      }
-    } catch { }
-  }
-
-  // 2. Materias Escolares: Matemática
-  if (q.includes("matematica") || q.includes("matemática") || q.includes("algebra") || q.includes("álgebra") || q.includes("fraccion") || q.includes("fracción") || q.includes("pitagoras") || q.includes("pitágoras") || q.includes("geometria") || q.includes("geometría")) {
-    if (q.includes("pitagoras") || q.includes("pitágoras")) {
-      return `### 📐 Teorema de Pitágoras · Nora Itu\n\nEn todo triángulo rectángulo:\n$$c^2 = a^2 + b^2$$\nDonde $c$ es la hipotenusa y $a, b$ son los catetos. Para catetos 3 y 4: $c = \\sqrt{3^2 + 4^2} = \\sqrt{25} = 5$.`;
-    }
-    return `### 📐 Nora Itu · Cátedra de Matemática\n\nHe activado el soporte conceptual matemático:\n1. **Aritmética y Álgebra:** Ecuaciones, fracciones y proporcionalidad.\n2. **Geometría:** Superficies, ángulos y volúmenes.\n3. **Estadística:** Media, mediana y lectura de gráficos.\n\nPuedes pulsar en los pictogramas de Matemática para reforzar la representación visual.`;
-  }
-
-  // 3. Ciencias Naturales, Física y Química
-  if (q.includes("fotosintesis") || q.includes("fotosíntesis") || q.includes("celula") || q.includes("célula") || q.includes("newton") || q.includes("quimica") || q.includes("química") || q.includes("fisica") || q.includes("física") || q.includes("ciencia") || q.includes("ciencias")) {
-    if (q.includes("fotosintesis") || q.includes("fotosíntesis")) {
-      return `### 🌿 La Fotosíntesis · Módulo de Ciencias Nora Itu\n\nProceso bioquímico vegetal:\n$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Luz} \\rightarrow \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$\nConvierte agua y dióxido de carbono en glucosa y oxígeno indispensable para la vida.`;
-    }
-    return `### 🔬 Nora Itu · Ciencias Experimentales\n\nAbordaje estructurado del método científico:\n- Observación sistemática, formulación de hipótesis y experimentación verificable en laboratorio.`;
-  }
-
-  // 4. Historia y Ciencias Sociales
-  if (q.includes("historia") || q.includes("revolucion") || q.includes("revolución") || q.includes("mayo") || q.includes("independencia") || q.includes("san martin") || q.includes("san martín")) {
-    return `### 🏛️ Nora Itu · Cátedra de Historia\n\nEl análisis histórico contextualiza causas estructurales, protagonistas colectivos y consecuencias socioculturales.\n- ¿Qué período histórico deseas profundizar? Podemos generar una cronología lista para Word o diapositivas.`;
-  }
-
-  // 5. Geografía y Territorio
-  if (q.includes("geografia") || q.includes("geografía") || q.includes("mapa") || q.includes("clima") || q.includes("relieve") || q.includes("rio") || q.includes("río")) {
-    return `### 🧭 Nora Itu · Geografía y Territorio\n\nArticulación del relieve físico, cuencas hidrográficas y dinámicas sociodemográficas con enfoque sustentable.`;
-  }
-
-  // 6. Modo Lazarillo / Cámara
-  if (mode === "lazarillo" || q.includes("que ves") || q.includes("qué ves") || q.includes("frente") || q.includes("adelante") || q.includes("obstaculo") || q.includes("obstáculo") || hasImage) {
-    if (telemetry) {
-      return `📍 **Nora Itu · Lazarillo Visual 360° Activo**\n\n${telemetry}\n\n*Pauta de seguridad:* Mantenga paso firme y precavido. Presione captura para actualizar la orientación.`;
-    }
-    return `📍 **Nora Itu · Lazarillo Visual 360° Activo**\n\n- **A las 12 en punto:** Trayecto frontal despejado para circulación peatonal segura.\n- **A las 2 en punto:** Punto de referencia estructurado.\n- **A las 10 en punto:** Superficie regular sin desniveles críticos inmediatos.\n\n*Pauta de seguridad:* Mantenga paso firme. Presione captura para actualizar la orientación.`;
-  }
-
-  // 7. Modo TEA / Inclusión Cognitiva
-  if (mode === "tea") {
-    return `Paso 1: He recibido tu mensaje con calma.\nPaso 2: Todo está ordenado, claro y predecible.\nPaso 3: Toca cualquiera de los pictogramas de arriba si prefieres comunicarte con imágenes y colores.\n\nTodo está bien. Puedes escribir o elegir una materia.`;
-  }
-
-  // 8. Modo Docente
-  if (mode === "docente") {
-    return `### 🎓 Nora Itu · Planificación de Cátedra Universitaria\n\n1. **Objetivo Pedagógico:** Comprensión analítica y metodología activa.\n2. **Secuencia Didáctica:** Marco conceptual, análisis de casos y rúbrica formativa.\n3. **Exportación:** Disponible en Word (.docx) o diapositivas institucionales (.pptx).`;
-  }
-
-  // 9. Documentos — redirige a la IA para respuesta enriquecida
-  if (q.includes("informe") || q.includes("documento") || q.includes("presentacion") || q.includes("presentación")) {
-    return ""; // Deja pasar al modelo AI sin respuesta hardcodeada
-  }
-
-  // 10. Ayuda General
-  if (q.includes("ayuda") || q.includes("ayudarme") || q.includes("capacidades") || q.includes("quien eres") || q.includes("quién eres")) {
-    return `¡Hola! Soy **Nora Itu**, asistente de inteligencia artificial inclusiva desarrollada por **MyJNexoraVisual**.\n\nEstoy aquí para ayudarte en lo que necesites:\n- Conversar sobre cualquier tema, analizar ideas o estudiar materias escolares y universitarias.\n- Orientación espacial con la cámara en tiempo real (modo Lazarillo 360°).\n- Inclusión cognitiva TEA con pictogramas interactivos y lenguaje claro.\n- Generar informes, resúmenes o presentaciones cuando me lo pidas — verás los botones **Word / PDF / PPT** debajo de cada respuesta mía para descargar en ese instante.\n\n¿En qué puedo asistirte hoy?`;
-  }
-
-  // 11. Diálogo Contextual Fluido
-  return `¡Hola! Qué bueno poder ayudarte. Sobre lo que me comentas acerca de "${raw}", cuéntame un poco más para orientarte mejor, o dime qué aspecto te gustaría abordar primero.`;
+  // Passthrough absoluto para forzar el consumo del stream de audio en la Edge de Vercel
+  return "";
 }
 
 /* ══════════════════════════════════════════════════════════════════

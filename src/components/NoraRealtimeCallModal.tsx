@@ -203,7 +203,14 @@ export default function NoraRealtimeCallModal({
   // ── 1. PROCESADOR DE COLA TTS STREAMING CON VOZ NEURAL HIPERREALISTA ──
   const processNextSpeechSentence = useCallback(async () => {
     if (!isCallAliveRef.current) return;
-    if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
+    if (isSpeakingRef.current || speechQueueRef.current.length === 0) {
+      // Parche: si la cola está vacía y el stream terminó, reactivar micrófono
+      if (speechQueueRef.current.length === 0 && !isStreamActiveRef.current) {
+        setStatus("listening");
+        activateMicrophoneSafely();
+      }
+      return;
+    }
 
     const rawSentence = speechQueueRef.current.shift()?.trim();
     const sentence = rawSentence ? cleanForSpeech(rawSentence) : "";
@@ -277,7 +284,7 @@ export default function NoraRealtimeCallModal({
         isSpeakingRef.current = false;
         if (!isCallAliveRef.current) return;
         if (speechQueueRef.current.length > 0) {
-          processNextSpeechSentence();
+          setTimeout(() => processNextSpeechSentence(), 50);
         } else if (!isStreamActiveRef.current) {
           setStatus("listening");
           activateMicrophoneSafely();
@@ -287,8 +294,12 @@ export default function NoraRealtimeCallModal({
       };
 
       window.speechSynthesis.speak(utterance);
+    } else {
+      // Sin WebSpeech disponible: liberar flag y continuar ciclo
+      isSpeakingRef.current = false;
+      setTimeout(() => processNextSpeechSentence(), 50);
     }
-  }, [activateMicrophoneSafely, playNeuralAudioStream]);
+  }, [activateMicrophoneSafely, cleanForSpeech, playNeuralAudioStream]);
 
   const enqueueSentenceForSpeech = useCallback(
     (chunk: string) => {
