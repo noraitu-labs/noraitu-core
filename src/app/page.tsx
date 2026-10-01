@@ -881,7 +881,7 @@ export default function NoraTitanPage() {
         ? `${objectTelemetry} ${pixelTelemetry}`
         : pixelTelemetry;
 
-      const visionPrompt = promptOverride || "Describe con precisión ejecutiva y orientación espacial lo que observas en esta imagen. Usa referencias de reloj para indicar posiciones. Sé breve y directo.";
+      const visionPrompt = promptOverride || "Analiza minuciosamente la imagen en tiempo real provista por la lente trasera. Describe de forma exacta, directa y en un máximo de 2 oraciones los objetos físicos, obstáculos (como sillas, mesas, personas o paredes) y la disposición del entorno real frente a ti. Si hay obstáculos inmediatos, indícalo con precisión para asistir a un usuario con discapacidad visual.";
       const systemPrompt = SYSTEM_PROMPTS[activeMode] || SYSTEM_PROMPTS.lazarillo;
       const clientDateTime = new Date().toLocaleString("es-AR", {
         dateStyle: "full",
@@ -904,7 +904,7 @@ export default function NoraTitanPage() {
       if (!cloudBody) {
         const localAns = inferClientSemantic(promptOverride || "que ves", activeMode, true, visualTelemetry);
         setCameraAnalysis(localAns);
-        if (activeMode === "lazarillo" || activeMode === "tea" || autoTEAMode) speakText(localAns);
+        if (localAns.trim()) speakText(localAns.trim());
         return;
       }
 
@@ -920,13 +920,14 @@ export default function NoraTitanPage() {
         setCameraAnalysis(localAns);
       }
 
-      if (acc && (activeMode === "lazarillo" || activeMode === "tea" || autoTEAMode)) {
-        speakText(acc);
+      // Parche de voz automática en tiempo real: reproduce inmediatamente en voz alta para personas con discapacidad visual
+      if (acc.trim()) {
+        speakText(acc.trim());
       }
     } catch {
       const localAns = inferClientSemantic(promptOverride || "que ves", activeMode, true);
       setCameraAnalysis(localAns);
-      if (activeMode === "lazarillo" || activeMode === "tea" || autoTEAMode) speakText(localAns);
+      if (localAns.trim()) speakText(localAns.trim());
     } finally {
       setCameraCapturing(false);
     }
@@ -937,9 +938,10 @@ export default function NoraTitanPage() {
       stopAutoVision();
     } else {
       setAutoVisionActive(true);
-      analyzeCameraSnapshot("Asistencia Lazarillo en tiempo real: describe obstáculos, personas o elementos clave a la distancia.");
+      const lazarilloPrompt = "Analiza minuciosamente la imagen en tiempo real provista por la lente trasera. Describe de forma exacta, directa y en un máximo de 2 oraciones los objetos físicos, obstáculos (como sillas, mesas, personas o paredes) y la disposición del entorno real frente a ti. Si hay obstáculos inmediatos, indícalo con precisión para asistir a un usuario con discapacidad visual.";
+      analyzeCameraSnapshot(lazarilloPrompt);
       autoVisionIntervalRef.current = setInterval(() => {
-        analyzeCameraSnapshot("Actualización Lazarillo en tiempo real: describe cambios inmediatos o advertencias de proximidad.");
+        analyzeCameraSnapshot(lazarilloPrompt);
       }, 5000);
     }
   }

@@ -285,12 +285,17 @@ export async function POST(req: Request) {
         ? imageBase64
         : `data:image/jpeg;base64,${imageBase64}`;
 
+      const visionDirective = "Analiza minuciosamente la imagen en tiempo real provista por la lente trasera. Describe de forma exacta, directa y en un máximo de 2 oraciones los objetos físicos, obstáculos (como sillas, mesas, personas o paredes) y la disposición del entorno real frente a ti. Si hay obstáculos inmediatos, indícalo con precisión para asistir a un usuario con discapacidad visual.";
+      const promptText = userText && !userText.includes("Captura visual") && !userText.includes("que ves")
+        ? `${visionDirective} Instrucción adicional: ${userText}`
+        : visionDirective;
+
       messages.push({
         role: "user",
         content: [
           {
             type: "text",
-            text: userText || "Describe con precisión ejecutiva y orientación espacial lo que observas en esta imagen.",
+            text: promptText,
           },
           {
             type: "image_url",

@@ -639,8 +639,9 @@ export default function NoraRealtimeCallModal({
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(3, 7, 18, 0.88)",
-        backdropFilter: "blur(18px)",
+        backgroundColor: "rgba(3, 7, 18, 0.85)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -652,17 +653,17 @@ export default function NoraRealtimeCallModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          backgroundColor: "#0b0f19",
+          backgroundColor: "#090d16",
           border: "1px solid rgba(255, 255, 255, 0.12)",
-          borderRadius: "28px",
+          borderRadius: "24px",
           width: "100%",
-          maxWidth: "460px",
-          padding: "24px",
+          maxWidth: "440px",
+          padding: "24px 20px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          color: "#f8fafc",
-          boxShadow: "0 30px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px rgba(99, 102, 241, 0.15)",
+          color: "#ffffff",
+          boxShadow: "0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(56, 189, 248, 0.12)",
           position: "relative",
           overflow: "hidden"
         }}
@@ -679,8 +680,10 @@ export default function NoraRealtimeCallModal({
                 boxShadow: status === "listening" ? "0 0 10px #22c55e" : "0 0 10px #a855f7"
               }}
             />
-            <span style={{ fontWeight: 800, fontSize: "16px", letterSpacing: "0.3px" }}>Llamada con Nora</span>
-            <span style={{ fontSize: "11px", backgroundColor: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)", padding: "2px 8px", borderRadius: "12px", fontWeight: 600 }}>
+            <span style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.02em", color: "#f8fafc" }}>
+              Nora Itu <span style={{ color: "#38bdf8" }}>PRO</span>
+            </span>
+            <span style={{ fontSize: "11px", backgroundColor: "rgba(56,189,248,0.15)", color: "#38bdf8", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
               {formatTimer(callDuration)}
             </span>
           </div>
@@ -698,7 +701,7 @@ export default function NoraRealtimeCallModal({
                 cursor: "pointer"
               }}
             >
-              <MessageSquare size={15} />
+              <MessageSquare size={16} />
             </button>
             <button
               onClick={handleEndCall}
@@ -707,8 +710,8 @@ export default function NoraRealtimeCallModal({
                 background: "rgba(239, 68, 68, 0.2)",
                 border: "1px solid rgba(239, 68, 68, 0.4)",
                 borderRadius: "50%",
-                width: "32px",
-                height: "32px",
+                width: "34px",
+                height: "34px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -716,7 +719,7 @@ export default function NoraRealtimeCallModal({
                 cursor: "pointer"
               }}
             >
-              <PhoneOff size={15} />
+              <PhoneOff size={16} />
             </button>
           </div>
         </div>
@@ -837,30 +840,31 @@ export default function NoraRealtimeCallModal({
           </div>
         )}
 
-        {/* ─── CONTROLES PRINCIPALES DE LLAMADA ─── */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginBottom: "16px", width: "100%" }}>
+        {/* ─── CONTROLES PRINCIPALES DE LLAMADA (Círculo centrado elegante) ─── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "20px", marginBottom: "16px", width: "100%" }}>
           {/* Silenciar micrófono */}
           <button
             onClick={toggleMute}
             title={isMuted ? "Activar micrófono" : "Silenciar micrófono"}
             style={{
-              width: "48px",
-              height: "48px",
+              width: "50px",
+              height: "50px",
               borderRadius: "50%",
-              border: isMuted ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.15)",
-              backgroundColor: isMuted ? "rgba(239,68,68,0.2)" : "rgba(30,41,59,0.8)",
+              border: isMuted ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.12)",
+              backgroundColor: isMuted ? "rgba(239,68,68,0.2)" : "rgba(30,41,59,0.7)",
               color: isMuted ? "#f87171" : "#f8fafc",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              transition: "all 0.15s ease"
+              transition: "all 0.15s ease",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
             }}
           >
             {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
 
-          {/* Botón PTT Opcional si el modo PTT está activo */}
+          {/* Botón PTT Opcional o Botón Centrado de Finalizar Llamada */}
           {pttMode ? (
             <button
               onMouseDown={handlePttDown}
@@ -890,15 +894,15 @@ export default function NoraRealtimeCallModal({
               </span>
             </button>
           ) : (
-            /* Botón de Finalizar Llamada en manos libres */
+            /* Botón de Finalizar Llamada centrado de forma elegante */
             <button
               onClick={handleEndCall}
               title="Cortar llamada"
               style={{
-                width: "68px",
-                height: "68px",
+                width: "70px",
+                height: "70px",
                 borderRadius: "50%",
-                border: "none",
+                border: "2px solid rgba(239, 68, 68, 0.4)",
                 backgroundColor: "#dc2626",
                 color: "#ffffff",
                 cursor: "pointer",
@@ -906,12 +910,12 @@ export default function NoraRealtimeCallModal({
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 8px 25px rgba(220, 38, 38, 0.45)",
+                boxShadow: "0 8px 25px rgba(220, 38, 38, 0.5), 0 0 15px rgba(220, 38, 38, 0.3)",
                 transition: "transform 0.15s ease",
               }}
             >
               <PhoneOff size={24} />
-              <span style={{ fontSize: "9.5px", fontWeight: 700, marginTop: "2px" }}>CORTAR</span>
+              <span style={{ fontSize: "9px", fontWeight: 700, marginTop: "2px", letterSpacing: "0.05em" }}>CORTAR</span>
             </button>
           )}
 
@@ -920,20 +924,21 @@ export default function NoraRealtimeCallModal({
             onClick={() => setPttMode(p => !p)}
             title={pttMode ? "Cambiar a Manos Libres" : "Cambiar a Push To Talk"}
             style={{
-              width: "48px",
-              height: "48px",
+              width: "50px",
+              height: "50px",
               borderRadius: "50%",
-              border: pttMode ? "2px solid #38bdf8" : "1px solid rgba(255,255,255,0.15)",
-              backgroundColor: pttMode ? "rgba(56,189,248,0.2)" : "rgba(30,41,59,0.8)",
+              border: pttMode ? "2px solid #38bdf8" : "1px solid rgba(255,255,255,0.12)",
+              backgroundColor: pttMode ? "rgba(56,189,248,0.2)" : "rgba(30,41,59,0.7)",
               color: pttMode ? "#38bdf8" : "#94a3b8",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              transition: "all 0.15s ease"
+              transition: "all 0.15s ease",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
             }}
           >
-            <Radio size={19} />
+            <Radio size={20} />
           </button>
         </div>
 
@@ -946,12 +951,12 @@ export default function NoraRealtimeCallModal({
             placeholder="O escribe algo aquí durante la llamada..."
             style={{
               flex: 1,
-              backgroundColor: "rgba(15, 23, 42, 0.6)",
+              backgroundColor: "rgba(15, 23, 42, 0.8)",
               border: "1px solid rgba(255, 255, 255, 0.1)",
-              borderRadius: "12px",
-              padding: "9px 12px",
-              color: "#f8fafc",
-              fontSize: "12.5px",
+              borderRadius: "9999px",
+              padding: "10px 16px",
+              color: "#ffffff",
+              fontSize: "13px",
               outline: "none"
             }}
           />
@@ -959,15 +964,15 @@ export default function NoraRealtimeCallModal({
             type="submit"
             disabled={!textInput.trim() || status === "thinking"}
             style={{
-              backgroundColor: textInput.trim() ? "#6366f1" : "rgba(255,255,255,0.06)",
+              backgroundColor: textInput.trim() ? "#0284c7" : "rgba(255,255,255,0.06)",
               border: "none",
-              borderRadius: "12px",
-              padding: "0 14px",
+              borderRadius: "9999px",
+              padding: "0 16px",
               color: "#ffffff",
               cursor: textInput.trim() ? "pointer" : "default"
             }}
           >
-            <Send size={14} />
+            <Send size={15} />
           </button>
         </form>
       </div>
