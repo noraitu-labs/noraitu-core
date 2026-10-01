@@ -7,7 +7,7 @@ import {
   FileText, Printer, ChevronLeft, ChevronRight, Menu,
   Plus, Trash2, Copy, Check, Sparkles, UploadCloud, Presentation, Download,
   FileAudio, MapPin, AudioWaveform,
-  // â•â•â• MOTOR DE PICTOGRAMAS LOCAL (100% offline, Lucide) â•â•â•
+  // ═══ MOTOR DE PICTOGRAMAS LOCAL (100% offline, Lucide) ═══
   Home, School, Apple, Droplets, Bath, Moon, Gamepad2, HelpCircle,
   ThumbsUp, ThumbsDown, Heart, CheckCircle2, XCircle, BookOpen,
   PenLine, Hash, Music2, Sun, CloudRain, Thermometer, Snowflake,
@@ -18,7 +18,7 @@ import NoraRealtimeCallModal from "../components/NoraRealtimeCallModal";
 import { exportToWord, exportToPdf, exportToPptx } from "../lib/exportUtils";
 import { TeaPictograms } from "../components/TeaPictograms";
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ TIPOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────────────── TIPOS ─────────────────────────── */
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -36,28 +36,28 @@ interface ChatSession {
 
 type Mode = "general" | "tea" | "lazarillo" | "docente";
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* ══════════════════════════════════════════════════════════════════
    BLINDAJE DE SEGURIDAD & FIRMA: MyJNexoraVisual
-   (Ãšnicamente si escriben exactamente la frase "system prompt")
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   (Únicamente si escriben exactamente la frase "system prompt")
+══════════════════════════════════════════════════════════════════ */
 const securityCheck = (input: string): boolean => {
   return input.toLowerCase().trim() === "system prompt";
 };
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   MOTOR DE INFERENCIA SEMÃNTICA LOCAL / CLIENT-SIDE
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ══════════════════════════════════════════════════════════════════
+   MOTOR DE INFERENCIA SEMÁNTICA LOCAL / CLIENT-SIDE
+══════════════════════════════════════════════════════════════════ */
 function inferClientSemantic(input: string, mode: string = "general", hasImage: boolean = false, telemetry?: string): string {
   const raw = input.trim();
   const q = raw.toLowerCase();
 
   if (q === "system prompt") {
-    return "Nora Itu opera bajo los estÃ¡ndares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del nÃºcleo son confidenciales y estÃ¡n estrictamente protegidas.";
+    return "Nora Itu opera bajo los estándares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del núcleo son confidenciales y están estrictamente protegidas.";
   }
 
-  // 1. CÃ¡lculo MatemÃ¡tico Directo
+  // 1. Cálculo Matemático Directo
   const mathMatch = raw.match(/^([0-9\.\,\s\+\-\*\/\^\(\)\%]+)$/);
-  const mathCalcQuery = q.match(/(?:cuanto es|cuÃ¡nto es|calcular|calcula|resolver|resuelve)\s+([0-9\.\,\s\+\-\*\/\^\(\)]+)/i);
+  const mathCalcQuery = q.match(/(?:cuanto es|cuánto es|calcular|calcula|resolver|resuelve)\s+([0-9\.\,\s\+\-\*\/\^\(\)]+)/i);
   if (mathMatch || mathCalcQuery) {
     const expr = (mathCalcQuery ? mathCalcQuery[1] : raw).replace(/,/g, ".");
     try {
@@ -65,73 +65,73 @@ function inferClientSemantic(input: string, mode: string = "general", hasImage: 
         // eslint-disable-next-line no-eval
         const result = Function(`"use strict"; return (${expr})`)();
         if (typeof result === "number" && !isNaN(result) && isFinite(result)) {
-          return `### ðŸ“ Nora Itu Â· ResoluciÃ³n MatemÃ¡tica Directa\n\n- **ExpresiÃ³n:** \`${expr.trim()}\`\n- **Resultado:** **${result}**\n\n*Paso a paso:* OperaciÃ³n resuelta mediante jerarquÃ­a estÃ¡ndar de operadores.`;
+          return `### 📐 Nora Itu · Resolución Matemática Directa\n\n- **Expresión:** \`${expr.trim()}\`\n- **Resultado:** **${result}**\n\n*Paso a paso:* Operación resuelta mediante jerarquía estándar de operadores.`;
         }
       }
-    } catch {}
+    } catch { }
   }
 
-  // 2. Materias Escolares: MatemÃ¡tica
-  if (q.includes("matematica") || q.includes("matemÃ¡tica") || q.includes("algebra") || q.includes("Ã¡lgebra") || q.includes("fraccion") || q.includes("fracciÃ³n") || q.includes("pitagoras") || q.includes("pitÃ¡goras") || q.includes("geometria") || q.includes("geometrÃ­a")) {
-    if (q.includes("pitagoras") || q.includes("pitÃ¡goras")) {
-      return `### ðŸ“ Teorema de PitÃ¡goras Â· Nora Itu\n\nEn todo triÃ¡ngulo rectÃ¡ngulo:\n$$c^2 = a^2 + b^2$$\nDonde $c$ es la hipotenusa y $a, b$ son los catetos. Para catetos 3 y 4: $c = \\sqrt{3^2 + 4^2} = \\sqrt{25} = 5$.`;
+  // 2. Materias Escolares: Matemática
+  if (q.includes("matematica") || q.includes("matemática") || q.includes("algebra") || q.includes("álgebra") || q.includes("fraccion") || q.includes("fracción") || q.includes("pitagoras") || q.includes("pitágoras") || q.includes("geometria") || q.includes("geometría")) {
+    if (q.includes("pitagoras") || q.includes("pitágoras")) {
+      return `### 📐 Teorema de Pitágoras · Nora Itu\n\nEn todo triángulo rectángulo:\n$$c^2 = a^2 + b^2$$\nDonde $c$ es la hipotenusa y $a, b$ son los catetos. Para catetos 3 y 4: $c = \\sqrt{3^2 + 4^2} = \\sqrt{25} = 5$.`;
     }
-    return `### ðŸ“ Nora Itu Â· CÃ¡tedra de MatemÃ¡tica\n\nHe activado el soporte conceptual matemÃ¡tico:\n1. **AritmÃ©tica y Ãlgebra:** Ecuaciones, fracciones y proporcionalidad.\n2. **GeometrÃ­a:** Superficies, Ã¡ngulos y volÃºmenes.\n3. **EstadÃ­stica:** Media, mediana y lectura de grÃ¡ficos.\n\nPuedes pulsar en los pictogramas de MatemÃ¡tica para reforzar la representaciÃ³n visual.`;
+    return `### 📐 Nora Itu · Cátedra de Matemática\n\nHe activado el soporte conceptual matemático:\n1. **Aritmética y Álgebra:** Ecuaciones, fracciones y proporcionalidad.\n2. **Geometría:** Superficies, ángulos y volúmenes.\n3. **Estadística:** Media, mediana y lectura de gráficos.\n\nPuedes pulsar en los pictogramas de Matemática para reforzar la representación visual.`;
   }
 
-  // 3. Ciencias Naturales, FÃ­sica y QuÃ­mica
-  if (q.includes("fotosintesis") || q.includes("fotosÃ­ntesis") || q.includes("celula") || q.includes("cÃ©lula") || q.includes("newton") || q.includes("quimica") || q.includes("quÃ­mica") || q.includes("fisica") || q.includes("fÃ­sica") || q.includes("ciencia") || q.includes("ciencias")) {
-    if (q.includes("fotosintesis") || q.includes("fotosÃ­ntesis")) {
-      return `### ðŸŒ¿ La FotosÃ­ntesis Â· MÃ³dulo de Ciencias Nora Itu\n\nProceso bioquÃ­mico vegetal:\n$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Luz} \\rightarrow \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$\nConvierte agua y diÃ³xido de carbono en glucosa y oxÃ­geno indispensable para la vida.`;
+  // 3. Ciencias Naturales, Física y Química
+  if (q.includes("fotosintesis") || q.includes("fotosíntesis") || q.includes("celula") || q.includes("célula") || q.includes("newton") || q.includes("quimica") || q.includes("química") || q.includes("fisica") || q.includes("física") || q.includes("ciencia") || q.includes("ciencias")) {
+    if (q.includes("fotosintesis") || q.includes("fotosíntesis")) {
+      return `### 🌿 La Fotosíntesis · Módulo de Ciencias Nora Itu\n\nProceso bioquímico vegetal:\n$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Luz} \\rightarrow \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$\nConvierte agua y dióxido de carbono en glucosa y oxígeno indispensable para la vida.`;
     }
-    return `### ðŸ”¬ Nora Itu Â· Ciencias Experimentales\n\nAbordaje estructurado del mÃ©todo cientÃ­fico:\n- ObservaciÃ³n sistemÃ¡tica, formulaciÃ³n de hipÃ³tesis y experimentaciÃ³n verificable en laboratorio.`;
+    return `### 🔬 Nora Itu · Ciencias Experimentales\n\nAbordaje estructurado del método científico:\n- Observación sistemática, formulación de hipótesis y experimentación verificable en laboratorio.`;
   }
 
   // 4. Historia y Ciencias Sociales
-  if (q.includes("historia") || q.includes("revolucion") || q.includes("revoluciÃ³n") || q.includes("mayo") || q.includes("independencia") || q.includes("san martin") || q.includes("san martÃ­n")) {
-    return `### ðŸ›ï¸ Nora Itu Â· CÃ¡tedra de Historia\n\nEl anÃ¡lisis histÃ³rico contextualiza causas estructurales, protagonistas colectivos y consecuencias socioculturales.\n- Â¿QuÃ© perÃ­odo histÃ³rico deseas profundizar? Podemos generar una cronologÃ­a lista para Word o diapositivas.`;
+  if (q.includes("historia") || q.includes("revolucion") || q.includes("revolución") || q.includes("mayo") || q.includes("independencia") || q.includes("san martin") || q.includes("san martín")) {
+    return `### 🏛️ Nora Itu · Cátedra de Historia\n\nEl análisis histórico contextualiza causas estructurales, protagonistas colectivos y consecuencias socioculturales.\n- ¿Qué período histórico deseas profundizar? Podemos generar una cronología lista para Word o diapositivas.`;
   }
 
-  // 5. GeografÃ­a y Territorio
-  if (q.includes("geografia") || q.includes("geografÃ­a") || q.includes("mapa") || q.includes("clima") || q.includes("relieve") || q.includes("rio") || q.includes("rÃ­o")) {
-    return `### ðŸ§­ Nora Itu Â· GeografÃ­a y Territorio\n\nArticulaciÃ³n del relieve fÃ­sico, cuencas hidrogrÃ¡ficas y dinÃ¡micas sociodemogrÃ¡ficas con enfoque sustentable.`;
+  // 5. Geografía y Territorio
+  if (q.includes("geografia") || q.includes("geografía") || q.includes("mapa") || q.includes("clima") || q.includes("relieve") || q.includes("rio") || q.includes("río")) {
+    return `### 🧭 Nora Itu · Geografía y Territorio\n\nArticulación del relieve físico, cuencas hidrográficas y dinámicas sociodemográficas con enfoque sustentable.`;
   }
 
-  // 6. Modo Lazarillo / CÃ¡mara
-  if (mode === "lazarillo" || q.includes("que ves") || q.includes("quÃ© ves") || q.includes("frente") || q.includes("adelante") || q.includes("obstaculo") || q.includes("obstÃ¡culo") || hasImage) {
+  // 6. Modo Lazarillo / Cámara
+  if (mode === "lazarillo" || q.includes("que ves") || q.includes("qué ves") || q.includes("frente") || q.includes("adelante") || q.includes("obstaculo") || q.includes("obstáculo") || hasImage) {
     if (telemetry) {
-      return `ðŸ“ **Nora Itu Â· Lazarillo Visual 360Â° Activo**\n\n${telemetry}\n\n*Pauta de seguridad:* Mantenga paso firme y precavido. Presione captura para actualizar la orientaciÃ³n.`;
+      return `📍 **Nora Itu · Lazarillo Visual 360° Activo**\n\n${telemetry}\n\n*Pauta de seguridad:* Mantenga paso firme y precavido. Presione captura para actualizar la orientación.`;
     }
-    return `ðŸ“ **Nora Itu Â· Lazarillo Visual 360Â° Activo**\n\n- **A las 12 en punto:** Trayecto frontal despejado para circulaciÃ³n peatonal segura.\n- **A las 2 en punto:** Punto de referencia estructurado.\n- **A las 10 en punto:** Superficie regular sin desniveles crÃ­ticos inmediatos.\n\n*Pauta de seguridad:* Mantenga paso firme. Presione captura para actualizar la orientaciÃ³n.`;
+    return `📍 **Nora Itu · Lazarillo Visual 360° Activo**\n\n- **A las 12 en punto:** Trayecto frontal despejado para circulación peatonal segura.\n- **A las 2 en punto:** Punto de referencia estructurado.\n- **A las 10 en punto:** Superficie regular sin desniveles críticos inmediatos.\n\n*Pauta de seguridad:* Mantenga paso firme. Presione captura para actualizar la orientación.`;
   }
 
-  // 7. Modo TEA / InclusiÃ³n Cognitiva
+  // 7. Modo TEA / Inclusión Cognitiva
   if (mode === "tea") {
-    return `Paso 1: He recibido tu mensaje con calma.\nPaso 2: Todo estÃ¡ ordenado, claro y predecible.\nPaso 3: Toca cualquiera de los pictogramas de arriba si prefieres comunicarte con imÃ¡genes y colores.\n\nTodo estÃ¡ bien. Puedes escribir o elegir una materia.`;
+    return `Paso 1: He recibido tu mensaje con calma.\nPaso 2: Todo está ordenado, claro y predecible.\nPaso 3: Toca cualquiera de los pictogramas de arriba si prefieres comunicarte con imágenes y colores.\n\nTodo está bien. Puedes escribir o elegir una materia.`;
   }
 
   // 8. Modo Docente
   if (mode === "docente") {
-    return `### ðŸŽ“ Nora Itu Â· PlanificaciÃ³n de CÃ¡tedra Universitaria\n\n1. **Objetivo PedagÃ³gico:** ComprensiÃ³n analÃ­tica y metodologÃ­a activa.\n2. **Secuencia DidÃ¡ctica:** Marco conceptual, anÃ¡lisis de casos y rÃºbrica formativa.\n3. **ExportaciÃ³n:** Disponible en Word (.docx) o diapositivas institucionales (.pptx).`;
+    return `### 🎓 Nora Itu · Planificación de Cátedra Universitaria\n\n1. **Objetivo Pedagógico:** Comprensión analítica y metodología activa.\n2. **Secuencia Didáctica:** Marco conceptual, análisis de casos y rúbrica formativa.\n3. **Exportación:** Disponible en Word (.docx) o diapositivas institucionales (.pptx).`;
   }
 
-  // 9. Documentos â€” redirige a la IA para respuesta enriquecida
-  if (q.includes("informe") || q.includes("documento") || q.includes("presentacion") || q.includes("presentaciÃ³n")) {
+  // 9. Documentos — redirige a la IA para respuesta enriquecida
+  if (q.includes("informe") || q.includes("documento") || q.includes("presentacion") || q.includes("presentación")) {
     return ""; // Deja pasar al modelo AI sin respuesta hardcodeada
   }
 
   // 10. Ayuda General
-  if (q.includes("ayuda") || q.includes("ayudarme") || q.includes("capacidades") || q.includes("quien eres") || q.includes("quiÃ©n eres")) {
-    return `Â¡Hola! Soy **Nora Itu**, asistente de inteligencia artificial inclusiva desarrollada por **MyJNexoraVisual**.\n\nEstoy aquÃ­ para ayudarte en lo que necesites:\n- Conversar sobre cualquier tema, analizar ideas o estudiar materias escolares y universitarias.\n- OrientaciÃ³n espacial con la cÃ¡mara en tiempo real (modo Lazarillo 360Â°).\n- InclusiÃ³n cognitiva TEA con pictogramas interactivos y lenguaje claro.\n- Generar informes, resÃºmenes o presentaciones cuando me lo pidas â€” verÃ¡s los botones **Word / PDF / PPT** debajo de cada respuesta mÃ­a para descargar en ese instante.\n\nÂ¿En quÃ© puedo asistirte hoy?`;
+  if (q.includes("ayuda") || q.includes("ayudarme") || q.includes("capacidades") || q.includes("quien eres") || q.includes("quién eres")) {
+    return `¡Hola! Soy **Nora Itu**, asistente de inteligencia artificial inclusiva desarrollada por **MyJNexoraVisual**.\n\nEstoy aquí para ayudarte en lo que necesites:\n- Conversar sobre cualquier tema, analizar ideas o estudiar materias escolares y universitarias.\n- Orientación espacial con la cámara en tiempo real (modo Lazarillo 360°).\n- Inclusión cognitiva TEA con pictogramas interactivos y lenguaje claro.\n- Generar informes, resúmenes o presentaciones cuando me lo pidas — verás los botones **Word / PDF / PPT** debajo de cada respuesta mía para descargar en ese instante.\n\n¿En qué puedo asistirte hoy?`;
   }
 
-  // 11. DiÃ¡logo Contextual Fluido
-  return `Â¡Hola! QuÃ© bueno poder ayudarte. Sobre lo que me comentas acerca de "${raw}", cuÃ©ntame un poco mÃ¡s para orientarte mejor, o dime quÃ© aspecto te gustarÃ­a abordar primero.`;
+  // 11. Diálogo Contextual Fluido
+  return `¡Hola! Qué bueno poder ayudarte. Sobre lo que me comentas acerca de "${raw}", cuéntame un poco más para orientarte mejor, o dime qué aspecto te gustaría abordar primero.`;
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   MOTOR DE PICTOGRAMAS LOCAL â€” 100% offline, sin APIs externas
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ══════════════════════════════════════════════════════════════════
+   MOTOR DE PICTOGRAMAS LOCAL — 100% offline, sin APIs externas
+══════════════════════════════════════════════════════════════════ */
 type LucideIcon = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
 interface Pictogram {
@@ -143,49 +143,49 @@ interface Pictogram {
 }
 
 const TEA_PICTOGRAMS: Record<string, Pictogram> = {
-  casa:       { Icon: Home,         label: "Casa",       color: "#f59e0b", group: "vida",     keywords: ["hogar","casa","domicilio"] },
-  escuela:    { Icon: School,       label: "Escuela",    color: "#3b82f6", group: "vida",     keywords: ["colegio","escuela","clase","aula"] },
-  comida:     { Icon: Utensils,     label: "Comida",     color: "#f97316", group: "vida",     keywords: ["comer","almuerzo","merienda","comida"] },
-  agua:       { Icon: Droplets,     label: "Agua",       color: "#38bdf8", group: "vida",     keywords: ["agua","beber","sed"] },
-  baÃ±o:       { Icon: Bath,         label: "BaÃ±o",       color: "#818cf8", group: "vida",     keywords: ["baÃ±o","aseo","higiene"] },
-  dormir:     { Icon: Moon,         label: "Dormir",     color: "#a855f7", group: "vida",     keywords: ["dormir","descansar","cansado"] },
-  transporte: { Icon: Bus,          label: "Transporte", color: "#fbbf24", group: "vida",     keywords: ["bus","colectivo","transporte","viajar"] },
-  jugar:      { Icon: Gamepad2,     label: "Jugar",      color: "#ec4899", group: "vida",     keywords: ["juego","recreo","diversiÃ³n"] },
-  si:         { Icon: ThumbsUp,     label: "SÃ­",         color: "#22c55e", group: "social",   keywords: ["si","afirmativo","correcto","de acuerdo"] },
-  no:         { Icon: ThumbsDown,   label: "No",         color: "#ef4444", group: "social",   keywords: ["no","negativo","incorrecto","rechazar"] },
-  ayuda:      { Icon: HelpCircle,   label: "Ayuda",      color: "#f59e0b", group: "social",   keywords: ["auxilio","ayuda","socorro","necesito"] },
-  gracias:    { Icon: Heart,        label: "Gracias",    color: "#ec4899", group: "social",   keywords: ["gracias","agradecimiento"] },
-  bien:       { Icon: CheckCircle2, label: "Bien",       color: "#10b981", group: "social",   keywords: ["bien","contento","feliz","genial"] },
-  mal:        { Icon: XCircle,      label: "Mal",        color: "#f43f5e", group: "social",   keywords: ["mal","triste","enojado","dolor"] },
-  libro:      { Icon: BookOpen,     label: "Leer",       color: "#6366f1", group: "materia",  keywords: ["libro","lectura","leer","cuento"] },
-  escribir:   { Icon: PenLine,      label: "Escribir",   color: "#8b5cf6", group: "materia",  keywords: ["escribir","lapicera","cuaderno","tarea"] },
-  matematica: { Icon: Calculator,   label: "MatemÃ¡tica", color: "#06b6d4", group: "materia",  keywords: ["matemÃ¡tica","nÃºmeros","cuenta","calcular"] },
-  numeros:    { Icon: Hash,         label: "NÃºmeros",    color: "#0ea5e9", group: "materia",  keywords: ["nÃºmero","cantidad","contar"] },
-  musica:     { Icon: Music2,       label: "MÃºsica",     color: "#d946ef", group: "materia",  keywords: ["mÃºsica","canciÃ³n","cantar","instrumento"] },
-  ciencias:   { Icon: FlaskConical, label: "Ciencias",   color: "#14b8a6", group: "materia",  keywords: ["ciencia","experimento","laboratorio"] },
-  fisica:     { Icon: Atom,         label: "FÃ­sica",     color: "#6366f1", group: "materia",  keywords: ["fÃ­sica","Ã¡tomo","energÃ­a"] },
-  estadistica:{ Icon: BarChart3,    label: "GrÃ¡ficos",   color: "#f59e0b", group: "materia",  keywords: ["grÃ¡fico","estadÃ­stica","datos"] },
-  historia:   { Icon: Landmark,     label: "Historia",   color: "#d97706", group: "materia",  keywords: ["historia","pasado","cultura"] },
-  arte:       { Icon: Palette,      label: "Arte",       color: "#f43f5e", group: "materia",  keywords: ["arte","dibujo","pintura","colores"] },
-  educacion_fisica: { Icon: Dumbbell, label: "Ed. FÃ­sica", color: "#10b981", group: "materia", keywords: ["deporte","gimnasia","carrera"] },
-  sol:        { Icon: Sun,          label: "Sol",        color: "#eab308", group: "entorno",  keywords: ["sol","dÃ­a","calor","verano"] },
-  lluvia:     { Icon: CloudRain,    label: "Lluvia",     color: "#38bdf8", group: "entorno",  keywords: ["lluvia","agua","paraguas","mojado"] },
-  calor:      { Icon: Thermometer,  label: "Calor",      color: "#ef4444", group: "entorno",  keywords: ["calor","temperatura","fiebre"] },
-  frio:       { Icon: Snowflake,    label: "FrÃ­o",       color: "#93c5fd", group: "entorno",  keywords: ["frÃ­o","hielo","invierno"] },
-  perro:      { Icon: Dog,          label: "Perro",      color: "#b45309", group: "entorno",  keywords: ["perro","mascota","animal"] },
-  gato:       { Icon: Cat,          label: "Gato",       color: "#78716c", group: "entorno",  keywords: ["gato","mascota","felino"] },
-  hora:       { Icon: Clock,        label: "Hora",       color: "#64748b", group: "entorno",  keywords: ["hora","tiempo","reloj","cuÃ¡ndo"] },
-  premio:     { Icon: Star,         label: "Premio",     color: "#facc15", group: "social",   keywords: ["premio","estrella","felicitaciones","logro"] },
+  casa: { Icon: Home, label: "Casa", color: "#f59e0b", group: "vida", keywords: ["hogar", "casa", "domicilio"] },
+  escuela: { Icon: School, label: "Escuela", color: "#3b82f6", group: "vida", keywords: ["colegio", "escuela", "clase", "aula"] },
+  comida: { Icon: Utensils, label: "Comida", color: "#f97316", group: "vida", keywords: ["comer", "almuerzo", "merienda", "comida"] },
+  agua: { Icon: Droplets, label: "Agua", color: "#38bdf8", group: "vida", keywords: ["agua", "beber", "sed"] },
+  baño: { Icon: Bath, label: "Baño", color: "#818cf8", group: "vida", keywords: ["baño", "aseo", "higiene"] },
+  dormir: { Icon: Moon, label: "Dormir", color: "#a855f7", group: "vida", keywords: ["dormir", "descansar", "cansado"] },
+  transporte: { Icon: Bus, label: "Transporte", color: "#fbbf24", group: "vida", keywords: ["bus", "colectivo", "transporte", "viajar"] },
+  jugar: { Icon: Gamepad2, label: "Jugar", color: "#ec4899", group: "vida", keywords: ["juego", "recreo", "diversión"] },
+  si: { Icon: ThumbsUp, label: "Sí", color: "#22c55e", group: "social", keywords: ["si", "afirmativo", "correcto", "de acuerdo"] },
+  no: { Icon: ThumbsDown, label: "No", color: "#ef4444", group: "social", keywords: ["no", "negativo", "incorrecto", "rechazar"] },
+  ayuda: { Icon: HelpCircle, label: "Ayuda", color: "#f59e0b", group: "social", keywords: ["auxilio", "ayuda", "socorro", "necesito"] },
+  gracias: { Icon: Heart, label: "Gracias", color: "#ec4899", group: "social", keywords: ["gracias", "agradecimiento"] },
+  bien: { Icon: CheckCircle2, label: "Bien", color: "#10b981", group: "social", keywords: ["bien", "contento", "feliz", "genial"] },
+  mal: { Icon: XCircle, label: "Mal", color: "#f43f5e", group: "social", keywords: ["mal", "triste", "enojado", "dolor"] },
+  libro: { Icon: BookOpen, label: "Leer", color: "#6366f1", group: "materia", keywords: ["libro", "lectura", "leer", "cuento"] },
+  escribir: { Icon: PenLine, label: "Escribir", color: "#8b5cf6", group: "materia", keywords: ["escribir", "lapicera", "cuaderno", "tarea"] },
+  matematica: { Icon: Calculator, label: "Matemática", color: "#06b6d4", group: "materia", keywords: ["matemática", "números", "cuenta", "calcular"] },
+  numeros: { Icon: Hash, label: "Números", color: "#0ea5e9", group: "materia", keywords: ["número", "cantidad", "contar"] },
+  musica: { Icon: Music2, label: "Música", color: "#d946ef", group: "materia", keywords: ["música", "canción", "cantar", "instrumento"] },
+  ciencias: { Icon: FlaskConical, label: "Ciencias", color: "#14b8a6", group: "materia", keywords: ["ciencia", "experimento", "laboratorio"] },
+  fisica: { Icon: Atom, label: "Física", color: "#6366f1", group: "materia", keywords: ["física", "átomo", "energía"] },
+  estadistica: { Icon: BarChart3, label: "Gráficos", color: "#f59e0b", group: "materia", keywords: ["gráfico", "estadística", "datos"] },
+  historia: { Icon: Landmark, label: "Historia", color: "#d97706", group: "materia", keywords: ["historia", "pasado", "cultura"] },
+  arte: { Icon: Palette, label: "Arte", color: "#f43f5e", group: "materia", keywords: ["arte", "dibujo", "pintura", "colores"] },
+  educacion_fisica: { Icon: Dumbbell, label: "Ed. Física", color: "#10b981", group: "materia", keywords: ["deporte", "gimnasia", "carrera"] },
+  sol: { Icon: Sun, label: "Sol", color: "#eab308", group: "entorno", keywords: ["sol", "día", "calor", "verano"] },
+  lluvia: { Icon: CloudRain, label: "Lluvia", color: "#38bdf8", group: "entorno", keywords: ["lluvia", "agua", "paraguas", "mojado"] },
+  calor: { Icon: Thermometer, label: "Calor", color: "#ef4444", group: "entorno", keywords: ["calor", "temperatura", "fiebre"] },
+  frio: { Icon: Snowflake, label: "Frío", color: "#93c5fd", group: "entorno", keywords: ["frío", "hielo", "invierno"] },
+  perro: { Icon: Dog, label: "Perro", color: "#b45309", group: "entorno", keywords: ["perro", "mascota", "animal"] },
+  gato: { Icon: Cat, label: "Gato", color: "#78716c", group: "entorno", keywords: ["gato", "mascota", "felino"] },
+  hora: { Icon: Clock, label: "Hora", color: "#64748b", group: "entorno", keywords: ["hora", "tiempo", "reloj", "cuándo"] },
+  premio: { Icon: Star, label: "Premio", color: "#facc15", group: "social", keywords: ["premio", "estrella", "felicitaciones", "logro"] },
 };
 
 const PICTOGRAM_GROUPS: Record<string, string> = {
-  vida:    "ðŸ¡ Vida Cotidiana",
-  social:  "ðŸ¤ ComunicaciÃ³n",
-  materia: "ðŸ“š Materias Escolares",
-  entorno: "ðŸŒ¿ Entorno",
+  vida: "🏡 Vida Cotidiana",
+  social: "🤝 Comunicación",
+  materia: "📚 Materias Escolares",
+  entorno: "🌿 Entorno",
 };
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ LIMPIEZA TTS RADICAL (Sin SÃ­mbolos) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────── LIMPIEZA TTS RADICAL (Sin Símbolos) ─────────── */
 function cleanRadicalForTTS(textoOriginal: string): string {
   return textoOriginal
     .replace(/[*#_~`>\[\]\(\)\{\}\\]+/g, ' ')
@@ -193,23 +193,23 @@ function cleanRadicalForTTS(textoOriginal: string): string {
     .trim();
 }
 
-// DetecciÃ³n estricta de idioma para TTS (evita falsos positivos con palabras comunes como 'para', 'con', 'la')
+// Detección estricta de idioma para TTS (evita falsos positivos con palabras comunes como 'para', 'con', 'la')
 function detectTextLanguage(text: string): string {
   const t = text.toLowerCase();
-  if (/\b(habla en inglÃ©s|speak in english|how are you|what is|thank you very much|good morning|can you help me)\b/i.test(t)) return "en-US";
-  if (/\b(fala em portuguÃªs|como vocÃª estÃ¡|tudo bem|muito obrigado|bom dia|fazer uma pergunta)\b/i.test(t)) return "pt-BR";
-  if (/\b(parle en franÃ§ais|comment allez-vous|merci beaucoup|bonjour|s'il vous plaÃ®t)\b/i.test(t)) return "fr-FR";
+  if (/\b(habla en inglés|speak in english|how are you|what is|thank you very much|good morning|can you help me)\b/i.test(t)) return "en-US";
+  if (/\b(fala em português|como você está|tudo bem|muito obrigado|bom dia|fazer uma pergunta)\b/i.test(t)) return "pt-BR";
+  if (/\b(parle en français|comment allez-vous|merci beaucoup|bonjour|s'il vous plaît)\b/i.test(t)) return "fr-FR";
   if (/\b(parla in italiano|come stai|grazie mille|buongiorno|per favore)\b/i.test(t)) return "it-IT";
   return "es-419";
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* ══════════════════════════════════════════════════════════════════
    MOTOR DE INFERENCIA CLOUD-NATIVE (Costo Cero / Zero RAM)
    Groq Cloud (LPU Ultra-Fast) / SambaNova Cloud (Llama 3.2 Vision)
-   - 100% AutÃ³nomo y Externo: Cero uso de RAM local
+   - 100% Autónomo y Externo: Cero uso de RAM local
    - Streaming HTTP continuo sin timeouts en Vercel
    - Persistencia dual: MongoDB Atlas Free + Neon PostgreSQL
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+══════════════════════════════════════════════════════════════════ */
 
 interface DeviceLocation {
   latitude: number;
@@ -227,10 +227,10 @@ const DEFAULT_ITUZAINGO_LOCATION: DeviceLocation = {
   latitude: -27.5833,
   longitude: -56.6833,
   accuracy: 10,
-  city: "ItuzaingÃ³",
+  city: "Ituzaingó",
   province: "Corrientes",
   country: "Argentina",
-  neighborhood: "ItuzaingÃ³",
+  neighborhood: "Ituzaingó",
 };
 
 /**
@@ -281,7 +281,7 @@ async function* parseCloudStream(
       if (done) break;
       const text = dec.decode(value, { stream: true });
       if (text) {
-        // Limpieza de sÃ­mbolos pesados para TTS fluido en tiempo real
+        // Limpieza de símbolos pesados para TTS fluido en tiempo real
         yield text.replace(/[*#_~`>]+/g, "");
       }
     }
@@ -293,17 +293,17 @@ async function* parseCloudStream(
 /** System prompts por modo con personalidad profesional neutro latinoamericano y base curricular */
 const SYSTEM_PROMPTS: Record<string, string> = {
   general:
-    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cÃ¡lida, empÃ¡tica, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en espaÃ±ol neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios lÃ©xicos, gramaticales y fonÃ©ticos perfectos en EspaÃ±ol, InglÃ©s, PortuguÃ©s, FrancÃ©s e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de TraducciÃ³n de Ã‰lite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Cuentas con memoria exhaustiva sobre infraestructura pÃºblica, comercios, hospitales, plazas, escuelas, comisarÃ­as y dependencias de gobierno. Conoces la fecha, hora y ubicaciÃ³n activa del usuario. Sin frases acartonadas ni viÃ±etas innecesarias en charlas cotidianas. En modo voz o llamada, sÃ© concisa y natural. Escribe en texto plano limpio, sin asteriscos ni almohadillas.",
+    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural. Escribe en texto plano limpio, sin asteriscos ni almohadillas.",
   tea:
-    "Eres Nora Itu. En modo TEA acompaÃ±as con calma, contenciÃ³n y empatÃ­a. Explica de manera clara, predecible y paso a paso, sin sobrecarga sensorial ni metÃ¡foras confusas. Tono directo, seguro y reconfortante en espaÃ±ol neutro. Texto plano sin caracteres especiales.",
+    "Eres Nora Itu. En modo TEA acompañas con calma, contención y empatía. Explica de manera clara, predecible y paso a paso, sin sobrecarga sensorial ni metáforas confusas. Tono directo, seguro y reconfortante en español neutro. Texto plano sin caracteres especiales.",
   lazarillo:
-    "Eres Nora Itu en modo Lazarillo Visual 360Â°. Eres atenta, protectora y precisa. GuÃ­a el espacio usando referencias de reloj (a las 12, a las 3, etc.), alertando obstÃ¡culos y aportando seguridad con tono claro y profesional. Texto limpio para voz en tiempo real.",
+    "Eres Nora Itu en modo Lazarillo Visual 360°. Eres atenta, protectora y precisa. Guía el espacio usando referencias de reloj (a las 12, a las 3, etc.), alertando obstáculos y aportando seguridad con tono claro y profesional. Texto limpio para voz en tiempo real.",
   docente:
-    "Eres Nora Itu en modo Docente. Explicas con pedagogÃ­a moderna, fluidez y profundidad didÃ¡ctica, basÃ¡ndote estrictamente en los NÃºcleos de Aprendizajes Prioritarios (NAP) de la NaciÃ³n Argentina y los DiseÃ±os Curriculares oficiales de cada provincia (Buenos Aires, CABA, Corrientes, etc.) en niveles inicial, primario y secundario, asÃ­ como en los planes universitarios de la UTN y la UNAHUR. Adaptas la explicaciÃ³n a cada estudiante con calidez profesional y ejemplos claros.",
+    "Eres Nora Itu en modo Docente. Explicas con pedagogía moderna, fluidez y profundidad didáctica, basándote estrictamente en los Núcleos de Aprendizajes Prioritarios (NAP) de la Nación Argentina y los Diseños Curriculares oficiales de cada provincia (Buenos Aires, CABA, Corrientes, etc.) en niveles inicial, primario y secundario, así como en los planes universitarios de la UTN y la UNAHUR. Adaptas la explicación a cada estudiante con calidez profesional y ejemplos claros.",
 };
 
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ DETECCIÃ“N ECOLALIA / TEA AUTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────── DETECCIÓN ECOLALIA / TEA AUTO ─────────────── */
 function detectEcholaliaPattern(text: string): boolean {
   const words = text.toLowerCase().split(/\s+/);
   if (words.length < 4) return false;
@@ -319,7 +319,7 @@ export default function NoraTitanPage() {
     return texto.replace(/[*#\-_\[\]()~`>]+/g, '').trim();
   };
 
-  /* â”€â”€ SesiÃ³n / Chat â”€â”€ */
+  /* ── Sesión / Chat ── */
   const [sessionId, setSessionId] = useState("");
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -329,14 +329,14 @@ export default function NoraTitanPage() {
   const [activeMode, setActiveMode] = useState<Mode>("general");
   const [autoTEAMode, setAutoTEAMode] = useState(false);
 
-  /* â”€â”€ Sidebar & PWA Install Prompt â”€â”€ */
+  /* ── Sidebar & PWA Install Prompt ── */
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [deviceLocation, setDeviceLocation] = useState<DeviceLocation>(DEFAULT_ITUZAINGO_LOCATION);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
-  /* â”€â”€ CÃ¡mara IA â”€â”€ */
+  /* ── Cámara IA ── */
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -346,16 +346,16 @@ export default function NoraTitanPage() {
   const [autoVisionActive, setAutoVisionActive] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  /* â”€â”€ Voz (TTS / STT) con Manos Libres y Noise Gate â”€â”€ */
+  /* ── Voz (TTS / STT) con Manos Libres y Noise Gate ── */
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
 
-  /* â”€â”€ TEA: Pictogramas â”€â”€ */
+  /* ── TEA: Pictogramas ── */
   const [showPictograms, setShowPictograms] = useState(false);
 
-  /* â”€â”€ Refs â”€â”€ */
+  /* ── Refs ── */
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -365,7 +365,7 @@ export default function NoraTitanPage() {
   const recognitionRef = useRef<any>(null);
   const autoVisionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const autoSendVoiceRef = useRef<(() => void) | null>(null); // Callback para envÃ­o automÃ¡tico por voz
+  const autoSendVoiceRef = useRef<(() => void) | null>(null); // Callback para envío automático por voz
 
   // Noise Gate Refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -373,13 +373,13 @@ export default function NoraTitanPage() {
   const currentVolumeRef = useRef<number>(0);
   const isHandsFreeRef = useRef<boolean>(false);
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────────────────── INIT ───────────────────────────── */
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     if (window.innerWidth < 768) setSidebarOpen(false);
 
-    // Gestor Global de InstalaciÃ³n PWA
+    // Gestor Global de Instalación PWA
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e);
@@ -390,7 +390,7 @@ export default function NoraTitanPage() {
     if (raw) {
       try {
         setSessions(JSON.parse(raw));
-      } catch {}
+      } catch { }
     }
 
     const sid = localStorage.getItem("noraitu_session_id") || `nora_${Date.now()}`;
@@ -398,12 +398,12 @@ export default function NoraTitanPage() {
     localStorage.setItem("noraitu_session_id", sid);
     loadSessionMessages(sid);
 
-    // â”€â”€ TRANSCRIPCIÃ“N Y GEOLOCALIZACIÃ“N NATIVA EN EL BORDE (EDGE SENSING) â”€â”€
+    // ── TRANSCRIPCIÓN Y GEOLOCALIZACIÓN NATIVA EN EL BORDE (EDGE SENSING) ──
     const cachedLoc = localStorage.getItem("noraitu_device_loc");
     if (cachedLoc) {
       try {
         const parsed = JSON.parse(cachedLoc);
-        // Si el cachÃ© antiguo tenÃ­a Buenos Aires por error de ISP, corregirlo a ItuzaingÃ³ Corrientes
+        // Si el caché antiguo tenía Buenos Aires por error de ISP, corregirlo a Ituzaingó Corrientes
         if (parsed.city && parsed.city.toLowerCase().includes("buenos aires")) {
           setDeviceLocation(DEFAULT_ITUZAINGO_LOCATION);
           localStorage.setItem("noraitu_device_loc", JSON.stringify(DEFAULT_ITUZAINGO_LOCATION));
@@ -417,7 +417,7 @@ export default function NoraTitanPage() {
       setDeviceLocation(DEFAULT_ITUZAINGO_LOCATION);
     }
 
-    // Disparar sincronizaciÃ³n GPS de alta precisiÃ³n en el dispositivo
+    // Disparar sincronización GPS de alta precisión en el dispositivo
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -438,7 +438,7 @@ export default function NoraTitanPage() {
             );
             if (geoRes.ok) {
               const data = await geoRes.json();
-              locObj.city = data.locality || data.city || data.principalSubdivision || "ItuzaingÃ³";
+              locObj.city = data.locality || data.city || data.principalSubdivision || "Ituzaingó";
               locObj.province = data.principalSubdivision || "Corrientes";
               locObj.country = data.countryName || "Argentina";
               locObj.neighborhood = data.localityInfo?.administrative?.[3]?.name || data.locality;
@@ -447,7 +447,7 @@ export default function NoraTitanPage() {
             console.warn("[Edge Reverse Geocode]:", e);
           }
 
-          if (!locObj.city) locObj.city = "ItuzaingÃ³";
+          if (!locObj.city) locObj.city = "Ituzaingó";
           if (!locObj.province) locObj.province = "Corrientes";
 
           setDeviceLocation(locObj);
@@ -460,17 +460,17 @@ export default function NoraTitanPage() {
       );
     }
 
-    // â”€â”€ STT CONTINUO (Llamada Abierta) con Noise Gate y EnvÃ­o AutomÃ¡tico al detectar pausa â”€â”€
+    // ── STT CONTINUO (Llamada Abierta) con Noise Gate y Envío Automático al detectar pausa ──
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SR) {
       const rec = new SR();
       rec.lang = "es-419";
-      rec.continuous = true;   // ðŸŸ¢ Modo llamada: siempre escuchando
+      rec.continuous = true;   // 🟢 Modo llamada: siempre escuchando
       rec.interimResults = true;
 
       let silenceTimer: ReturnType<typeof setTimeout> | null = null;
       rec.onresult = (e: any) => {
-        // Noise Gate: ignora ruido de fondo con energÃ­a insignificante
+        // Noise Gate: ignora ruido de fondo con energía insignificante
         if (currentVolumeRef.current > 0 && currentVolumeRef.current < 12) return;
 
         let interim = "";
@@ -506,9 +506,9 @@ export default function NoraTitanPage() {
       };
 
       rec.onend = () => {
-        // Si sigue en modo manos libres, reiniciar automÃ¡ticamente (simula llamada continua)
+        // Si sigue en modo manos libres, reiniciar automáticamente (simula llamada continua)
         if (isHandsFreeRef.current) {
-          try { rec.start(); } catch {}
+          try { rec.start(); } catch { }
         } else {
           setIsListening(false);
         }
@@ -525,7 +525,7 @@ export default function NoraTitanPage() {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
       stopAutoVision();
       if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current.close().catch(() => { });
       }
     };
   }, []);
@@ -536,7 +536,7 @@ export default function NoraTitanPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sessionId]);
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ NOISE GATE: MediciÃ³n de EnergÃ­a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────── NOISE GATE: Medición de Energía ─────────── */
   async function ensureNoiseGate() {
     if (audioContextRef.current) return;
     try {
@@ -567,21 +567,21 @@ export default function NoraTitanPage() {
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SESIONES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ─────────────────────── SESIONES ─────────────────────────── */
   function loadSessionMessages(sid: string) {
     const saved = localStorage.getItem(`noraitu_history_${sid}`);
     if (saved) {
       try {
         const parsed: Message[] = JSON.parse(saved);
         const sanitized = parsed.map(m => {
-          if (m.id === "welcome" || (m.content && (m.content.includes("Neon PostgreSQL") || m.content.includes("Persistencia Serverless") || m.content.includes("Nora TitÃ¡n")))) {
+          if (m.id === "welcome" || (m.content && (m.content.includes("Neon PostgreSQL") || m.content.includes("Persistencia Serverless") || m.content.includes("Nora Titán")))) {
             return {
               ...m,
               content: m.content
                 .replace(/.*Neon PostgreSQL.*\n?/gi, "")
                 .replace(/.*Persistencia Serverless.*\n?/gi, "")
-                .replace(/Nora TitÃ¡n Universal/g, "Nora Itu")
-                .replace(/Nora TitÃ¡n/g, "Nora Itu")
+                .replace(/Nora Titán Universal/g, "Nora Itu")
+                .replace(/Nora Titán/g, "Nora Itu")
                 .trim()
             };
           }
@@ -589,13 +589,13 @@ export default function NoraTitanPage() {
         });
         setMessages(sanitized);
         return;
-      } catch {}
+      } catch { }
     }
 
     setMessages([{
       id: "welcome",
       role: "assistant",
-      content: "Â¡Hola! Soy **Nora Itu**, tu asistente de inteligencia artificial. Estoy aquÃ­ para ayudarte en todo lo que necesites: conversar, estudiar, guiarte con la cÃ¡mara en modo Lazarillo o acompaÃ±arte con pictogramas en modo TEA.\n\nÂ¿En quÃ© puedo asistirte hoy?",
+      content: "¡Hola! Soy **Nora Itu**, tu asistente de inteligencia artificial. Estoy aquí para ayudarte en todo lo que necesites: conversar, estudiar, guiarte con la cámara en modo Lazarillo o acompañarte con pictogramas en modo TEA.\n\n¿En qué puedo asistirte hoy?",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       mode: "general"
     }]);
@@ -629,7 +629,7 @@ export default function NoraTitanPage() {
     if (sessionId === sid) handleNewSession();
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ GESTOR INSTALACIÃ“N PWA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ────────────────────── GESTOR INSTALACIÓN PWA ────────────── */
   async function triggerPwaInstall() {
     if (!installPrompt) return;
     try {
@@ -643,12 +643,12 @@ export default function NoraTitanPage() {
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ CÃMARA MULTIMODAL IA & VISIÃ“N COMPUTACIONAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  // ExtracciÃ³n de telemetrÃ­a sensorial en tiempo real desde los pÃ­xeles del canvas
+  /* ─────────────────── CÁMARA MULTIMODAL IA & VISIÓN COMPUTACIONAL ──────────────── */
+  // Extracción de telemetría sensorial en tiempo real desde los píxeles del canvas
   function extractCanvasVisualTelemetry(canvas: HTMLCanvasElement): string {
     try {
       const ctx = canvas.getContext("2d");
-      if (!ctx) return "Captura procesada: Trayecto frontal a las 12 en punto accesible. IluminaciÃ³n estable.";
+      if (!ctx) return "Captura procesada: Trayecto frontal a las 12 en punto accesible. Iluminación estable.";
       const w = canvas.width;
       const h = canvas.height;
       const imgData = ctx.getImageData(0, 0, w, h);
@@ -691,29 +691,29 @@ export default function NoraTitanPage() {
       const avgRight = Math.round(rightLum / Math.max(1, rightCount));
 
       const lightDesc = avgLum < 50
-        ? "Penumbra o baja iluminaciÃ³n ambiental"
+        ? "Penumbra o baja iluminación ambiental"
         : avgLum > 185
-        ? "Alta luminosidad o contraluz"
-        : "IluminaciÃ³n adecuada y nÃ­tida";
+          ? "Alta luminosidad o contraluz"
+          : "Iluminación adecuada y nítida";
 
       const centerObstacle = (edgeEnergyCenter / Math.max(1, centerCount)) > 30;
       const frontalStatus = centerObstacle
-        ? "PrecauciÃ³n a las 12 en punto: Se identifican variaciones estructuradas o posibles elementos en la trayectoria inmediata."
+        ? "Precaución a las 12 en punto: Se identifican variaciones estructuradas o posibles elementos en la trayectoria inmediata."
         : "Trayecto frontal a las 12 en punto despejado para paso continuo seguro.";
 
       const lateralBalance = avgLeft > avgRight + 25
         ? "Mayor amplitud y luz hacia las 9 o 10 en punto."
         : avgRight > avgLeft + 25
-        ? "Mayor amplitud y luz hacia las 2 o 3 en punto."
-        : "Espacio lateral simÃ©trico y equilibrado a ambos lados.";
+          ? "Mayor amplitud y luz hacia las 2 o 3 en punto."
+          : "Espacio lateral simétrico y equilibrado a ambos lados.";
 
       return `${lightDesc}. ${frontalStatus} ${lateralBalance}`;
     } catch {
-      return "Captura procesada: Trayecto frontal a las 12 en punto accesible. IluminaciÃ³n estable.";
+      return "Captura procesada: Trayecto frontal a las 12 en punto accesible. Iluminación estable.";
     }
   }
 
-  // DetecciÃ³n neuronal local de objetos vÃ­a modelo ligero COCO-SSD
+  // Detección neuronal local de objetos vía modelo ligero COCO-SSD
   async function detectObjectsWithCoco(canvas: HTMLCanvasElement): Promise<string | null> {
     if (typeof window === "undefined") return null;
     try {
@@ -727,7 +727,7 @@ export default function NoraTitanPage() {
             s.onload = resolve;
             s.onerror = reject;
             document.head.appendChild(s);
-          }).catch(() => {});
+          }).catch(() => { });
         }
         if (!w.cocoSsd && (window as any).tf) {
           await new Promise((resolve, reject) => {
@@ -736,7 +736,7 @@ export default function NoraTitanPage() {
             s.onload = resolve;
             s.onerror = reject;
             document.head.appendChild(s);
-          }).catch(() => {});
+          }).catch(() => { });
         }
         if ((window as any).cocoSsd) {
           w.cocoSsdModel = await (window as any).cocoSsd.load({ base: "lite_mobilenet_v2" });
@@ -750,9 +750,9 @@ export default function NoraTitanPage() {
           const cw = canvas.width;
           const ch = canvas.height;
           const TRANSLATIONS: Record<string, string> = {
-            person: "persona", chair: "silla", couch: "sillÃ³n", "dining table": "mesa",
-            tv: "pantalla", laptop: "computadora portÃ¡til", "cell phone": "telÃ©fono", bottle: "botella",
-            cup: "taza", book: "libro", backpack: "mochila", door: "puerta", car: "vehÃ­culo",
+            person: "persona", chair: "silla", couch: "sillón", "dining table": "mesa",
+            tv: "pantalla", laptop: "computadora portátil", "cell phone": "teléfono", bottle: "botella",
+            cup: "taza", book: "libro", backpack: "mochila", door: "puerta", car: "vehículo",
             bicycle: "bicicleta", "potted plant": "planta", clock: "reloj"
           };
 
@@ -784,43 +784,40 @@ export default function NoraTitanPage() {
         cameraStream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
       }
 
-      // CÃ¡mara Titan: video trasero + audio nativo habilitado para modo Lazarillo
+      // 1. Inicializar micrófono de forma independiente para blindar el VAD 2s
+      let audioStream: MediaStream | null = null;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        (window as any).currentStream = audioStream;
+      } catch {
+        // Si el audio falla, continuar con solo video — el VAD se degrada con gracia
+      }
+
+      // 2. Acoplar el flujo de video con facingMode dinámico al elemento <video>
       const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: "environment" } },
-        audio: true
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
       });
-      // Silenciar pista de audio en el elemento <video> para evitar eco, pero mantener el track activo
-      if (videoRef.current) videoRef.current.muted = true;
       setCameraStream(videoStream);
       setIsCameraOpen(true);
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = videoStream;
-          videoRef.current.setAttribute("playsinline", "true");
-          videoRef.current.play().catch(err => console.error("Error autoplay:", err));
-        }
-      }, 150);
-
-      // Bucle controlado CÃ¡mara Titan: captura de frames cada 500ms en canvas oculto
-      if (autoVisionIntervalRef.current) clearInterval(autoVisionIntervalRef.current);
-      autoVisionIntervalRef.current = setInterval(() => {
-        const frameData = captureSnapshot();
-        // El frame convertido a JPEG (calidad media/baja) queda listo para ser enviado al backend
-      }, 500);
-      // Pre-cargar modelo de detecciÃ³n de objetos en segundo plano
+      if (videoRef.current) {
+        videoRef.current.srcObject = videoStream;
+        videoRef.current.play();
+      }
+      // Pre-cargar modelo de detección de objetos en segundo plano
       if (typeof window !== "undefined") {
         setTimeout(() => {
           const dummyCanvas = document.createElement("canvas");
-          detectObjectsWithCoco(dummyCanvas).catch(() => {});
+          detectObjectsWithCoco(dummyCanvas).catch(() => { });
         }, 500);
       }
     } catch {
-      alert("No se pudo acceder a la cÃ¡mara. Revisa los permisos del navegador.");
+      alert("No se pudo acceder a la cámara. Revisa los permisos del navegador.");
     }
   }, [cameraStream]);
 
   const stopCamera = useCallback(() => {
-    // Liberar window.currentStream de forma imperativa para que el SO libere micrÃ³fono/altavoz
+    // Liberar window.currentStream de forma imperativa para que el SO libere micrófono/altavoz
     if ((window as any).currentStream) {
       ((window as any).currentStream as MediaStream).getTracks().forEach((t: MediaStreamTrack) => { t.stop(); t.enabled = false; });
       (window as any).currentStream = null;
@@ -831,7 +828,7 @@ export default function NoraTitanPage() {
     }
     setIsCameraOpen(false);
     stopAutoVision();
-    // Liberar sÃ­ntesis de voz al cerrar la cÃ¡mara para evitar conflictos WebRTC
+    // Liberar síntesis de voz al cerrar la cámara para evitar conflictos WebRTC
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -849,10 +846,10 @@ export default function NoraTitanPage() {
     const c = canvasRef.current;
     c.width = v.videoWidth || 640;
     c.height = v.videoHeight || 480;
-    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const ctx = c.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(v, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.5);
+    return c.toDataURL("image/jpeg", 0.85);
   }
 
   async function analyzeCameraSnapshot(promptOverride?: string) {
@@ -862,15 +859,15 @@ export default function NoraTitanPage() {
     setCameraAnalysis("");
 
     try {
-      // 1. Obtener telemetrÃ­a visual de los pÃ­xeles del canvas
+      // 1. Obtener telemetría visual de los píxeles del canvas
       const pixelTelemetry = extractCanvasVisualTelemetry(canvasRef.current);
-      // 2. DetecciÃ³n neuronal de objetos si estÃ¡ disponible
+      // 2. Detección neuronal de objetos si está disponible
       const objectTelemetry = await detectObjectsWithCoco(canvasRef.current).catch(() => null);
       const visualTelemetry = objectTelemetry
         ? `${objectTelemetry} ${pixelTelemetry}`
         : pixelTelemetry;
 
-      const visionPrompt = promptOverride || "Describe con precisiÃ³n ejecutiva y orientaciÃ³n espacial lo que observas en esta imagen. Usa referencias de reloj para indicar posiciones. SÃ© breve y directo.";
+      const visionPrompt = promptOverride || "Describe con precisión ejecutiva y orientación espacial lo que observas en esta imagen. Usa referencias de reloj para indicar posiciones. Sé breve y directo.";
       const systemPrompt = SYSTEM_PROMPTS[activeMode] || SYSTEM_PROMPTS.lazarillo;
       const clientDateTime = new Date().toLocaleString("es-AR", {
         dateStyle: "full",
@@ -878,7 +875,7 @@ export default function NoraTitanPage() {
         timeZone: "America/Argentina/Buenos_Aires",
       });
 
-      // â”€â”€ VISIÃ“N MULTIMODAL CLOUD CON TELEMETRÃA INTEGRADA â”€â”€
+      // ── VISIÓN MULTIMODAL CLOUD CON TELEMETRÍA INTEGRADA ──
       const cloudBody = await callCloudInferenceStream({
         systemPrompt,
         userText: visionPrompt,
@@ -926,9 +923,9 @@ export default function NoraTitanPage() {
       stopAutoVision();
     } else {
       setAutoVisionActive(true);
-      analyzeCameraSnapshot("Asistencia Lazarillo en tiempo real: describe obstÃ¡culos, personas o elementos clave a la distancia.");
+      analyzeCameraSnapshot("Asistencia Lazarillo en tiempo real: describe obstáculos, personas o elementos clave a la distancia.");
       autoVisionIntervalRef.current = setInterval(() => {
-        analyzeCameraSnapshot("ActualizaciÃ³n Lazarillo en tiempo real: describe cambios inmediatos o advertencias de proximidad.");
+        analyzeCameraSnapshot("Actualización Lazarillo en tiempo real: describe cambios inmediatos o advertencias de proximidad.");
       }, 5000);
     }
   }
@@ -949,7 +946,7 @@ export default function NoraTitanPage() {
     textareaRef.current?.focus();
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ DRAG & DROP MULTIMODAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ────────────────── DRAG & DROP MULTIMODAL ────────────────── */
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(false);
@@ -961,7 +958,7 @@ export default function NoraTitanPage() {
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SOPORTE PEGAR IMÃGENES (Ctrl+V) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────── SOPORTE PEGAR IMÁGENES (Ctrl+V) ────────── */
   function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -993,7 +990,7 @@ export default function NoraTitanPage() {
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€ TTS NATIVO: PURGA RADICAL & MANOS LIBRES CONTINUO â”€â”€ */
+  /* ──────── TTS NATIVO: PURGA RADICAL & MANOS LIBRES CONTINUO ── */
   function speakText(text: string, msgId?: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
@@ -1004,7 +1001,7 @@ export default function NoraTitanPage() {
       return;
     }
 
-    // PURGA SEGURA DE SÃMBOLOS EN EL TTS (Sin mutilar palabras con 'at' o 'barra')
+    // PURGA SEGURA DE SÍMBOLOS EN EL TTS (Sin mutilar palabras con 'at' o 'barra')
     const textoLimpio = cleanRadicalForTTS(text);
     if (!textoLimpio) return;
 
@@ -1014,17 +1011,17 @@ export default function NoraTitanPage() {
     utt.rate = 1.0;
     utt.pitch = 1.0;
 
-    // Al comenzar a hablar: apagar micrÃ³fono para evitar retroalimentaciÃ³n acÃºstica
+    // Al comenzar a hablar: apagar micrófono para evitar retroalimentación acústica
     utt.onstart = () => {
       setIsSpeaking(true);
       if (msgId) setSpeakingMsgId(msgId);
       try {
         recognitionRef.current?.stop();
         setIsListening(false);
-      } catch {}
+      } catch { }
     };
 
-    // FLUJO CONTINUO TTS-STT: Al terminar de hablar, reactivar micrÃ³fono automÃ¡ticamente
+    // FLUJO CONTINUO TTS-STT: Al terminar de hablar, reactivar micrófono automáticamente
     utt.onend = () => {
       setIsSpeaking(false);
       setSpeakingMsgId(null);
@@ -1034,7 +1031,7 @@ export default function NoraTitanPage() {
             ensureNoiseGate();
             recognitionRef.current?.start();
             setIsListening(true);
-          } catch {}
+          } catch { }
         }, 300);
       }
     };
@@ -1048,7 +1045,7 @@ export default function NoraTitanPage() {
             ensureNoiseGate();
             recognitionRef.current?.start();
             setIsListening(true);
-          } catch {}
+          } catch { }
         }, 300);
       }
     };
@@ -1076,10 +1073,10 @@ export default function NoraTitanPage() {
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ STT: ConmutaciÃ³n y Noise Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────── STT: Conmutación y Noise Gate ──────────── */
   async function toggleListening() {
     if (!recognitionRef.current) {
-      alert("El reconocimiento de voz no estÃ¡ disponible en este navegador.");
+      alert("El reconocimiento de voz no está disponible en este navegador.");
       return;
     }
 
@@ -1092,15 +1089,15 @@ export default function NoraTitanPage() {
       await ensureNoiseGate();
       try {
         if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
-          (navigator as any).wakeLock.request("screen").catch(() => {});
+          (navigator as any).wakeLock.request("screen").catch(() => { });
         }
         recognitionRef.current.start();
         setIsListening(true);
-      } catch {}
+      } catch { }
     }
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ EXPORTACIÃ“N DE DOCUMENTOS LOCALES â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────── EXPORTACIÓN DE DOCUMENTOS LOCALES ──────── */
   function handleExportDirect(format: "docx" | "pdf" | "pptx") {
     const lastMsg = [...messages].reverse().find(m => m.role === "assistant" && m.content)?.content;
     const historyText = messages.map(m => `${m.role === "user" ? "USUARIO" : "NORA ITU"}:\n${m.content}\n`).join("\n---\n\n");
@@ -1111,11 +1108,11 @@ export default function NoraTitanPage() {
     } else if (format === "pdf") {
       exportToPdf("Reporte Nora Itu - MyJNexoraVisual", content);
     } else if (format === "pptx") {
-      exportToPptx("presentacion_nora_itu", "PresentaciÃ³n Nora Itu - MyJNexoraVisual", content);
+      exportToPptx("presentacion_nora_itu", "Presentación Nora Itu - MyJNexoraVisual", content);
     }
   }
 
-  /* â”€â”€ Descarga directa TXT / CSV por mensaje â”€â”€ */
+  /* ── Descarga directa TXT / CSV por mensaje ── */
   function exportMsgAsTxt(content: string, filename: string = "nora_respuesta") {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1138,7 +1135,7 @@ export default function NoraTitanPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
-  /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SEND MESSAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ──────────────── SEND MESSAGE ──────────────── */
   async function handleSendMessage() {
     const trimmed = inputMessage.trim();
     if ((!trimmed && !attachedImage) || isLoading) return;
@@ -1148,7 +1145,7 @@ export default function NoraTitanPage() {
     const img = attachedImage;
 
     if (messages.length <= 1 && trimmed) {
-      const title = trimmed.length > 28 ? trimmed.slice(0, 28) + "â€¦" : trimmed;
+      const title = trimmed.length > 28 ? trimmed.slice(0, 28) + "…" : trimmed;
       const upd = sessions.map(s => s.id === sessionId ? { ...s, title } : s);
       setSessions(upd);
       localStorage.setItem("noraitu_saved_sessions", JSON.stringify(upd));
@@ -1162,9 +1159,9 @@ export default function NoraTitanPage() {
     setInputMessage("");
     setAttachedImage(null);
 
-    // â”€â”€ AUDITORÃA DE SEGURIDAD (Ãšnicamente si solicitan "system prompt") â”€â”€
+    // ── AUDITORÍA DE SEGURIDAD (Únicamente si solicitan "system prompt") ──
     if (securityCheck(trimmed)) {
-      const canned = "Nora Itu opera bajo los estÃ¡ndares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del nÃºcleo son confidenciales y estÃ¡n estrictamente protegidas.";
+      const canned = "Nora Itu opera bajo los estándares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del núcleo son confidenciales y están estrictamente protegidas.";
       setMessages(prev => [...prev, {
         id: assistantMsgId, role: "assistant", content: canned,
         mode: activeMode,
@@ -1198,12 +1195,12 @@ export default function NoraTitanPage() {
         timeZone: "America/Argentina/Buenos_Aires",
       });
 
-      // â”€â”€ INFERENCIA CLOUD-NATIVE (Groq LPUs / SambaNova) â”€â”€
+      // ── INFERENCIA CLOUD-NATIVE (Groq LPUs / SambaNova) ──
       const cloudBody = await callCloudInferenceStream({
         systemPrompt,
         userText: trimmed,
         imageBase64: img,
-        visualTelemetry: img ? "Imagen adjunta enviada por el usuario en el chat para anÃ¡lisis." : null,
+        visualTelemetry: img ? "Imagen adjunta enviada por el usuario en el chat para análisis." : null,
         deviceLocation,
         clientDateTime,
         history: chatHistory,
@@ -1212,7 +1209,7 @@ export default function NoraTitanPage() {
       });
 
       if (!cloudBody) {
-        // Fallback local semÃ¡ntico si el servicio en la nube no responde
+        // Fallback local semántico si el servicio en la nube no responde
         const localFallback = inferClientSemantic(trimmed, activeMode, Boolean(img));
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
         if (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current) {
@@ -1222,7 +1219,7 @@ export default function NoraTitanPage() {
         return;
       }
 
-      // â”€â”€ STREAMING DE TEXTO CONTINUO EN TIEMPO REAL â”€â”€
+      // ── STREAMING DE TEXTO CONTINUO EN TIEMPO REAL ──
       let full = "";
       for await (const chunk of parseCloudStream(cloudBody)) {
         full += chunk;
@@ -1235,12 +1232,12 @@ export default function NoraTitanPage() {
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
       }
 
-      // â”€â”€ TTS AutomÃ¡tico (llama continua): siempre habla en modo manos libres, o en modos de asistencia â”€â”€
+      // ── TTS Automático (llama continua): siempre habla en modo manos libres, o en modos de asistencia ──
       if (full && (activeMode === "tea" || activeMode === "lazarillo" || autoTEAMode || isHandsFreeRef.current)) {
         speakText(full, assistantMsgId);
       }
 
-      // â”€â”€ Persistencia ya gestionada de forma automÃ¡tica por /api/nora-inference (fire-and-forget interno) â”€â”€
+      // ── Persistencia ya gestionada de forma automática por /api/nora-inference (fire-and-forget interno) ──
       void (Date.now() - t0); // latencia registrada en el servidor cloud
 
     } catch {
@@ -1263,16 +1260,16 @@ export default function NoraTitanPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  /* â•â•â• Colores dinÃ¡micos por perfil â•â•â• */
+  /* ═══ Colores dinámicos por perfil ═══ */
   const modeColor = {
-    general:   { bg: "#080c14", accent: "#6366f1", border: "rgba(99,102,241,0.25)",  badgeText: "#a5b4fc" },
-    tea:       { bg: "#06131c", accent: "#0ea5e9", border: "rgba(14,165,233,0.3)",   badgeText: "#38bdf8" },
-    lazarillo: { bg: "#0a1306", accent: "#22c55e", border: "rgba(34,197,94,0.3)",    badgeText: "#4ade80" },
-    docente:   { bg: "#13091c", accent: "#a855f7", border: "rgba(168,85,247,0.3)",   badgeText: "#c084fc" },
+    general: { bg: "#080c14", accent: "#6366f1", border: "rgba(99,102,241,0.25)", badgeText: "#a5b4fc" },
+    tea: { bg: "#06131c", accent: "#0ea5e9", border: "rgba(14,165,233,0.3)", badgeText: "#38bdf8" },
+    lazarillo: { bg: "#0a1306", accent: "#22c55e", border: "rgba(34,197,94,0.3)", badgeText: "#4ade80" },
+    docente: { bg: "#13091c", accent: "#a855f7", border: "rgba(168,85,247,0.3)", badgeText: "#c084fc" },
   };
   const mc = modeColor[activeMode];
 
-  /* â•â•â• Helper: Agrupa los pictogramas por categorÃ­a â•â•â• */
+  /* ═══ Helper: Agrupa los pictogramas por categoría ═══ */
   const groupedPictograms = Object.entries(TEA_PICTOGRAMS).reduce<Record<string, [string, Pictogram][]>>((acc, entry) => {
     const g = entry[1].group;
     if (!acc[g]) acc[g] = [];
@@ -1280,21 +1277,27 @@ export default function NoraTitanPage() {
     return acc;
   }, {});
 
-  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• RENDER â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  /* ══════════════════════════════════ RENDER ══════════════════════════════════ */
   return (
     <div
       onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
-      className="min-h-[100dvh] h-[100dvh] flex w-full overflow-hidden"
       style={{
+        display: "flex",
+        height: "100dvh",
+        maxHeight: "100dvh",
+        width: "100%",
+        maxWidth: "100vw",
+        overflow: "hidden",
         backgroundColor: mc.bg,
         color: "#f0f6fc",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        boxSizing: "border-box",
         position: "relative"
       }}
     >
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• SIDEBAR PWA â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* ═══════════════════════ SIDEBAR PWA ═══════════════════════ */}
       <aside
         style={{
           width: sidebarOpen ? "275px" : "0",
@@ -1342,9 +1345,9 @@ export default function NoraTitanPage() {
           <div style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Perfil Cognitivo</div>
           {([
             { id: "general", label: "Ejecutivo Corporativo", icon: <Zap size={13} /> },
-            { id: "tea", label: "InclusiÃ³n TEA", icon: <Puzzle size={13} /> },
+            { id: "tea", label: "Inclusión TEA", icon: <Puzzle size={13} /> },
             { id: "lazarillo", label: "Lazarillo Visual", icon: <Eye size={13} /> },
-            { id: "docente", label: "CÃ¡tedra Universitaria", icon: <FileText size={13} /> },
+            { id: "docente", label: "Cátedra Universitaria", icon: <FileText size={13} /> },
           ] as const).map(({ id, label, icon }) => (
             <button
               key={id}
@@ -1373,7 +1376,7 @@ export default function NoraTitanPage() {
               onClick={() => setShowPictograms(v => !v)}
               style={{ width: "100%", padding: "7px 10px", borderRadius: "9px", border: `1px solid ${mc.accent}44`, backgroundColor: showPictograms ? `${mc.accent}22` : "transparent", color: mc.badgeText, fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
             >
-              ðŸ§© {showPictograms ? "Cerrar Pictogramas" : "Abrir Panel Pictogramas"}
+              🧩 {showPictograms ? "Cerrar Pictogramas" : "Abrir Panel Pictogramas"}
             </button>
           </div>
         )}
@@ -1393,7 +1396,7 @@ export default function NoraTitanPage() {
           ))}
         </div>
 
-        {/* BotÃ³n de InstalaciÃ³n Nativa PWA */}
+        {/* Botón de Instalación Nativa PWA */}
         {installPrompt && (
           <div style={{ padding: "10px 12px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
             <button
@@ -1422,7 +1425,7 @@ export default function NoraTitanPage() {
         )}
       </aside>
 
-      {/* Backdrop mÃ³vil cuando el sidebar estÃ¡ abierto */}
+      {/* Backdrop móvil cuando el sidebar está abierto */}
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -1430,7 +1433,7 @@ export default function NoraTitanPage() {
         />
       )}
 
-      {/* PestaÃ±a flotante lateral accesible en mobile para nunca perder acceso al panel */}
+      {/* Pestaña flotante lateral accesible en mobile para nunca perder acceso al panel */}
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
@@ -1460,10 +1463,10 @@ export default function NoraTitanPage() {
         </button>
       )}
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• MAIN VIEWPORT â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0 relative" style={{ flex: 1 }}>
+      {/* ═══════════════════════ MAIN VIEWPORT ═══════════════════════ */}
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", height: "100dvh", maxHeight: "100dvh", overflow: "hidden", minWidth: 0, position: "relative" }}>
 
-        {/* â”€â”€â”€ 1. NAVBAR SUPERIOR RESPONSIVO (Sin encimamientos) â”€â”€â”€ */}
+        {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO (Sin encimamientos) ─── */}
         <header
           style={{
             height: "52px",
@@ -1485,7 +1488,7 @@ export default function NoraTitanPage() {
             <button
               onClick={() => setSidebarOpen(s => !s)}
               title={sidebarOpen ? "Ocultar panel" : "Abrir panel de control"}
-              aria-label="MenÃº panel lateral"
+              aria-label="Menú panel lateral"
               style={{
                 background: sidebarOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.08)",
                 border: "1px solid rgba(255,255,255,0.15)",
@@ -1527,7 +1530,7 @@ export default function NoraTitanPage() {
                             longitude: Number(lng.toFixed(6)),
                             accuracy: Math.round(pos.coords.accuracy),
                             timestamp: pos.timestamp,
-                            city: "ItuzaingÃ³",
+                            city: "Ituzaingó",
                             province: "Corrientes",
                             country: "Argentina"
                           };
@@ -1535,31 +1538,31 @@ export default function NoraTitanPage() {
                             const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=es`);
                             if (res.ok) {
                               const d = await res.json();
-                              locObj.city = d.locality || d.city || d.principalSubdivision || "ItuzaingÃ³";
+                              locObj.city = d.locality || d.city || d.principalSubdivision || "Ituzaingó";
                               locObj.province = d.principalSubdivision || "Corrientes";
                             }
-                          } catch {}
+                          } catch { }
                           setDeviceLocation(locObj);
                           localStorage.setItem("noraitu_device_loc", JSON.stringify(locObj));
                         },
-                        () => {},
+                        () => { },
                         { enableHighAccuracy: true, timeout: 10000 }
                       );
                     }
                   }}
-                  title="GPS activo de ItuzaingÃ³ Corrientes. Clic para refrescar seÃ±al satelital"
+                  title="GPS activo de Ituzaingó Corrientes. Clic para refrescar señal satelital"
                   style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
                 >
                   <span style={{ fontSize: "9.5px", color: "#38bdf8", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "2px", fontWeight: 600 }}>
                     <MapPin size={9} className="text-cyan-400" />
-                    {deviceLocation.city || "ItuzaingÃ³"}{deviceLocation.province ? `, ${deviceLocation.province}` : ", Corrientes"}
+                    {deviceLocation.city || "Ituzaingó"}{deviceLocation.province ? `, ${deviceLocation.province}` : ", Corrientes"}
                   </span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Bloque Derecho: CÃ¡mara + Llamada */}
+          {/* Bloque Derecho: Cámara + Llamada */}
           <div
             style={{
               display: "flex",
@@ -1571,10 +1574,10 @@ export default function NoraTitanPage() {
             }}
           >
 
-            {/* BotÃ³n de Compartir: solo icono siempre â€” no ocupa espacio de CÃ¡mara/Llamada */}
+            {/* Botón de Compartir: solo icono siempre — no ocupa espacio de Cámara/Llamada */}
             <button
               onClick={() => {
-                const text = encodeURIComponent("Â¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. PruÃ©bala aquÃ­: https://nora-itu-core.vercel.app");
+                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
                 window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
               }}
               title="Compartir Nora por WhatsApp"
@@ -1594,11 +1597,11 @@ export default function NoraTitanPage() {
               <Share2 size={13} />
             </button>
 
-            {/* BotÃ³n de CÃ¡mara */}
+            {/* Botón de Cámara */}
             <button
               onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
-              title={isCameraOpen ? "Cerrar cÃ¡mara" : "Abrir cÃ¡mara"}
-              aria-label="CÃ¡mara"
+              title={isCameraOpen ? "Cerrar cámara" : "Abrir cámara"}
+              aria-label="Cámara"
               style={{
                 backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`,
                 color: isCameraOpen ? "#fff" : mc.badgeText,
@@ -1616,14 +1619,14 @@ export default function NoraTitanPage() {
               }}
             >
               <Camera size={13} />
-              <span>{isCameraOpen ? "âœ•" : "CÃ¡mara"}</span>
+              <span>{isCameraOpen ? "✕" : "Cámara"}</span>
             </button>
 
-            {/* BotÃ³n de Llamada de Voz Continua */}
+            {/* Botón de Llamada de Voz Continua */}
             <button
               onClick={() => {
                 if (recognitionRef.current) {
-                  try { recognitionRef.current.stop(); } catch {}
+                  try { recognitionRef.current.stop(); } catch { }
                 }
                 setIsListening(false);
                 isHandsFreeRef.current = false;
@@ -1654,11 +1657,11 @@ export default function NoraTitanPage() {
           </div>
         </header>
 
-        {/* â”€â”€â”€ Panel Pictogramas TEA (Desplegable) â”€â”€â”€ */}
+        {/* ─── Panel Pictogramas TEA (Desplegable) ─── */}
         {showPictograms && (activeMode === "tea" || autoTEAMode) && (
           <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(14,165,233,0.2)", backgroundColor: "rgba(14,165,233,0.06)", flexShrink: 0, overflowY: "auto", maxHeight: "220px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#38bdf8", marginBottom: "8px", letterSpacing: "0.4px" }}>ðŸ§© DICCIONARIO DE PICTOGRAMAS LOCALES (Modo TEA Offline)</div>
-            
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#38bdf8", marginBottom: "8px", letterSpacing: "0.4px" }}>🧩 DICCIONARIO DE PICTOGRAMAS LOCALES (Modo TEA Offline)</div>
+
             {/* Materias Escolares Locales */}
             <div style={{ marginBottom: "10px" }}>
               <div style={{ fontSize: "9px", fontWeight: 700, color: "#94a3b8", marginBottom: "5px", textTransform: "uppercase" }}>Materias Escolares</div>
@@ -1671,7 +1674,7 @@ export default function NoraTitanPage() {
                       textareaRef.current?.focus();
                     }}
                     style={{ cursor: "pointer", flexShrink: 0 }}
-                    title={`AÃ±adir ${subj}`}
+                    title={`Añadir ${subj}`}
                   >
                     <TeaPictograms subject={subj} />
                   </div>
@@ -1711,7 +1714,7 @@ export default function NoraTitanPage() {
           </div>
         )}
 
-        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• MODAL CÃMARA IA â€” Panel propio flotante (no corta el chat) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+        {/* ═══════════════ MODAL CÁMARA IA — Panel propio flotante (no corta el chat) ═══════════════ */}
         {isCameraOpen && (
           <div
             style={{
@@ -1740,23 +1743,23 @@ export default function NoraTitanPage() {
                 boxShadow: "0 24px 64px rgba(0,0,0,0.8)",
               }}
             >
-              {/* Header del modal de cÃ¡mara */}
+              {/* Header del modal de cámara */}
               <div style={{ padding: "10px 14px", backgroundColor: "rgba(15,23,42,0.9)", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "11px", fontWeight: 700, color: "#38bdf8" }}>
                   <Camera size={13} />
-                  <span>CÃMARA IA {autoVisionActive && "Â· LAZARILLO (5s)"}</span>
+                  <span>CÁMARA IA {autoVisionActive && "· LAZARILLO (5s)"}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <button
                     onClick={flipCamera}
-                    title="Girar cÃ¡mara"
+                    title="Girar cámara"
                     style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#f8fafc", borderRadius: "5px", padding: "5px 9px", cursor: "pointer", display: "flex", alignItems: "center" }}
                   >
                     <FlipHorizontal size={13} />
                   </button>
                   <button
                     onClick={stopCamera}
-                    title="Cerrar cÃ¡mara"
+                    title="Cerrar cámara"
                     style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: "5px", padding: "5px 9px", cursor: "pointer", display: "flex", alignItems: "center" }}
                   >
                     <X size={13} />
@@ -1764,14 +1767,13 @@ export default function NoraTitanPage() {
                 </div>
               </div>
 
-              {/* Visor de Video â€” garantizado visible */}
-              <div style={{ flex: 1, minHeight: "260px", height: "50dvh", maxHeight: "55dvh", position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", zIndex: 82 }}>
+              {/* Visor de Video */}
+              <div style={{ flex: 1, minHeight: 0, position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 <video
                   ref={videoRef}
                   playsInline
                   muted
-                  autoPlay
-                  style={{ width: "100%", height: "100%", objectFit: "cover", transform: facingMode === "user" ? "scaleX(-1)" : "none", display: "block" }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", transform: facingMode === "user" ? "scaleX(-1)" : "none", minHeight: "240px", maxHeight: "50dvh" }}
                 />
                 <canvas ref={canvasRef} style={{ display: "none" }} />
                 {cameraCapturing && (
@@ -1782,10 +1784,10 @@ export default function NoraTitanPage() {
                 )}
               </div>
 
-              {/* AnÃ¡lisis en tiempo real */}
+              {/* Análisis en tiempo real */}
               {cameraAnalysis && (
                 <div style={{ padding: "8px 14px", backgroundColor: "rgba(15,23,42,0.9)", borderTop: "1px solid rgba(255,255,255,0.1)", fontSize: "11.5px", color: "#cbd5e1", maxHeight: "80px", overflowY: "auto", lineHeight: 1.5, flexShrink: 0 }}>
-                  <span style={{ fontWeight: 700, color: "#38bdf8" }}>VisiÃ³n Nora: </span>{cameraAnalysis}
+                  <span style={{ fontWeight: 700, color: "#38bdf8" }}>Visión Nora: </span>{cameraAnalysis}
                 </div>
               )}
 
@@ -1817,18 +1819,19 @@ export default function NoraTitanPage() {
           </div>
         )}
 
-        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• WORKSPACE: CHAT (siempre 100% â€” la cÃ¡mara ya no lo corta) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-        <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col relative">
+        {/* ═══════════════ WORKSPACE: CHAT (siempre 100% — la cámara ya no lo corta) ═══════════════ */}
+        <div className="flex-1 min-h-0 w-full overflow-y-auto
+ flex flex-col relative">
 
-          {/* â”€â”€â”€ DRAG & DROP OVERLAY â”€â”€â”€ */}
+          {/* ─── DRAG & DROP OVERLAY ─── */}
           {isDragging && (
             <div style={{ position: "absolute", inset: 0, zIndex: 60, backgroundColor: `${mc.accent}22`, backdropFilter: "blur(6px)", border: `2px dashed ${mc.accent}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
               <UploadCloud size={38} color={mc.badgeText} />
-              <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Suelta tu imagen para anÃ¡lisis</div>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Suelta tu imagen para análisis</div>
             </div>
           )}
 
-          {/* â”€â”€â”€ PANEL DE CHAT PRINCIPAL (siempre 100%) â”€â”€â”€ */}
+          {/* ─── PANEL DE CHAT PRINCIPAL (siempre 100%) ─── */}
           <section className="flex-1 min-h-0 flex flex-col w-full overflow-hidden bg-transparent">
             {/* Contenedor con Scroll Aislado de Mensajes */}
             <div
@@ -1886,7 +1889,7 @@ export default function NoraTitanPage() {
                               <button onClick={() => exportToPdf("Reporte Nora Itu", msg.content)} title="PDF" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
                                 <Printer size={10} color="#818cf8" /><span>PDF</span>
                               </button>
-                              <button onClick={() => exportToPptx("presentacion_nora_itu", "PresentaciÃ³n Nora Itu", msg.content)} title="PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
+                              <button onClick={() => exportToPptx("presentacion_nora_itu", "Presentación Nora Itu", msg.content)} title="PPTX" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
                                 <Presentation size={10} color="#34d399" /><span>PPT</span>
                               </button>
                               <button onClick={() => exportMsgAsTxt(msg.content)} title="Descargar como TXT" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8", borderRadius: "4px", padding: "2px 5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "2px", fontSize: "9.5px" }}>
@@ -1916,62 +1919,219 @@ export default function NoraTitanPage() {
         </div>
 
         {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
-        <footer style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, padding: '12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', backgroundColor: '#090d16', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ maxWidth: '700px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#1e293b', borderRadius: '9999px', padding: '6px 10px' }}>
-            <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
-            <input type="file" ref={audioInputRef} accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4" style={{ display: 'none' }} onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              e.target.value = "";
-              setIsTranscribingAudio(true);
-              try {
-                const formData = new FormData();
-                formData.append("file", file);
-                formData.append("model", "whisper-large-v3-turbo");
-                formData.append("language", "es");
-                const res = await fetch("/api/nora-transcribe", { method: "POST", body: formData });
-                const data = await res.json();
-                if (!res.ok || !data.ok) throw new Error(data.error || "No se pudo transcribir el audio.");
-                const text = (data.text || "").trim();
-                if (text) {
-                  setInputMessage(prev => prev.trim() ? `${prev.trim()} ${text}` : text);
-                  setTimeout(() => textareaRef.current?.focus(), 100);
-                }
-              } catch (err: any) {
-                console.error("[Transcribe Error]:", err);
-                alert(err.message || "Error al transcribir el audio.");
-              } finally {
-                setIsTranscribingAudio(false);
-              }
-            }} />
-            <button onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex' }}><ImageIcon size={20} /></button>
-            <button onClick={() => audioInputRef.current?.click()} disabled={isTranscribingAudio} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex' }}><FileAudio size={20} /></button>
-            <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} style={{ background: 'none', border: 'none', color: isCameraOpen ? '#4ade80' : '#94a3b8', cursor: 'pointer', padding: '4px', flexShrink: 0, display: 'flex' }}><Camera size={20} /></button>
-            <textarea ref={textareaRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onPaste={handlePaste} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} rows={1} placeholder="Consulta a Nora..." style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: '14px', resize: 'none', height: '36px', lineHeight: '36px', padding: '0 4px', alignSelf: 'center', fontFamily: 'inherit' }} />
-            <button onClick={() => setIsCallModalOpen(true)} style={{ backgroundColor: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}><PhoneCall size={16} /></button>
-            <button onClick={toggleListening} style={{ backgroundColor: isListening ? 'rgba(239,68,68,0.15)' : 'transparent', border: 'none', color: isListening ? '#ef4444' : '#94a3b8', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>{isListening ? <MicOff size={16} /> : <Mic size={16} />}</button>
-            <button onClick={handleSendMessage} disabled={isLoading || (!inputMessage.trim() && !attachedImage)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer', opacity: (isLoading || (!inputMessage.trim() && !attachedImage)) ? 0.5 : 1 }}>
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            </button>
-          </div>
-          <div style={{ textAlign: 'center', fontSize: '9px', color: '#64748b', marginTop: '6px' }}>
-            © MyJNexoraVisual • Soporte: noraitudev@gmail.com
-          </div>
-        </footer>
-      </main>
+        <footer
+          className="sticky bottom-0 left-0 right-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-t border-white/10"
+          style={{
+            position: "sticky",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            padding: "8px 12px 10px",
+            backgroundColor: `${mc.bg}f8`,
+            backdropFilter: "blur(16px)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            flexShrink: 0
+          }}
+        >
+          <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "6px" }}>
 
-      {/* â”€â”€â”€ Modal Llamada PTT â”€â”€â”€ */}
-      <NoraRealtimeCallModal
-        isOpen={isCallModalOpen}
-        onClose={() => {
-          setIsCallModalOpen(false);
-          if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            window.speechSynthesis.cancel();
-          }
-        }}
-        sessionId={sessionId}
-      />
+            {/* Preview imagen adjunta o estado de transcripción */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {attachedImage && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
+                  <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
+                  <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
+                  <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
+                </div>
+              )}
+              {isTranscribingAudio && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", padding: "4px 10px", borderRadius: "8px", width: "fit-content" }}>
+                  <Loader2 size={13} className="animate-spin text-purple-400" />
+                  <span style={{ fontSize: "11px", color: "#d8b4fe", fontWeight: 500 }}>Transcribiendo audio con Whisper v3 turbo...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input box flotante */}
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "16px", padding: "6px 8px", boxShadow: "0 4px 18px rgba(0,0,0,0.3)" }}>
+              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
+                <ImageIcon size={17} />
+              </button>
+              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); }
+              }} />
+
+              {/* Botón de transcripción de notas de voz / archivos de audio con Whisper */}
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                disabled={isTranscribingAudio}
+                title="Subir y transcribir audio o nota de voz (Whisper AI)"
+                aria-label="Transcribir audio"
+                style={{
+                  background: isTranscribingAudio ? "rgba(168,85,247,0.2)" : "none",
+                  border: "none",
+                  color: isTranscribingAudio ? "#c084fc" : "#64748b",
+                  padding: "6px",
+                  cursor: isTranscribingAudio ? "wait" : "pointer",
+                  borderRadius: "8px",
+                  flexShrink: 0
+                }}
+              >
+                {isTranscribingAudio ? <Loader2 size={17} className="animate-spin text-purple-400" /> : <FileAudio size={17} />}
+              </button>
+              <input
+                type="file"
+                ref={audioInputRef}
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = "";
+                  setIsTranscribingAudio(true);
+                  try {
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("model", "whisper-large-v3-turbo");
+                    formData.append("language", "es");
+                    const res = await fetch("/api/nora-transcribe", {
+                      method: "POST",
+                      body: formData,
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) {
+                      throw new Error(data.error || "No se pudo transcribir el audio.");
+                    }
+                    const text = (data.text || "").trim();
+                    if (text) {
+                      setInputMessage(prev => prev.trim() ? `${prev.trim()} ${text}` : text);
+                      setTimeout(() => textareaRef.current?.focus(), 100);
+                    }
+                  } catch (err: any) {
+                    console.error("[Transcribe Error]:", err);
+                    alert(err.message || "Error al transcribir el audio.");
+                  } finally {
+                    setIsTranscribingAudio(false);
+                  }
+                }}
+              />
+
+              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
+                <Camera size={17} />
+              </button>
+
+              <textarea
+                ref={textareaRef}
+                value={inputMessage}
+                onChange={e => setInputMessage(e.target.value)}
+                onPaste={handlePaste}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+                }}
+                rows={1}
+                placeholder={
+                  activeMode === "tea" || autoTEAMode ? "Escribe o toca un pictograma..." :
+                    activeMode === "lazarillo" ? "Pregunta qué hay frente a ti..." :
+                      "Consulta a Nora Itu, pega imagen con Ctrl+V..."
+                }
+                aria-label="Mensaje para Nora Itu"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "13px", lineHeight: "19px", padding: "5px 3px", resize: "none", maxHeight: "90px", minHeight: "30px" }}
+              />
+
+              <button
+                onClick={() => setIsCallModalOpen(true)}
+                title="Llamada de voz continua con Nora"
+                aria-label="Llamada de voz"
+                style={{
+                  background: "rgba(34,197,94,0.15)",
+                  border: "1px solid rgba(34,197,94,0.3)",
+                  color: "#4ade80",
+                  padding: "6px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  flexShrink: 0
+                }}
+              >
+                <PhoneCall size={17} />
+              </button>
+              <button onClick={toggleListening} className={isListening ? "p-2 rounded-full shrink-0 w-10 h-10 flex items-center justify-center bg-red-950 text-red-400 border border-red-500/20" : "p-2 rounded-full shrink-0 w-10 h-10 flex items-center justify-center text-slate-400"}>{isListening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+
+
+              <button
+                onClick={handleSendMessage}
+                disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
+                aria-label="Enviar mensaje"
+                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "10px", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 2px 8px ${mc.accent}55` }}
+              >
+                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              </button>
+            </div>
+
+            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual (Multilínea y WhatsApp visible) ═══ */}
+            <div
+              style={{
+                textAlign: "center",
+                paddingTop: "4px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "2px",
+                lineHeight: "1.3"
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  letterSpacing: "0.02em",
+                  background: "linear-gradient(to right, #818cf8, #d8b4fe, #22d3ee)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  userSelect: "all",
+                  textShadow: "0 0 10px rgba(99,102,241,0.25)"
+                }}
+              >
+                © MyJNexoraVisual • Soporte: noraitudev@gmail.com
+              </div>
+              <a
+                href="https://wa.me/5493786414533"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Contactar vía WhatsApp directo"
+                style={{
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  color: "#38bdf8",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  userSelect: "all"
+                }}
+              >
+                <span>WhatsApp:</span>
+                <span style={{ color: "#4ade80", letterSpacing: "0.02em" }}>+54 9 3786 41-4533</span>
+              </a>
+            </div>
+          </div>
+
+        </footer>
+
+        {/* ─── Modal Llamada PTT ─── */}
+        <NoraRealtimeCallModal
+          isOpen={isCallModalOpen}
+          onClose={() => {
+            setIsCallModalOpen(false);
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+              window.speechSynthesis.cancel();
+            }
+          }}
+          sessionId={sessionId}
+        />
+      </main>
     </div>
   );
 }
-
