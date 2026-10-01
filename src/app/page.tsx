@@ -2052,6 +2052,10 @@ export default function NoraTitanPage() {
           isOpen={isCallModalOpen}
           onClose={() => {
             setIsCallModalOpen(false);
+            if (typeof document !== "undefined") {
+              document.body.style.overflow = "unset";
+              document.documentElement.style.overflow = "unset";
+            }
             if (typeof window !== "undefined" && "speechSynthesis" in window) {
               window.speechSynthesis.cancel();
             }
