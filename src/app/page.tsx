@@ -793,7 +793,8 @@ export default function NoraTitanPage() {
       setIsCameraOpen(true);
       if (videoRef.current) {
         videoRef.current.srcObject = videoStream;
-        videoRef.current.play();
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.play().catch(err => console.error("Error autoplay:", err));
       }
 
       // Bucle controlado Cámara Titan: captura de frames cada 500ms en canvas oculto
@@ -844,7 +845,7 @@ export default function NoraTitanPage() {
     const c = canvasRef.current;
     c.width = v.videoWidth || 640;
     c.height = v.videoHeight || 480;
-    const ctx = c.getContext("2d");
+    const ctx = c.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(v, 0, 0, c.width, c.height);
     return c.toDataURL("image/jpeg", 0.5);
@@ -1281,17 +1282,11 @@ export default function NoraTitanPage() {
       onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
+      className="min-h-[100dvh] h-[100dvh] flex w-full overflow-hidden"
       style={{
-        display: "flex",
-        height: "100dvh",
-        maxHeight: "100dvh",
-        width: "100%",
-        maxWidth: "100vw",
-        overflow: "hidden",
         backgroundColor: mc.bg,
         color: "#f0f6fc",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        boxSizing: "border-box",
         position: "relative"
       }}
     >
@@ -1462,7 +1457,7 @@ export default function NoraTitanPage() {
       )}
 
       {/* ═══════════════════════ MAIN VIEWPORT ═══════════════════════ */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", height: "100dvh", maxHeight: "100dvh", overflow: "hidden", minWidth: 0, position: "relative" }}>
+      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden min-w-0 relative" style={{ flex: 1 }}>
 
         {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO (Sin encimamientos) ─── */}
         <header
@@ -1917,14 +1912,15 @@ export default function NoraTitanPage() {
 
         {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
         <footer
-          className="sticky bottom-0 left-0 right-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-t border-white/10"
+          className="sticky bottom-0 left-0 right-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-t border-white/10 pb-6 md:pb-2"
           style={{
             position: "sticky",
             bottom: 0,
             left: 0,
             right: 0,
             zIndex: 50,
-            padding: "8px 12px 10px",
+            padding: "8px 12px",
+            paddingBottom: "max(12px, env(safe-area-inset-bottom))",
             backgroundColor: `${mc.bg}f8`,
             backdropFilter: "blur(16px)",
             borderTop: "1px solid rgba(255,255,255,0.08)",
