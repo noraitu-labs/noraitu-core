@@ -37,8 +37,17 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#09090b" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
+        {/* Fuerza scroll vertical en todo momento — anula overflow:hidden de modales en móvil */}
+        <style dangerouslySetInnerHTML={{__html: `
+          html, body {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            height: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+        `}} />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#090d16", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#090d16", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch" as any }}>
         {children}
       </body>
     </html>
