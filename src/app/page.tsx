@@ -784,18 +784,9 @@ export default function NoraTitanPage() {
         cameraStream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
       }
 
-      // 1. Inicializar micrófono de forma independiente para blindar el VAD 2s
-      let audioStream: MediaStream | null = null;
-      try {
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        (window as any).currentStream = audioStream;
-      } catch {
-        // Si el audio falla, continuar con solo video — el VAD se degrada con gracia
-      }
-
-      // 2. Acoplar el flujo de video con facingMode dinámico al elemento <video>
+      // Método Cámara Titan: Aislamos el audio completamente y forzamos cámara trasera
       const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: { exact: "environment" } },
         audio: false
       });
       setCameraStream(videoStream);
@@ -804,6 +795,13 @@ export default function NoraTitanPage() {
         videoRef.current.srcObject = videoStream;
         videoRef.current.play();
       }
+
+      // Bucle controlado Cámara Titan: captura de frames cada 500ms en canvas oculto
+      if (autoVisionIntervalRef.current) clearInterval(autoVisionIntervalRef.current);
+      autoVisionIntervalRef.current = setInterval(() => {
+        const frameData = captureSnapshot();
+        // El frame convertido a JPEG (calidad media/baja) queda listo para ser enviado al backend
+      }, 500);
       // Pre-cargar modelo de detección de objetos en segundo plano
       if (typeof window !== "undefined") {
         setTimeout(() => {
@@ -849,7 +847,7 @@ export default function NoraTitanPage() {
     const ctx = c.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(v, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.85);
+    return c.toDataURL("image/jpeg", 0.5);
   }
 
   async function analyzeCameraSnapshot(promptOverride?: string) {

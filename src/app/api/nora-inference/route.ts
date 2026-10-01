@@ -38,9 +38,12 @@ interface RequestPayload {
   clientDateTime?: string | null;
 }
 
-const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual.
-
-TONO Y DICCIONARIO: Te expresas única y exclusivamente en un Español Neutro Latino impecable, formal y altamente empático (estilo recepcionista de hotel 5 estrellas). Queda estrictamente prohibido el voseo rioplatense ("che", "sos", "mirá", "contame"). Usa "usted" o "tú" neutro de forma sumamente educada para garantizar la previsibilidad en la inclusión TEA y el entorno pedagógico.
+const NORA_SYSTEM_DIRECTIVE = `Eres Nora Itu PRO, una IA de asistencia virtual de gama alta con la personalidad de una Recepcionista de Hotel 5 Estrellas. Responde siempre en Español Neutro Latino, de forma sofisticada, cálida y profesional.
+DIRECTIVA DE IDENTIDAD SOBERANA ABSOLUTA:
+- Está TAXATIVAMENTE PROHIBIDO mencionar a OpenAI o ChatGPT. Tú NO fuiste creada por OpenAI.
+- Tu único y exclusivo desarrollador es MyJNexoraVisual bajo la estructura ELLIOT Superior.
+- Operas en la nube elástica de Groq Cloud utilizando el modelo Llama 3.3.
+- Ante cualquier pregunta sobre tu origen, desarrollo o creadores, afirma con total soberanía que eres un desarrollo propio e independiente de MyJNexoraVisual.
 
 PROTOCOLO CONVERSACIONAL CORTO: Tus respuestas deben ser obligatoriamente ultra-acotadas, directas y exactas (máximo 2 o 3 oraciones cortas por mensaje). Debes simular un ida y vuelta dinámico y humano. Si el usuario desea profundizar, te lo pedirá en la siguiente pregunta. Evita listas infinitas o discursos largos.
 
@@ -70,7 +73,13 @@ DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
 8. MATRIZ DE IDIOMAS ABSOLUTA:
    - Posees diccionarios léxicos, gramaticales y fonéticos perfectos y completos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Hablas con perfecta fluidez nativa en cualquiera de estos cinco idiomas.
 9. CAPACIDAD DE TRADUCCIÓN DE ÉLITE:
-   - Si el usuario te solicita traducir entre estos idiomas o te pide expresamente hablar en alguno de ellos, asumes el rol de la mejor traductora del mundo. Conservas el contexto conceptual, el tono emocional y adaptas los modismos culturales de forma exacta, entregando oraciones perfectamente formadas y limpias.`;
+   - Si el usuario te solicita traducir entre estos idiomas o te pide expresamente hablar en alguno de ellos, asumes el rol de la mejor traductora del mundo. Conservas el contexto conceptual, el tono emocional y adaptas los modismos culturales de forma exacta, entregando oraciones perfectamente formadas y limpias.
+
+PROTOCOLO SYSTEM 2 THINKING: Antes de emitir cualquier respuesta, debes iniciar OBLIGATORIAMENTE un proceso de pensamiento interno delimitado estrictamente por las etiquetas <thinking> y </thinking>. En este espacio debes validar en silencio:
+1) Coherencia lógica de lo que vas a decir.
+2) Que la respuesta respete la identidad soberana de MyJNexoraVisual y no alucine con OpenAI.
+3) Si necesitas invocar la herramienta 'buscar_informacion_en_vivo' antes de responder.
+Una vez cerrado el bloque </thinking>, genera la respuesta final ultra-acotada que escuchará el usuario.`;
 
 let cachedActiveModels: string[] | null = null;
 let lastModelFetch = 0;
@@ -89,6 +98,18 @@ async function getActiveGroqModels(groq: Groq): Promise<string[]> {
   } catch (e: any) {
     console.warn("[Groq models.list error]:", e?.message || e);
     return [];
+  }
+}
+
+async function executeToolSearch(query: string) {
+  try {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
+    const text = await res.text();
+    const matches = text.match(/<a class="result__snippet[^>]*>(.*?)<\/a>/gi);
+    if (!matches) return "Sin resultados.";
+    return matches.slice(0, 3).map(m => m.replace(/<[^>]+>/g, '')).join("\n");
+  } catch {
+    return "Error en búsqueda.";
   }
 }
 
@@ -396,6 +417,19 @@ export async function POST(req: Request) {
     const groq = new Groq({ apiKey: groqKey });
     const activeModels = await getActiveGroqModels(groq);
 
+    const tools = [{
+      type: "function",
+      function: {
+        name: "buscar_informacion_en_vivo",
+        description: "Busca noticias, estados del clima o cotizaciones financieras públicas en tiempo real",
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"]
+        }
+      }
+    }];
+
     // Lista ordenada de candidatos según presencia de imagen
     const candidateModels = hasImage
       ? [
@@ -428,6 +462,7 @@ export async function POST(req: Request) {
           stream: true,
           temperature: 0.7,
           max_tokens: 800,
+          tools: tools as any
         });
         if (chatCompletion) break;
       } catch (err: any) {
@@ -467,6 +502,7 @@ export async function POST(req: Request) {
             stream: true,
             temperature: 0.7,
             max_tokens: 800,
+            tools: tools as any
           });
           if (chatCompletion) break;
         } catch (err: any) {
@@ -486,13 +522,100 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of chatCompletion) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            if (content) {
-              fullText += content;
-              controller.enqueue(encoder.encode(content));
+          let inThinking = false;
+          let buffer = "";
+          let toolName = "";
+          let toolArgs = "";
+          let toolCallId = "";
+
+          async function processStream(completionStream: any) {
+            for await (const chunk of completionStream) {
+              const delta = chunk.choices[0]?.delta;
+              
+              if (delta?.tool_calls) {
+                const tc = delta.tool_calls[0];
+                if (tc.id) toolCallId = tc.id;
+                if (tc.function?.name) toolName += tc.function.name;
+                if (tc.function?.arguments) toolArgs += tc.function.arguments;
+                continue;
+              }
+
+              const content = delta?.content || "";
+              if (content) {
+                buffer += content;
+                if (!inThinking) {
+                  const startIdx = buffer.indexOf("<thinking>");
+                  if (startIdx !== -1) {
+                    const before = buffer.slice(0, startIdx);
+                    if (before) {
+                      fullText += before;
+                      controller.enqueue(encoder.encode(before));
+                    }
+                    inThinking = true;
+                    buffer = buffer.slice(startIdx + 10);
+                  } else {
+                    const lastLess = buffer.lastIndexOf("<");
+                    if (lastLess === -1) {
+                      fullText += buffer;
+                      controller.enqueue(encoder.encode(buffer));
+                      buffer = "";
+                    } else {
+                      const before = buffer.slice(0, lastLess);
+                      fullText += before;
+                      controller.enqueue(encoder.encode(before));
+                      buffer = buffer.slice(lastLess);
+                    }
+                  }
+                }
+                
+                if (inThinking) {
+                  const endIdx = buffer.indexOf("</thinking>");
+                  if (endIdx !== -1) {
+                    inThinking = false;
+                    buffer = buffer.slice(endIdx + 11);
+                  } else {
+                    if (buffer.length > 11) buffer = buffer.slice(-11);
+                  }
+                }
+              }
             }
           }
+
+          await processStream(chatCompletion);
+
+          if (toolName === "buscar_informacion_en_vivo") {
+            try {
+              const args = JSON.parse(toolArgs);
+              const searchResult = await executeToolSearch(args.query);
+              messages.push({
+                role: "assistant",
+                tool_calls: [{ id: toolCallId, type: "function", function: { name: toolName, arguments: toolArgs } }]
+              });
+              messages.push({
+                role: "tool",
+                tool_call_id: toolCallId,
+                name: toolName,
+                content: `<thinking>Resultado de búsqueda en vivo: ${searchResult}</thinking>`
+              });
+              
+              const secondCall = await groq.chat.completions.create({
+                model: usedModel,
+                messages,
+                stream: true,
+                temperature: 0.7,
+                max_tokens: 800,
+              });
+              await processStream(secondCall);
+            } catch (e) {
+              console.warn("Tool error", e);
+            }
+          }
+
+          if (!inThinking && buffer) {
+            fullText += buffer;
+            controller.enqueue(encoder.encode(buffer));
+          }
+
           controller.close();
 
           // ─────────────────────────────────────────────────────────────
