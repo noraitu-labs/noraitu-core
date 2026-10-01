@@ -791,11 +791,13 @@ export default function NoraTitanPage() {
       });
       setCameraStream(videoStream);
       setIsCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = videoStream;
-        videoRef.current.setAttribute("playsinline", "true");
-        videoRef.current.play().catch(err => console.error("Error autoplay:", err));
-      }
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = videoStream;
+          videoRef.current.setAttribute("playsinline", "true");
+          videoRef.current.play().catch(err => console.error("Error autoplay:", err));
+        }
+      }, 150);
 
       // Bucle controlado Cámara Titan: captura de frames cada 500ms en canvas oculto
       if (autoVisionIntervalRef.current) clearInterval(autoVisionIntervalRef.current);
@@ -1911,24 +1913,8 @@ export default function NoraTitanPage() {
         </div>
 
         {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
-        <footer
-          className="sticky bottom-0 left-0 right-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-t border-white/10 pb-6 md:pb-2"
-          style={{
-            position: "sticky",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            padding: "8px 12px",
-            paddingBottom: "max(12px, env(safe-area-inset-bottom))",
-            backgroundColor: `${mc.bg}f8`,
-            backdropFilter: "blur(16px)",
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            flexShrink: 0
-          }}
-        >
-          <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "6px" }}>
-
+        <footer className="fixed bottom-0 left-0 right-0 z-50 p-3 bg-slate-950/95 backdrop-blur-md border-t border-white/10 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <div className="max-w-4xl mx-auto flex flex-col gap-2">
             {/* Preview imagen adjunta o estado de transcripción */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
               {attachedImage && (
@@ -1947,31 +1933,13 @@ export default function NoraTitanPage() {
             </div>
 
             {/* Input box flotante */}
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "20px", padding: "8px 10px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "12px", transition: "all 0.2s" }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "#1e293b", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "24px", padding: "8px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", width: "100%" }}>
+              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
                 <ImageIcon size={22} />
               </button>
-              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => {
-                const f = e.target.files?.[0];
-                if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); }
-              }} />
-
-              {/* Botón de transcripción de notas de voz / archivos de audio con Whisper */}
-              <button
-                onClick={() => audioInputRef.current?.click()}
-                disabled={isTranscribingAudio}
-                title="Subir y transcribir audio o nota de voz (Whisper AI)"
-                aria-label="Transcribir audio"
-                style={{
-                  background: isTranscribingAudio ? "rgba(168,85,247,0.2)" : "none",
-                  border: "none",
-                  color: isTranscribingAudio ? "#c084fc" : "#64748b",
-                  cursor: isTranscribingAudio ? "wait" : "pointer",
-                  borderRadius: "12px",
-                  flexShrink: 0,
-                  minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s"
-                }}
-              >
+              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
+              
+              <button onClick={() => audioInputRef.current?.click()} disabled={isTranscribingAudio} title="Subir y transcribir audio" style={{ background: "none", border: "none", color: isTranscribingAudio ? "#c084fc" : "#94a3b8", cursor: isTranscribingAudio ? "wait" : "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
                 {isTranscribingAudio ? <Loader2 size={22} className="animate-spin text-purple-400" /> : <FileAudio size={22} />}
               </button>
               <input
@@ -2010,57 +1978,23 @@ export default function NoraTitanPage() {
                   }
                 }}
               />
-
-              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "12px", transition: "all 0.2s" }}>
+              
+              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? "#34d399" : "#94a3b8", cursor: "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
                 <Camera size={22} />
               </button>
 
-              <textarea
-                ref={textareaRef}
-                value={inputMessage}
-                onChange={e => setInputMessage(e.target.value)}
-                onPaste={handlePaste}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
-                }}
-                rows={1}
-                placeholder={
-                  activeMode === "tea" || autoTEAMode ? "Escribe o toca un pictograma..." :
-                  activeMode === "lazarillo" ? "Pregunta qué hay frente a ti..." :
-                  "Consulta a Nora Itu..."
-                }
-                aria-label="Mensaje para Nora Itu"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "14px", lineHeight: "20px", padding: "14px 6px", resize: "none", maxHeight: "120px", minHeight: "48px" }}
-              />
+              <textarea ref={textareaRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onPaste={handlePaste} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} rows={1} placeholder="Mensaje a Nora..." style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "15px", lineHeight: "24px", padding: "8px 4px", resize: "none", maxHeight: "150px", minHeight: "40px", alignSelf: "center", fontFamily: "inherit" }} />
 
-              <button
-                onClick={() => setIsCallModalOpen(true)}
-                title="Llamada de voz continua con Nora"
-                aria-label="Llamada de voz"
-                style={{
-                  background: "rgba(34,197,94,0.15)",
-                  border: "1px solid rgba(34,197,94,0.3)",
-                  color: "#4ade80",
-                  borderRadius: "14px",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s"
-                }}
-              >
-                <PhoneCall size={22} />
+              <button onClick={() => setIsCallModalOpen(true)} title="Llamada PTT" style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "#4ade80", cursor: "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", marginBottom: "1px" }}>
+                <PhoneCall size={18} />
               </button>
 
-              <button onClick={toggleListening} title={isListening ? "Detener dictado" : "Hablar con manos libres"} aria-label="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#64748b", borderRadius: "12px", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
-                {isListening ? <MicOff size={22} /> : <Mic size={22} />}
+              <button onClick={toggleListening} title="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#94a3b8", cursor: "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", marginBottom: "1px" }}>
+                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
               </button>
 
-              <button
-                onClick={handleSendMessage}
-                disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
-                aria-label="Enviar mensaje"
-                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "14px", minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 4px 12px ${mc.accent}66`, transition: "all 0.2s" }}
-              >
-                {isLoading ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
+              <button onClick={handleSendMessage} disabled={isLoading || (!inputMessage.trim() && !attachedImage)} style={{ backgroundColor: (isLoading || (!inputMessage.trim() && !attachedImage)) ? "#475569" : "#3b82f6", color: "#fff", border: "none", cursor: (isLoading || (!inputMessage.trim() && !attachedImage)) ? "not-allowed" : "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", opacity: (isLoading || (!inputMessage.trim() && !attachedImage)) ? 0.6 : 1, marginBottom: "1px" }}>
+                {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </button>
             </div>
 
