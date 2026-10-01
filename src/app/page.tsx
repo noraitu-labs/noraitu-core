@@ -1958,7 +1958,6 @@ export default function NoraTitanPage() {
             © MyJNexoraVisual • Soporte: noraitudev@gmail.com
           </div>
         </footer>
-        </footer>
       </main>
 
       {/* â”€â”€â”€ Modal Llamada PTT â”€â”€â”€ */}
