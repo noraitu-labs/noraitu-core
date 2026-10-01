@@ -793,17 +793,31 @@ export default function NoraTitanPage() {
         // Si el audio falla, continuar con solo video — el VAD se degrada con gracia
       }
 
-      // 2. Acoplar el flujo de video con facingMode dinámico al elemento <video>
-      const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      });
+      // 2. Acoplar el flujo de video forzando facingMode environment con fallback
+      let videoStream: MediaStream;
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true,
+        });
+      } catch {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true,
+        });
+      }
+
       setCameraStream(videoStream);
       setIsCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = videoStream;
-        videoRef.current.play();
-      }
+
+      // setTimeout de 100ms para asegurar el montaje del elemento <video> en el DOM
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = videoStream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 100);
+
       // Pre-cargar modelo de detección de objetos en segundo plano
       if (typeof window !== "undefined") {
         setTimeout(() => {
@@ -1005,11 +1019,24 @@ export default function NoraTitanPage() {
     const textoLimpio = cleanRadicalForTTS(text);
     if (!textoLimpio) return;
 
+    // Modulación prosódica: pausas naturales humanas (estilo XTTS v2 / Deepgram Aura)
     const lang = detectTextLanguage(textoLimpio);
     const utt = new SpeechSynthesisUtterance(textoLimpio);
     utt.lang = lang;
-    utt.rate = 1.0;
+    utt.rate = 1.02;
     utt.pitch = 1.0;
+
+    // Selección de voz neural o hiperrealista en español si está disponible en el navegador
+    if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.getVoices) {
+      const voices = window.speechSynthesis.getVoices();
+      const naturalVoice = voices.find(v =>
+        (v.lang.startsWith("es") || v.lang.includes("es-")) &&
+        (v.name.includes("Natural") || v.name.includes("Neural") || v.name.includes("Google") || v.name.includes("Paulina") || v.name.includes("Sabina"))
+      ) || voices.find(v => v.lang.startsWith("es"));
+      if (naturalVoice) {
+        utt.voice = naturalVoice;
+      }
+    }
 
     // Al comenzar a hablar: apagar micrófono para evitar retroalimentación acústica
     utt.onstart = () => {
@@ -1466,11 +1493,11 @@ export default function NoraTitanPage() {
       {/* ═══════════════════════ MAIN VIEWPORT ═══════════════════════ */}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", height: "100dvh", maxHeight: "100dvh", overflow: "hidden", minWidth: 0, position: "relative" }}>
 
-        {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO (Sin encimamientos) ─── */}
+        {/* ─── 1. NAVBAR SUPERIOR RESPONSIVO (Estilo Grandes Compañías) ─── */}
         <header
           style={{
-            height: "52px",
-            minHeight: "52px",
+            height: "56px",
+            minHeight: "56px",
             flexShrink: 0,
             borderBottom: "1px solid rgba(255,255,255,0.08)",
             backgroundColor: `${mc.bg}f2`,
@@ -1478,23 +1505,26 @@ export default function NoraTitanPage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0 10px",
+            padding: "0 14px",
             zIndex: 30,
             gap: "8px"
           }}
         >
-          {/* Bloque Izquierdo: Fijo y protegido contra cualquier solapamiento */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          {/* Bloque Izquierdo: Menú Sidebar + Título Nora Itu PRO */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flexShrink: 0 }}>
             <button
               onClick={() => setSidebarOpen(s => !s)}
               title={sidebarOpen ? "Ocultar panel" : "Abrir panel de control"}
               aria-label="Menú panel lateral"
               style={{
-                background: sidebarOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.15)",
+                width: "44px",
+                height: "44px",
+                minWidth: "44px",
+                minHeight: "44px",
+                background: sidebarOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
                 color: sidebarOpen ? "#818cf8" : "#f8fafc",
-                borderRadius: "7px",
-                padding: "6px 8px",
+                borderRadius: "10px",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -1503,126 +1533,37 @@ export default function NoraTitanPage() {
                 boxShadow: "0 2px 6px rgba(0,0,0,0.25)"
               }}
             >
-              <Menu size={16} />
+              <Menu size={20} />
             </button>
-            <img
-              src="/avatar-nora.png"
-              alt="Nora"
-              style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid #3f3f46", objectFit: "cover", flexShrink: 0 }}
-            />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc", whiteSpace: "nowrap", letterSpacing: "0.4px" }}>NORA ITU</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <img
+                src="/avatar-nora.png"
+                alt="Nora"
+                style={{ width: "32px", height: "32px", borderRadius: "50%", border: "2px solid #38bdf8", objectFit: "cover", flexShrink: 0 }}
+              />
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: "15px", fontWeight: 800, color: "#f8fafc", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
+                  Nora Itu <span style={{ color: "#38bdf8" }}>PRO</span>
+                </span>
                 {autoTEAMode && (
-                  <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "10px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", whiteSpace: "nowrap" }}>AUTO</span>
+                  <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "10px", backgroundColor: "#0ea5e922", color: "#38bdf8", fontWeight: 700, border: "1px solid #38bdf844", width: "fit-content" }}>AUTO TEA</span>
                 )}
               </div>
-              {deviceLocation && (
-                <button
-                  onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.geolocation) {
-                      navigator.geolocation.getCurrentPosition(
-                        async (pos) => {
-                          const lat = pos.coords.latitude;
-                          const lng = pos.coords.longitude;
-                          const locObj: DeviceLocation = {
-                            latitude: Number(lat.toFixed(6)),
-                            longitude: Number(lng.toFixed(6)),
-                            accuracy: Math.round(pos.coords.accuracy),
-                            timestamp: pos.timestamp,
-                            city: "Ituzaingó",
-                            province: "Corrientes",
-                            country: "Argentina"
-                          };
-                          try {
-                            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=es`);
-                            if (res.ok) {
-                              const d = await res.json();
-                              locObj.city = d.locality || d.city || d.principalSubdivision || "Ituzaingó";
-                              locObj.province = d.principalSubdivision || "Corrientes";
-                            }
-                          } catch { }
-                          setDeviceLocation(locObj);
-                          localStorage.setItem("noraitu_device_loc", JSON.stringify(locObj));
-                        },
-                        () => { },
-                        { enableHighAccuracy: true, timeout: 10000 }
-                      );
-                    }
-                  }}
-                  title="GPS activo de Ituzaingó Corrientes. Clic para refrescar señal satelital"
-                  style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
-                >
-                  <span style={{ fontSize: "9.5px", color: "#38bdf8", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "2px", fontWeight: 600 }}>
-                    <MapPin size={9} className="text-cyan-400" />
-                    {deviceLocation.city || "Ituzaingó"}{deviceLocation.province ? `, ${deviceLocation.province}` : ", Corrientes"}
-                  </span>
-                </button>
-              )}
             </div>
           </div>
 
-          {/* Bloque Derecho: Cámara + Llamada */}
+          {/* Bloque Derecho: 3 iconos limpios (size={20}, min 44px x 44px) */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "6px",
+              gap: "8px",
               minWidth: 0,
               flexShrink: 0,
               justifyContent: "flex-end",
             }}
           >
-
-            {/* Botón de Compartir: solo icono siempre — no ocupa espacio de Cámara/Llamada */}
-            <button
-              onClick={() => {
-                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
-                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-              }}
-              title="Compartir Nora por WhatsApp"
-              aria-label="Compartir"
-              style={{
-                backgroundColor: "rgba(34,197,94,0.12)",
-                color: "#4ade80",
-                border: "1px solid rgba(34,197,94,0.25)",
-                borderRadius: "7px",
-                padding: "5px 7px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                flexShrink: 0
-              }}
-            >
-              <Share2 size={13} />
-            </button>
-
-            {/* Botón de Cámara */}
-            <button
-              onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
-              title={isCameraOpen ? "Cerrar cámara" : "Abrir cámara"}
-              aria-label="Cámara"
-              style={{
-                backgroundColor: isCameraOpen ? "#dc2626" : `${mc.accent}22`,
-                color: isCameraOpen ? "#fff" : mc.badgeText,
-                border: `1px solid ${isCameraOpen ? "#ef4444" : `${mc.accent}44`}`,
-                borderRadius: "7px",
-                padding: "5px 9px",
-                fontSize: "10.5px",
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                whiteSpace: "nowrap",
-                flexShrink: 0
-              }}
-            >
-              <Camera size={13} />
-              <span>{isCameraOpen ? "✕" : "Cámara"}</span>
-            </button>
-
-            {/* Botón de Llamada de Voz Continua */}
+            {/* 1. Botón de Llamada (Abre el setIsCallModalOpen existente) */}
             <button
               onClick={() => {
                 if (recognitionRef.current) {
@@ -1633,26 +1574,77 @@ export default function NoraTitanPage() {
                 setIsCallModalOpen(true);
               }}
               title="Iniciar llamada de voz continua con Nora"
-              aria-label="Llamada de voz continua"
+              aria-label="Llamada de voz"
               style={{
-                background: "linear-gradient(135deg, #16a34a, #15803d)",
-                color: "#ffffff",
-                border: "1px solid rgba(255,255,255,0.2)",
-                borderRadius: "8px",
-                padding: "5px 10px",
-                fontSize: "11px",
-                fontWeight: 700,
-                cursor: "pointer",
+                width: "44px",
+                height: "44px",
+                minWidth: "44px",
+                minHeight: "44px",
+                backgroundColor: "rgba(34,197,94,0.15)",
+                border: "1px solid rgba(34,197,94,0.3)",
+                color: "#4ade80",
+                borderRadius: "12px",
                 display: "flex",
                 alignItems: "center",
-                gap: "5px",
-                boxShadow: "0 0 12px rgba(22,163,74,0.4)",
-                whiteSpace: "nowrap",
+                justifyContent: "center",
+                cursor: "pointer",
+                flexShrink: 0,
+                boxShadow: "0 2px 8px rgba(34,197,94,0.2)"
+              }}
+            >
+              <PhoneCall size={20} className="animate-pulse" />
+            </button>
+
+            {/* 2. Botón de Compartir */}
+            <button
+              onClick={() => {
+                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
+                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+              }}
+              title="Compartir Nora por WhatsApp"
+              aria-label="Compartir"
+              style={{
+                width: "44px",
+                height: "44px",
+                minWidth: "44px",
+                minHeight: "44px",
+                backgroundColor: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#cbd5e1",
+                borderRadius: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
                 flexShrink: 0
               }}
             >
-              <PhoneCall size={13} className="animate-pulse" />
-              <span>Llamar</span>
+              <Share2 size={20} />
+            </button>
+
+            {/* 3. Botón de Cámara Multimodal (Abre su propio modal independiente aislado del chat) */}
+            <button
+              onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)}
+              title={isCameraOpen ? "Cerrar cámara" : "Abrir cámara multimodal"}
+              aria-label="Cámara Multimodal"
+              style={{
+                width: "44px",
+                height: "44px",
+                minWidth: "44px",
+                minHeight: "44px",
+                backgroundColor: isCameraOpen ? "rgba(239,68,68,0.2)" : "rgba(56,189,248,0.15)",
+                border: `1px solid ${isCameraOpen ? "rgba(239,68,68,0.4)" : "rgba(56,189,248,0.3)"}`,
+                color: isCameraOpen ? "#f87171" : "#38bdf8",
+                borderRadius: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                flexShrink: 0,
+                boxShadow: isCameraOpen ? "0 0 10px rgba(239,68,68,0.3)" : "0 2px 8px rgba(56,189,248,0.15)"
+              }}
+            >
+              <Camera size={20} />
             </button>
           </div>
         </header>
@@ -1771,6 +1763,7 @@ export default function NoraTitanPage() {
               <div style={{ flex: 1, minHeight: 0, position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                 <video
                   ref={videoRef}
+                  autoPlay
                   playsInline
                   muted
                   style={{ width: "100%", height: "100%", objectFit: "contain", transform: facingMode === "user" ? "scaleX(-1)" : "none", minHeight: "240px", maxHeight: "50dvh" }}
@@ -1820,8 +1813,7 @@ export default function NoraTitanPage() {
         )}
 
         {/* ═══════════════ WORKSPACE: CHAT (siempre 100% — la cámara ya no lo corta) ═══════════════ */}
-        <div className="flex-1 min-h-0 w-full overflow-y-auto
- flex flex-col relative">
+        <div className="flex-1 min-h-0 w-full overflow-y-auto flex flex-col relative">
 
           {/* ─── DRAG & DROP OVERLAY ─── */}
           {isDragging && (
@@ -1835,7 +1827,7 @@ export default function NoraTitanPage() {
           <section className="flex-1 min-h-0 flex flex-col w-full overflow-hidden bg-transparent">
             {/* Contenedor con Scroll Aislado de Mensajes */}
             <div
-              className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 flex flex-col gap-3.5"
+              className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 flex flex-col gap-3.5 pb-28"
               style={{
                 WebkitOverflowScrolling: "touch",
               }}
@@ -1918,110 +1910,107 @@ export default function NoraTitanPage() {
 
         </div>
 
-        {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
+        {/* ─── 3. CAJÓN DE CHAT UNIFICADO (Base Flotante en una Sola Línea) ─── */}
         <footer
-          className="sticky bottom-0 left-0 right-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-t border-white/10"
+          className="fixed bottom-0 left-0 right-0 z-50 p-2 bg-slate-950/90 backdrop-blur-md border-t border-white/10 pb-[max(10px,env(safe-area-inset-bottom))]"
           style={{
-            position: "sticky",
+            position: "fixed",
             bottom: 0,
             left: 0,
             right: 0,
             zIndex: 50,
-            padding: "8px 12px 10px",
-            backgroundColor: `${mc.bg}f8`,
+            backgroundColor: "rgba(9, 13, 22, 0.95)",
             backdropFilter: "blur(16px)",
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            flexShrink: 0
+            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
-          <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ maxWidth: "700px", margin: "0 auto", display: "flex", flexDirection: "column" }}>
 
-            {/* Preview imagen adjunta o estado de transcripción */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              {attachedImage && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
-                  <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
-                  <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
-                  <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
-                </div>
-              )}
-              {isTranscribingAudio && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", padding: "4px 10px", borderRadius: "8px", width: "fit-content" }}>
-                  <Loader2 size={13} className="animate-spin text-purple-400" />
-                  <span style={{ fontSize: "11px", color: "#d8b4fe", fontWeight: 500 }}>Transcribiendo audio con Whisper v3 turbo...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Input box flotante */}
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "16px", padding: "6px 8px", boxShadow: "0 4px 18px rgba(0,0,0,0.3)" }}>
-              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
-                <ImageIcon size={17} />
-              </button>
-              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => {
+            {/* Inputs de archivo blindados de forma visual absoluta */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: "none", position: "absolute", visibility: "hidden" }}
+              onChange={e => {
                 const f = e.target.files?.[0];
-                if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); }
-              }} />
-
-              {/* Botón de transcripción de notas de voz / archivos de audio con Whisper */}
-              <button
-                onClick={() => audioInputRef.current?.click()}
-                disabled={isTranscribingAudio}
-                title="Subir y transcribir audio o nota de voz (Whisper AI)"
-                aria-label="Transcribir audio"
-                style={{
-                  background: isTranscribingAudio ? "rgba(168,85,247,0.2)" : "none",
-                  border: "none",
-                  color: isTranscribingAudio ? "#c084fc" : "#64748b",
-                  padding: "6px",
-                  cursor: isTranscribingAudio ? "wait" : "pointer",
-                  borderRadius: "8px",
-                  flexShrink: 0
-                }}
-              >
-                {isTranscribingAudio ? <Loader2 size={17} className="animate-spin text-purple-400" /> : <FileAudio size={17} />}
-              </button>
-              <input
-                type="file"
-                ref={audioInputRef}
-                accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4"
-                style={{ display: "none" }}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.target.value = "";
-                  setIsTranscribingAudio(true);
-                  try {
-                    const formData = new FormData();
-                    formData.append("file", file);
-                    formData.append("model", "whisper-large-v3-turbo");
-                    formData.append("language", "es");
-                    const res = await fetch("/api/nora-transcribe", {
-                      method: "POST",
-                      body: formData,
-                    });
-                    const data = await res.json();
-                    if (!res.ok || !data.ok) {
-                      throw new Error(data.error || "No se pudo transcribir el audio.");
-                    }
-                    const text = (data.text || "").trim();
-                    if (text) {
-                      setInputMessage(prev => prev.trim() ? `${prev.trim()} ${text}` : text);
-                      setTimeout(() => textareaRef.current?.focus(), 100);
-                    }
-                  } catch (err: any) {
-                    console.error("[Transcribe Error]:", err);
-                    alert(err.message || "Error al transcribir el audio.");
-                  } finally {
-                    setIsTranscribingAudio(false);
+                if (f) {
+                  const r = new FileReader();
+                  r.onload = ev => setAttachedImage(ev.target?.result as string);
+                  r.readAsDataURL(f);
+                }
+              }}
+            />
+            <input
+              type="file"
+              ref={audioInputRef}
+              accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4"
+              style={{ display: "none", position: "absolute", visibility: "hidden" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = "";
+                setIsTranscribingAudio(true);
+                try {
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  formData.append("model", "whisper-large-v3-turbo");
+                  formData.append("language", "es");
+                  const res = await fetch("/api/nora-transcribe", {
+                    method: "POST",
+                    body: formData,
+                  });
+                  const data = await res.json();
+                  if (!res.ok || !data.ok) {
+                    throw new Error(data.error || "No se pudo transcribir el audio.");
                   }
-                }}
-              />
+                  const text = (data.text || "").trim();
+                  if (text) {
+                    setInputMessage(prev => prev.trim() ? `${prev.trim()} ${text}` : text);
+                    setTimeout(() => textareaRef.current?.focus(), 100);
+                  }
+                } catch (err: any) {
+                  console.error("[Transcribe Error]:", err);
+                  alert(err.message || "Error al transcribir el audio.");
+                } finally {
+                  setIsTranscribingAudio(false);
+                }
+              }}
+            />
 
-              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
-                <Camera size={17} />
+            {/* Preview de imagen adjunta o transcripción de audio */}
+            {(attachedImage || isTranscribingAudio) && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                {attachedImage && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
+                    <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
+                    <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
+                    <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
+                  </div>
+                )}
+                {isTranscribingAudio && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", padding: "4px 10px", borderRadius: "8px", width: "fit-content" }}>
+                    <Loader2 size={13} className="animate-spin text-purple-400" />
+                    <span style={{ fontSize: "11px", color: "#d8b4fe", fontWeight: 500 }}>Transcribiendo audio...</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cápsula Horizontal Elíptica Redondeada */}
+            <div className="bg-slate-900 border border-white/10 rounded-full px-4 py-2 mx-3 mb-4 flex items-center gap-2 shadow-2xl" style={{ backgroundColor: "#0f172a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "9999px", padding: "8px 16px", margin: "0 12px 6px", display: "flex", alignItems: "center", gap: "8px", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)" }}>
+              {/* 1. Icono de Adjuntar Archivo/Imagen */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Adjuntar archivo o imagen"
+                aria-label="Adjuntar archivo"
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: "4px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                <ImageIcon size={20} />
               </button>
 
+              {/* 2. <textarea> transparente de una sola línea */}
               <textarea
                 ref={textareaRef}
                 value={inputMessage}
@@ -2037,52 +2026,68 @@ export default function NoraTitanPage() {
                       "Consulta a Nora Itu, pega imagen con Ctrl+V..."
                 }
                 aria-label="Mensaje para Nora Itu"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "13px", lineHeight: "19px", padding: "5px 3px", resize: "none", maxHeight: "90px", minHeight: "30px" }}
+                className="flex-1 bg-transparent border-none outline-none text-sm text-white resize-none h-8 py-1"
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#ffffff", fontSize: "14px", lineHeight: "24px", resize: "none", height: "32px", padding: "4px 0" }}
               />
 
+              {/* 3. Icono de Micrófono */}
               <button
-                onClick={() => setIsCallModalOpen(true)}
-                title="Llamada de voz continua con Nora"
-                aria-label="Llamada de voz"
+                type="button"
+                onClick={toggleListening}
+                title={isListening ? "Detener micrófono" : "Hablar con Nora"}
+                aria-label="Micrófono"
                 style={{
-                  background: "rgba(34,197,94,0.15)",
-                  border: "1px solid rgba(34,197,94,0.3)",
-                  color: "#4ade80",
-                  padding: "6px",
-                  borderRadius: "8px",
+                  background: "none",
+                  border: "none",
+                  color: isListening ? "#ef4444" : "#94a3b8",
                   cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   flexShrink: 0
                 }}
               >
-                <PhoneCall size={17} />
+                {isListening ? <MicOff size={20} className="animate-pulse" /> : <Mic size={20} />}
               </button>
-              <button onClick={toggleListening} className={isListening ? "p-2 rounded-full shrink-0 w-10 h-10 flex items-center justify-center bg-red-950 text-red-400 border border-red-500/20" : "p-2 rounded-full shrink-0 w-10 h-10 flex items-center justify-center text-slate-400"}>{isListening ? <MicOff size={18} /> : <Mic size={18} />}</button>
 
-
+              {/* 4. Icono de Enviar */}
               <button
+                type="button"
                 onClick={handleSendMessage}
                 disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
                 aria-label="Enviar mensaje"
-                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "10px", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 2px 8px ${mc.accent}55` }}
+                title="Enviar mensaje"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: isLoading || (!inputMessage.trim() && !attachedImage) ? "#475569" : "#38bdf8",
+                  cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1
+                }}
               >
-                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {isLoading ? <Loader2 size={18} className="animate-spin text-sky-400" /> : <Send size={20} />}
               </button>
             </div>
 
-            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual (Multilínea y WhatsApp visible) ═══ */}
+            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual ═══ */}
             <div
               style={{
                 textAlign: "center",
-                paddingTop: "4px",
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "2px",
-                lineHeight: "1.3"
+                gap: "8px",
+                paddingTop: "2px",
+                lineHeight: "1.2"
               }}
             >
-              <div
+              <span
                 style={{
                   fontSize: "10px",
                   fontWeight: 600,
@@ -2090,34 +2095,28 @@ export default function NoraTitanPage() {
                   background: "linear-gradient(to right, #818cf8, #d8b4fe, #22d3ee)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
-                  userSelect: "all",
-                  textShadow: "0 0 10px rgba(99,102,241,0.25)"
+                  userSelect: "all"
                 }}
               >
-                © MyJNexoraVisual • Soporte: noraitudev@gmail.com
-              </div>
+                © MyJNexoraVisual • noraitudev@gmail.com
+              </span>
               <a
                 href="https://wa.me/5493786414533"
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Contactar vía WhatsApp directo"
+                title="WhatsApp directo"
                 style={{
-                  fontSize: "10.5px",
+                  fontSize: "10px",
                   fontWeight: 700,
-                  color: "#38bdf8",
+                  color: "#4ade80",
                   textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
                   userSelect: "all"
                 }}
               >
-                <span>WhatsApp:</span>
-                <span style={{ color: "#4ade80", letterSpacing: "0.02em" }}>+54 9 3786 41-4533</span>
+                WA: +54 9 3786 41-4533
               </a>
             </div>
           </div>
-
         </footer>
 
         {/* ─── Modal Llamada PTT ─── */}

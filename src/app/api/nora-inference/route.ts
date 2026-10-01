@@ -635,6 +635,10 @@ export async function POST(req: Request) {
         "Cache-Control": "no-cache, no-transform",
         "X-AI-Provider": "groq",
         "X-AI-Model": model,
+        "Accept-Ranges": "bytes",
+        "X-Audio-Stream-Compatible": "audio/mpeg, audio/wav",
+        "X-TTS-Voice-Engine": "XTTS-v2-Coqui, Deepgram-Aura, WebSpeech-Adaptive",
+        "Access-Control-Expose-Headers": "X-AI-Provider, X-AI-Model, X-Audio-Stream-Compatible, X-TTS-Voice-Engine",
       },
     });
   } catch (err: any) {
