@@ -1914,40 +1914,12 @@ export default function NoraTitanPage() {
 
         {/* ─── 3. PANEL DE COMANDOS FIJO Y ACCESIBLE (Sticky Bottom-0 / z-50) ─── */}
         <footer className="fixed bottom-0 left-0 right-0 z-50 p-3 bg-slate-950/95 backdrop-blur-md border-t border-white/10 pb-[max(12px,env(safe-area-inset-bottom))]">
-          <div className="max-w-4xl mx-auto flex flex-col gap-2">
-            {/* Preview imagen adjunta o estado de transcripción */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              {attachedImage && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#1e293b", padding: "4px 9px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", width: "fit-content" }}>
-                  <img src={attachedImage} alt="Preview" style={{ width: "24px", height: "24px", borderRadius: "4px", objectFit: "cover" }} />
-                  <span style={{ fontSize: "10px", color: "#94a3b8" }}>Imagen lista</span>
-                  <button onClick={() => setAttachedImage(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}><X size={12} /></button>
-                </div>
-              )}
-              {isTranscribingAudio && (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", padding: "4px 10px", borderRadius: "8px", width: "fit-content" }}>
-                  <Loader2 size={13} className="animate-spin text-purple-400" />
-                  <span style={{ fontSize: "11px", color: "#d8b4fe", fontWeight: 500 }}>Transcribiendo audio con Whisper v3 turbo...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Input box flotante */}
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "#1e293b", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "24px", padding: "8px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", width: "100%" }}>
-              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
-                <ImageIcon size={22} />
-              </button>
-              <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
-              
-              <button onClick={() => audioInputRef.current?.click()} disabled={isTranscribingAudio} title="Subir y transcribir audio" style={{ background: "none", border: "none", color: isTranscribingAudio ? "#c084fc" : "#94a3b8", cursor: isTranscribingAudio ? "wait" : "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
-                {isTranscribingAudio ? <Loader2 size={22} className="animate-spin text-purple-400" /> : <FileAudio size={22} />}
-              </button>
-              <input
-                type="file"
-                ref={audioInputRef}
-                accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4"
-                style={{ display: "none" }}
-                onChange={async (e) => {
+          <div className="max-w-4xl mx-auto flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-full px-3 py-1.5 shadow-2xl">
+            <button onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', flexShrink: 0 }}><ImageIcon size={20} /></button>
+            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
+            
+            <button onClick={() => audioInputRef.current?.click()} disabled={isTranscribingAudio} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', flexShrink: 0 }}><FileAudio size={20} /></button>
+            <input type="file" ref={audioInputRef} accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4" className="hidden" style={{ display: 'none' }} onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   e.target.value = "";
@@ -1976,75 +1948,19 @@ export default function NoraTitanPage() {
                   } finally {
                     setIsTranscribingAudio(false);
                   }
-                }}
-              />
-              
-              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? "#34d399" : "#94a3b8", cursor: "pointer", flexShrink: 0, padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}>
-                <Camera size={22} />
-              </button>
-
-              <textarea ref={textareaRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onPaste={handlePaste} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} rows={1} placeholder="Mensaje a Nora..." style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "15px", lineHeight: "24px", padding: "8px 4px", resize: "none", maxHeight: "150px", minHeight: "40px", alignSelf: "center", fontFamily: "inherit" }} />
-
-              <button onClick={() => setIsCallModalOpen(true)} title="Llamada PTT" style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "#4ade80", cursor: "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", marginBottom: "1px" }}>
-                <PhoneCall size={18} />
-              </button>
-
-              <button onClick={toggleListening} title="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#94a3b8", cursor: "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", marginBottom: "1px" }}>
-                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-              </button>
-
-              <button onClick={handleSendMessage} disabled={isLoading || (!inputMessage.trim() && !attachedImage)} style={{ backgroundColor: (isLoading || (!inputMessage.trim() && !attachedImage)) ? "#475569" : "#3b82f6", color: "#fff", border: "none", cursor: (isLoading || (!inputMessage.trim() && !attachedImage)) ? "not-allowed" : "pointer", flexShrink: 0, width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", opacity: (isLoading || (!inputMessage.trim() && !attachedImage)) ? 0.6 : 1, marginBottom: "1px" }}>
+                }} />
+            
+            <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} style={{ background: 'none', border: 'none', color: isCameraOpen ? '#4ade80' : '#64748b', cursor: 'pointer', flexShrink: 0 }}><Camera size={20} /></button>
+            
+            <textarea ref={textareaRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onPaste={handlePaste} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }} rows={1} placeholder="Consulta a Nora..." style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontSize: '14px', resize: 'none', height: '40px', paddingTop: '10px' }} />
+            
+            <button onClick={() => setIsCallModalOpen(true)} style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PhoneCall size={18} /></button>
+            
+            <button onClick={toggleListening} style={{ background: isListening ? 'rgba(239,68,68,0.15)' : 'none', border: 'none', color: isListening ? '#ef4444' : '#64748b', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Mic size={18} /></button>
+            
+            <button onClick={handleSendMessage} disabled={isLoading || (!inputMessage.trim() && !attachedImage)} style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-              </button>
-            </div>
-
-            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual (Multilínea y WhatsApp visible) ═══ */}
-            <div
-              style={{
-                textAlign: "center",
-                paddingTop: "4px",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "2px",
-                lineHeight: "1.3"
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  letterSpacing: "0.02em",
-                  background: "linear-gradient(to right, #818cf8, #d8b4fe, #22d3ee)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  userSelect: "all",
-                  textShadow: "0 0 10px rgba(99,102,241,0.25)"
-                }}
-              >
-                © MyJNexoraVisual • Soporte: noraitudev@gmail.com
-              </div>
-              <a
-                href="https://wa.me/5493786414533"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Contactar vía WhatsApp directo"
-                style={{
-                  fontSize: "10.5px",
-                  fontWeight: 700,
-                  color: "#38bdf8",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  userSelect: "all"
-                }}
-              >
-                <span>WhatsApp:</span>
-                <span style={{ color: "#4ade80", letterSpacing: "0.02em" }}>+54 9 3786 41-4533</span>
-              </a>
-            </div>
+            </button>
           </div>
         </footer>
       </main>
