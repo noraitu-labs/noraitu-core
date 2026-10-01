@@ -1951,9 +1951,9 @@ export default function NoraTitanPage() {
             </div>
 
             {/* Input box flotante */}
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "16px", padding: "6px 8px", boxShadow: "0 4px 18px rgba(0,0,0,0.3)" }}>
-              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
-                <ImageIcon size={17} />
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", backgroundColor: "rgba(30,41,59,0.5)", border: `1px solid ${mc.border}`, borderRadius: "20px", padding: "8px 10px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+              <button onClick={() => fileInputRef.current?.click()} title="Adjuntar imagen" style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "12px", transition: "all 0.2s" }}>
+                <ImageIcon size={22} />
               </button>
               <input type="file" ref={fileInputRef} accept="image/*" style={{ display: "none" }} onChange={e => {
                 const f = e.target.files?.[0];
@@ -1970,13 +1970,13 @@ export default function NoraTitanPage() {
                   background: isTranscribingAudio ? "rgba(168,85,247,0.2)" : "none",
                   border: "none",
                   color: isTranscribingAudio ? "#c084fc" : "#64748b",
-                  padding: "6px",
                   cursor: isTranscribingAudio ? "wait" : "pointer",
-                  borderRadius: "8px",
-                  flexShrink: 0
+                  borderRadius: "12px",
+                  flexShrink: 0,
+                  minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s"
                 }}
               >
-                {isTranscribingAudio ? <Loader2 size={17} className="animate-spin text-purple-400" /> : <FileAudio size={17} />}
+                {isTranscribingAudio ? <Loader2 size={22} className="animate-spin text-purple-400" /> : <FileAudio size={22} />}
               </button>
               <input
                 type="file"
@@ -2015,8 +2015,8 @@ export default function NoraTitanPage() {
                 }}
               />
 
-              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", padding: "6px", cursor: "pointer", flexShrink: 0 }}>
-                <Camera size={17} />
+              <button onClick={() => isCameraOpen ? stopCamera() : startCamera(facingMode)} title="Abrir cámara" style={{ background: "none", border: "none", color: isCameraOpen ? mc.badgeText : "#64748b", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "12px", transition: "all 0.2s" }}>
+                <Camera size={22} />
               </button>
 
               <textarea
@@ -2031,10 +2031,10 @@ export default function NoraTitanPage() {
                 placeholder={
                   activeMode === "tea" || autoTEAMode ? "Escribe o toca un pictograma..." :
                   activeMode === "lazarillo" ? "Pregunta qué hay frente a ti..." :
-                  "Consulta a Nora Itu, pega imagen con Ctrl+V..."
+                  "Consulta a Nora Itu..."
                 }
                 aria-label="Mensaje para Nora Itu"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "13px", lineHeight: "19px", padding: "5px 3px", resize: "none", maxHeight: "90px", minHeight: "30px" }}
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#f8fafc", fontSize: "14px", lineHeight: "20px", padding: "14px 6px", resize: "none", maxHeight: "120px", minHeight: "48px" }}
               />
 
               <button
@@ -2045,26 +2045,26 @@ export default function NoraTitanPage() {
                   background: "rgba(34,197,94,0.15)",
                   border: "1px solid rgba(34,197,94,0.3)",
                   color: "#4ade80",
-                  padding: "6px",
-                  borderRadius: "8px",
+                  borderRadius: "14px",
                   cursor: "pointer",
-                  flexShrink: 0
+                  flexShrink: 0,
+                  minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s"
                 }}
               >
-                <PhoneCall size={17} />
+                <PhoneCall size={22} />
               </button>
 
-              <button onClick={toggleListening} title={isListening ? "Detener dictado" : "Hablar con manos libres"} aria-label="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#64748b", padding: "6px", borderRadius: "8px", cursor: "pointer", flexShrink: 0 }}>
-                {isListening ? <MicOff size={17} /> : <Mic size={17} />}
+              <button onClick={toggleListening} title={isListening ? "Detener dictado" : "Hablar con manos libres"} aria-label="Micrófono" style={{ background: isListening ? "rgba(239,68,68,0.15)" : "none", border: "none", color: isListening ? "#ef4444" : "#64748b", borderRadius: "12px", cursor: "pointer", flexShrink: 0, minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>
+                {isListening ? <MicOff size={22} /> : <Mic size={22} />}
               </button>
 
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || (!inputMessage.trim() && !attachedImage)}
                 aria-label="Enviar mensaje"
-                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "10px", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 2px 8px ${mc.accent}55` }}
+                style={{ backgroundColor: mc.accent, color: "#fff", border: "none", borderRadius: "14px", minWidth: "48px", minHeight: "48px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isLoading || (!inputMessage.trim() && !attachedImage) ? "not-allowed" : "pointer", opacity: isLoading || (!inputMessage.trim() && !attachedImage) ? 0.45 : 1, flexShrink: 0, boxShadow: `0 4px 12px ${mc.accent}66`, transition: "all 0.2s" }}
               >
-                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {isLoading ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} />}
               </button>
             </div>
 
