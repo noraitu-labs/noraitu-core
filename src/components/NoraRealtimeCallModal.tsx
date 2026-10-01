@@ -158,9 +158,50 @@ export default function NoraRealtimeCallModal({
     return null;
   };
 
-  // ── 1. PROCESADOR DE COLA TTS STREAMING CON IDIOMA ESTABLE ──
-  const processNextSpeechSentence = useCallback(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  // ── PIPELINE DE VOZ REAL NEURAL (Deepgram Aura / XTTS v2 / Audio MPEG) ──
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playNeuralAudioStream = useCallback(async (text: string, voiceModel: string = "aura-2-javier-es"): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/nora-transcribe?tts=true", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg, audio/wav"
+        },
+        body: JSON.stringify({
+          text,
+          voice: voiceModel, // "aura-2-javier-es" o "aura-2-diana-es"
+          model: "aura-2-latino",
+          format: "audio/mpeg"
+        })
+      });
+
+      if (res.ok && res.headers.get("content-type")?.includes("audio")) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudioRef.current = audio;
+        return new Promise((resolve) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            resolve(true);
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(false);
+          };
+          audio.play().catch(() => resolve(false));
+        });
+      }
+    } catch {
+      // Degradar fluidamente a síntesis neural local
+    }
+    return false;
+  }, []);
+
+  // ── 1. PROCESADOR DE COLA TTS STREAMING CON VOZ NEURAL HIPERREALISTA ──
+  const processNextSpeechSentence = useCallback(async () => {
     if (!isCallAliveRef.current) return;
     if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
 
@@ -185,53 +226,69 @@ export default function NoraRealtimeCallModal({
       try { recognitionRef.current.stop(); } catch {}
     }
 
-    // Usar el idioma establecido para la llamada (sin cambios espontáneos de voz)
-    const lang = callLanguageRef.current || "es-419";
-    const utterance = new SpeechSynthesisUtterance(sentence);
-    utterance.lang = lang;
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    const langPrefix = lang.split("-")[0].toLowerCase();
-    const voice =
-      voices.find(v => v.lang.toLowerCase() === lang.toLowerCase()) ||
-      voices.find(v => v.lang.toLowerCase().startsWith(langPrefix)) ||
-      voices.find(v => v.name.toLowerCase().includes("google") && v.lang.toLowerCase().startsWith(langPrefix)) ||
-      voices.find(v => v.name.toLowerCase().includes("sabina") || v.name.toLowerCase().includes("elena") || v.name.toLowerCase().includes("paulina") || v.name.toLowerCase().includes("monica")) ||
-      voices.find(v => v.lang.toLowerCase().startsWith("es-419") || v.lang.toLowerCase().startsWith("es-us")) ||
-      voices.find(v => v.lang.toLowerCase().startsWith("es"));
-    if (voice) utterance.voice = voice;
-
-    utterance.onend = () => {
+    // 1. Intentar reproducción neural directa de audio/mpeg (Deepgram Aura Latino / XTTS v2)
+    const neuralPlayed = await playNeuralAudioStream(sentence, "aura-2-javier-es").catch(() => false);
+    if (neuralPlayed) {
       isSpeakingRef.current = false;
       if (!isCallAliveRef.current) return;
       if (speechQueueRef.current.length > 0) {
-        processNextSpeechSentence();
-      } else if (!isStreamActiveRef.current) {
-        // Toda la respuesta (red + oraciones) ha culminado
-        setStatus("listening");
-        activateMicrophoneSafely();
-      } else {
-        setStatus("thinking");
-      }
-    };
-
-    utterance.onerror = () => {
-      isSpeakingRef.current = false;
-      if (!isCallAliveRef.current) return;
-      if (speechQueueRef.current.length > 0) {
-        processNextSpeechSentence();
+        setTimeout(processNextSpeechSentence, 130); // Pausa respiratoria natural humana
       } else if (!isStreamActiveRef.current) {
         setStatus("listening");
         activateMicrophoneSafely();
       } else {
         setStatus("thinking");
       }
-    };
+      return;
+    }
 
-    window.speechSynthesis.speak(utterance);
-  }, [activateMicrophoneSafely]);
+    // 2. Fallback de alta fidelidad: Síntesis neural con cadencia humana y pausas respiratorias
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const lang = callLanguageRef.current || "es-419";
+      const utterance = new SpeechSynthesisUtterance(sentence);
+      utterance.lang = lang;
+      utterance.rate = 0.98; // Cadencia natural humana realista
+      utterance.pitch = 1.02;
+
+      const voices = window.speechSynthesis.getVoices();
+      const voice =
+        voices.find(v => v.name.toLowerCase().includes("aura-2-javier") || v.name.toLowerCase().includes("aura-2-diana")) ||
+        voices.find(v => v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural") || v.name.toLowerCase().includes("online")) ||
+        voices.find(v => (v.lang.startsWith("es") || v.lang.includes("es-")) && (v.name.includes("Google") || v.name.includes("Sabina") || v.name.includes("Paulina") || v.name.includes("Monica") || v.name.includes("Elena"))) ||
+        voices.find(v => v.lang.toLowerCase().startsWith("es-419") || v.lang.toLowerCase().startsWith("es-us")) ||
+        voices.find(v => v.lang.toLowerCase().startsWith("es"));
+      if (voice) utterance.voice = voice;
+
+      utterance.onend = () => {
+        isSpeakingRef.current = false;
+        if (!isCallAliveRef.current) return;
+        if (speechQueueRef.current.length > 0) {
+          setTimeout(processNextSpeechSentence, 140); // Pausa respiratoria natural entre oraciones
+        } else if (!isStreamActiveRef.current) {
+          setStatus("listening");
+          activateMicrophoneSafely();
+        } else {
+          setStatus("thinking");
+        }
+      };
+
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
+        if (!isCallAliveRef.current) return;
+        if (speechQueueRef.current.length > 0) {
+          processNextSpeechSentence();
+        } else if (!isStreamActiveRef.current) {
+          setStatus("listening");
+          activateMicrophoneSafely();
+        } else {
+          setStatus("thinking");
+        }
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [activateMicrophoneSafely, playNeuralAudioStream]);
 
   const enqueueSentenceForSpeech = useCallback(
     (chunk: string) => {
@@ -564,7 +621,14 @@ export default function NoraRealtimeCallModal({
     // 2. Abortar petición de red si está en vuelo
     if (abortControllerRef.current) abortControllerRef.current.abort();
 
-    // 3. Detener y purgar síntesis de voz
+    // 3. Detener y purgar síntesis de voz y stream neural
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+      } catch {}
+      currentAudioRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -639,9 +703,9 @@ export default function NoraRealtimeCallModal({
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(3, 7, 18, 0.85)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(2, 4, 8, 0.9)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -653,37 +717,37 @@ export default function NoraRealtimeCallModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          backgroundColor: "#090d16",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
-          borderRadius: "24px",
+          backgroundColor: "#05070c",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          borderRadius: "28px",
           width: "100%",
-          maxWidth: "440px",
+          maxWidth: "420px",
           padding: "24px 20px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           color: "#ffffff",
-          boxShadow: "0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(56, 189, 248, 0.12)",
+          boxShadow: "0 30px 60px -12px rgba(0, 0, 0, 0.95), 0 0 35px rgba(56, 189, 248, 0.1)",
           position: "relative",
           overflow: "hidden"
         }}
       >
         {/* Cabecera de la llamada */}
-        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <span
               style={{
-                width: "10px",
-                height: "10px",
+                width: "9px",
+                height: "9px",
                 borderRadius: "50%",
-                backgroundColor: status === "listening" ? "#22c55e" : status === "speaking" ? "#a855f7" : "#eab308",
-                boxShadow: status === "listening" ? "0 0 10px #22c55e" : "0 0 10px #a855f7"
+                backgroundColor: status === "listening" ? "#22c55e" : status === "speaking" ? "#38bdf8" : "#f59e0b",
+                boxShadow: status === "listening" ? "0 0 10px #22c55e" : status === "speaking" ? "0 0 10px #38bdf8" : "0 0 10px #f59e0b"
               }}
             />
-            <span style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.02em", color: "#f8fafc" }}>
+            <span style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.04em", color: "#ffffff" }}>
               Nora Itu <span style={{ color: "#38bdf8" }}>PRO</span>
             </span>
-            <span style={{ fontSize: "11px", backgroundColor: "rgba(56,189,248,0.15)", color: "#38bdf8", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 8px", borderRadius: "12px", fontWeight: 700 }}>
+            <span style={{ fontSize: "11px", backgroundColor: "rgba(56, 189, 248, 0.12)", color: "#38bdf8", border: "1px solid rgba(56, 189, 248, 0.25)", padding: "2px 8px", borderRadius: "12px", fontWeight: 700, letterSpacing: "0.03em" }}>
               {formatTimer(callDuration)}
             </span>
           </div>
@@ -691,14 +755,17 @@ export default function NoraRealtimeCallModal({
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
               onClick={() => setShowTranscript(s => !s)}
-              title={showTranscript ? "Ocultar texto" : "Ver texto"}
+              title={showTranscript ? "Ocultar transcripción" : "Ver transcripción"}
               style={{
-                background: showTranscript ? "rgba(255,255,255,0.1)" : "none",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-                padding: "6px",
+                background: showTranscript ? "rgba(255, 255, 255, 0.08)" : "none",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "10px",
+                padding: "7px",
                 color: "#94a3b8",
-                cursor: "pointer"
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
               }}
             >
               <MessageSquare size={16} />
@@ -707,11 +774,11 @@ export default function NoraRealtimeCallModal({
               onClick={handleEndCall}
               title="Cerrar llamada"
               style={{
-                background: "rgba(239, 68, 68, 0.2)",
-                border: "1px solid rgba(239, 68, 68, 0.4)",
+                background: "rgba(239, 68, 68, 0.15)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
                 borderRadius: "50%",
-                width: "34px",
-                height: "34px",
+                width: "32px",
+                height: "32px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -719,27 +786,27 @@ export default function NoraRealtimeCallModal({
                 cursor: "pointer"
               }}
             >
-              <PhoneOff size={16} />
+              <PhoneOff size={15} />
             </button>
           </div>
         </div>
 
         {errorMsg && (
-          <div style={{ width: "100%", backgroundColor: "rgba(239, 68, 68, 0.15)", border: "1px solid #ef4444", borderRadius: "10px", padding: "8px 12px", marginBottom: "12px", fontSize: "12px", color: "#fca5a5", textAlign: "center" }}>
+          <div style={{ width: "100%", backgroundColor: "rgba(239, 68, 68, 0.12)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "12px", padding: "8px 12px", marginBottom: "14px", fontSize: "12px", color: "#fca5a5", textAlign: "center" }}>
             {errorMsg}
           </div>
         )}
 
         {/* ─── ESFERA DE AUDIO REACTIVA / NORA AVATAR ─── */}
-        <div style={{ position: "relative", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "relative", margin: "14px 0 20px", display: "flex", alignItems: "center", justifyContent: "center" }}>
           {/* Ondas pulsantes de fondo */}
           <div
             style={{
               position: "absolute",
-              width: status === "speaking" ? "140px" : status === "listening" ? "125px" : "110px",
-              height: status === "speaking" ? "140px" : status === "listening" ? "125px" : "110px",
+              width: status === "speaking" ? "145px" : status === "listening" ? "130px" : "115px",
+              height: status === "speaking" ? "145px" : status === "listening" ? "130px" : "115px",
               borderRadius: "50%",
-              backgroundColor: status === "speaking" ? "rgba(168, 85, 247, 0.25)" : status === "listening" ? "rgba(34, 197, 94, 0.2)" : "rgba(99, 102, 241, 0.15)",
+              backgroundColor: status === "speaking" ? "rgba(56, 189, 248, 0.2)" : status === "listening" ? "rgba(34, 197, 94, 0.15)" : "rgba(99, 102, 241, 0.1)",
               animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
               transition: "all 0.3s ease"
             }}
@@ -748,16 +815,16 @@ export default function NoraRealtimeCallModal({
           <div
             style={{
               position: "relative",
-              width: "90px",
-              height: "90px",
+              width: "92px",
+              height: "92px",
               borderRadius: "50%",
-              border: `3px solid ${status === "speaking" ? "#c084fc" : status === "listening" ? "#4ade80" : "#6366f1"}`,
-              boxShadow: `0 0 25px ${status === "speaking" ? "rgba(192,132,252,0.5)" : status === "listening" ? "rgba(74,222,128,0.5)" : "rgba(99,102,241,0.3)"}`,
+              border: `2px solid ${status === "speaking" ? "#38bdf8" : status === "listening" ? "#4ade80" : "#6366f1"}`,
+              boxShadow: `0 0 25px ${status === "speaking" ? "rgba(56, 189, 248, 0.4)" : status === "listening" ? "rgba(74, 222, 128, 0.4)" : "rgba(99, 102, 241, 0.25)"}`,
               overflow: "hidden",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "#111827",
+              backgroundColor: "#0b0f19",
               transition: "all 0.3s ease"
             }}
           >
@@ -770,23 +837,23 @@ export default function NoraRealtimeCallModal({
               }}
             />
             {status === "thinking" && (
-              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Loader2 size={28} className="animate-spin" color="#c084fc" />
+              <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0, 0, 0, 0.65)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Loader2 size={28} className="animate-spin" color="#38bdf8" />
               </div>
             )}
           </div>
         </div>
 
         {/* Estado conversacional dinámico */}
-        <div style={{ textAlign: "center", marginBottom: "14px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: status === "speaking" ? "#c084fc" : status === "listening" ? "#4ade80" : status === "thinking" ? "#e3b341" : "#94a3b8" }}>
-            {status === "listening" && (isMuted ? "Micrófono Silenciado" : "● Nora te escucha con atención...")}
+        <div style={{ textAlign: "center", marginBottom: "18px" }}>
+          <div style={{ fontSize: "13.5px", fontWeight: 700, letterSpacing: "0.03em", color: status === "speaking" ? "#38bdf8" : status === "listening" ? "#4ade80" : status === "thinking" ? "#fbbf24" : "#ffffff" }}>
+            {status === "listening" && (isMuted ? "Micrófono Silenciado" : "● Nora te escucha con atención")}
             {status === "speaking" && "● Nora te está hablando..."}
-            {status === "thinking" && "● Nora está pensando la respuesta..."}
-            {status === "connecting" && "● Conectando llamada..."}
+            {status === "thinking" && "● Nora está procesando..."}
+            {status === "connecting" && "● Conectando llamada neural..."}
           </div>
-          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
-            {!pttMode ? "Llamada manos libres activa · Hablá normalmente" : "Modo PTT activado · Mantené presionado para hablar"}
+          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", letterSpacing: "0.02em" }}>
+            {!pttMode ? "Llamada manos libres continua • Habla normalmente" : "Modo PTT activado • Mantén presionado para hablar"}
           </div>
         </div>
 
@@ -795,14 +862,14 @@ export default function NoraRealtimeCallModal({
           <div
             style={{
               width: "100%",
-              minHeight: "130px",
-              maxHeight: "180px",
-              backgroundColor: "rgba(15, 23, 42, 0.7)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
+              minHeight: "120px",
+              maxHeight: "170px",
+              backgroundColor: "rgba(10, 15, 26, 0.7)",
+              border: "1px solid rgba(255, 255, 255, 0.06)",
               borderRadius: "16px",
               padding: "12px 14px",
               overflowY: "auto",
-              marginBottom: "16px",
+              marginBottom: "18px",
               display: "flex",
               flexDirection: "column",
               gap: "8px",
@@ -810,55 +877,55 @@ export default function NoraRealtimeCallModal({
             }}
           >
             {callHistory.map((item, idx) => (
-              <div key={idx} style={{ lineHeight: "1.4" }}>
-                <span style={{ fontWeight: 700, color: item.role === "user" ? "#38bdf8" : "#c084fc" }}>
-                  {item.role === "user" ? "Vos: " : "Nora: "}
+              <div key={idx} style={{ lineHeight: "1.45" }}>
+                <span style={{ fontWeight: 700, letterSpacing: "0.02em", color: item.role === "user" ? "#38bdf8" : "#a78bfa" }}>
+                  {item.role === "user" ? "Tú: " : "Nora: "}
                 </span>
-                <span style={{ color: "#e2e8f0" }}>{item.text}</span>
+                <span style={{ color: "#ffffff" }}>{item.text}</span>
               </div>
             ))}
 
             {/* Texto en progreso */}
             {userTranscript && (
-              <div style={{ lineHeight: "1.4", fontStyle: "italic", opacity: 0.9 }}>
-                <span style={{ fontWeight: 700, color: "#38bdf8" }}>Vos (hablando): </span>
+              <div style={{ lineHeight: "1.45", fontStyle: "italic", opacity: 0.9 }}>
+                <span style={{ fontWeight: 700, color: "#38bdf8" }}>Tú (hablando): </span>
                 <span style={{ color: "#93c5fd" }}>{userTranscript}</span>
               </div>
             )}
             {status === "speaking" && assistantText && !callHistory.some(h => h.text === assistantText) && (
-              <div style={{ lineHeight: "1.4" }}>
-                <span style={{ fontWeight: 700, color: "#c084fc" }}>Nora: </span>
-                <span style={{ color: "#f8fafc" }}>{assistantText}</span>
+              <div style={{ lineHeight: "1.45" }}>
+                <span style={{ fontWeight: 700, color: "#a78bfa" }}>Nora: </span>
+                <span style={{ color: "#ffffff" }}>{assistantText}</span>
               </div>
             )}
 
             {callHistory.length === 0 && !userTranscript && !assistantText && (
-              <div style={{ color: "#64748b", margin: "auto", textAlign: "center", fontSize: "12px" }}>
-                Hablá con libertad. Nora te escucha y responde de inmediato.
+              <div style={{ color: "#64748b", margin: "auto", textAlign: "center", fontSize: "12px", letterSpacing: "0.02em" }}>
+                Habla con naturalidad. Nora responderá con voz neural hiperrealista.
               </div>
             )}
           </div>
         )}
 
-        {/* ─── CONTROLES PRINCIPALES DE LLAMADA (Círculo centrado elegante) ─── */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "20px", marginBottom: "16px", width: "100%" }}>
+        {/* ─── CONTROLES PRINCIPALES DE LLAMADA (Círculo centrado elegante #dc2626) ─── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "22px", marginBottom: "18px", width: "100%" }}>
           {/* Silenciar micrófono */}
           <button
             onClick={toggleMute}
             title={isMuted ? "Activar micrófono" : "Silenciar micrófono"}
             style={{
-              width: "50px",
-              height: "50px",
+              width: "48px",
+              height: "48px",
               borderRadius: "50%",
-              border: isMuted ? "2px solid #ef4444" : "1px solid rgba(255,255,255,0.12)",
-              backgroundColor: isMuted ? "rgba(239,68,68,0.2)" : "rgba(30,41,59,0.7)",
-              color: isMuted ? "#f87171" : "#f8fafc",
+              border: isMuted ? "2px solid #ef4444" : "1px solid rgba(255, 255, 255, 0.1)",
+              backgroundColor: isMuted ? "rgba(239, 68, 68, 0.2)" : "rgba(15, 23, 42, 0.7)",
+              color: isMuted ? "#f87171" : "#ffffff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
               transition: "all 0.15s ease",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.4)"
             }}
           >
             {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
@@ -883,14 +950,14 @@ export default function NoraRealtimeCallModal({
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: isPressingPTT ? "0 0 25px rgba(220,38,38,0.7)" : "0 6px 20px rgba(22,163,74,0.4)",
-                transform: isPressingPTT ? "scale(0.95)" : "scale(1)",
+                boxShadow: isPressingPTT ? "0 0 25px rgba(220, 38, 38, 0.6)" : "0 6px 20px rgba(22, 163, 74, 0.4)",
+                transform: isPressingPTT ? "scale(0.96)" : "scale(1)",
                 transition: "all 0.15s ease"
               }}
             >
               <Radio size={24} />
-              <span style={{ fontSize: "10px", fontWeight: 700, marginTop: "2px" }}>
-                {isPressingPTT ? "SOLTÁ" : "HABLAR"}
+              <span style={{ fontSize: "10px", fontWeight: 700, marginTop: "2px", letterSpacing: "0.04em" }}>
+                {isPressingPTT ? "SOLTAR" : "HABLAR"}
               </span>
             </button>
           ) : (
@@ -899,10 +966,10 @@ export default function NoraRealtimeCallModal({
               onClick={handleEndCall}
               title="Cortar llamada"
               style={{
-                width: "70px",
-                height: "70px",
+                width: "68px",
+                height: "68px",
                 borderRadius: "50%",
-                border: "2px solid rgba(239, 68, 68, 0.4)",
+                border: "none",
                 backgroundColor: "#dc2626",
                 color: "#ffffff",
                 cursor: "pointer",
@@ -910,12 +977,12 @@ export default function NoraRealtimeCallModal({
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 8px 25px rgba(220, 38, 38, 0.5), 0 0 15px rgba(220, 38, 38, 0.3)",
+                boxShadow: "0 8px 24px rgba(220, 38, 38, 0.45), 0 0 12px rgba(220, 38, 38, 0.25)",
                 transition: "transform 0.15s ease",
               }}
             >
               <PhoneOff size={24} />
-              <span style={{ fontSize: "9px", fontWeight: 700, marginTop: "2px", letterSpacing: "0.05em" }}>CORTAR</span>
+              <span style={{ fontSize: "9px", fontWeight: 800, marginTop: "3px", letterSpacing: "0.06em" }}>CORTAR</span>
             </button>
           )}
 
@@ -924,25 +991,25 @@ export default function NoraRealtimeCallModal({
             onClick={() => setPttMode(p => !p)}
             title={pttMode ? "Cambiar a Manos Libres" : "Cambiar a Push To Talk"}
             style={{
-              width: "50px",
-              height: "50px",
+              width: "48px",
+              height: "48px",
               borderRadius: "50%",
-              border: pttMode ? "2px solid #38bdf8" : "1px solid rgba(255,255,255,0.12)",
-              backgroundColor: pttMode ? "rgba(56,189,248,0.2)" : "rgba(30,41,59,0.7)",
+              border: pttMode ? "2px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.1)",
+              backgroundColor: pttMode ? "rgba(56, 189, 248, 0.18)" : "rgba(15, 23, 42, 0.7)",
               color: pttMode ? "#38bdf8" : "#94a3b8",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
               transition: "all 0.15s ease",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.4)"
             }}
           >
             <Radio size={20} />
           </button>
         </div>
 
-        {/* Input de texto complementario por si el usuario prefiere escribir algo puntual */}
+        {/* Input de texto complementario */}
         <form onSubmit={handleSendManualText} style={{ width: "100%", display: "flex", gap: "8px" }}>
           <input
             type="text"
@@ -951,20 +1018,21 @@ export default function NoraRealtimeCallModal({
             placeholder="O escribe algo aquí durante la llamada..."
             style={{
               flex: 1,
-              backgroundColor: "rgba(15, 23, 42, 0.8)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
+              backgroundColor: "rgba(10, 15, 26, 0.8)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "9999px",
               padding: "10px 16px",
               color: "#ffffff",
               fontSize: "13px",
-              outline: "none"
+              outline: "none",
+              letterSpacing: "0.02em"
             }}
           />
           <button
             type="submit"
             disabled={!textInput.trim() || status === "thinking"}
             style={{
-              backgroundColor: textInput.trim() ? "#0284c7" : "rgba(255,255,255,0.06)",
+              backgroundColor: textInput.trim() ? "#0284c7" : "rgba(255, 255, 255, 0.05)",
               border: "none",
               borderRadius: "9999px",
               padding: "0 16px",
