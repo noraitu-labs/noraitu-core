@@ -784,11 +784,13 @@ export default function NoraTitanPage() {
         cameraStream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
       }
 
-      // Método Cámara Titan: Aislamos el audio completamente y forzamos cámara trasera
+      // Cámara Titan: video trasero + audio nativo habilitado para modo Lazarillo
       const videoStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { exact: "environment" } },
-        audio: false
+        audio: true
       });
+      // Silenciar pista de audio en el elemento <video> para evitar eco, pero mantener el track activo
+      if (videoRef.current) videoRef.current.muted = true;
       setCameraStream(videoStream);
       setIsCameraOpen(true);
       setTimeout(() => {
@@ -1762,13 +1764,14 @@ export default function NoraTitanPage() {
                 </div>
               </div>
 
-              {/* Visor de Video */}
-              <div style={{ flex: 1, minHeight: 0, position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+              {/* Visor de Video — garantizado visible */}
+              <div style={{ flex: 1, minHeight: "260px", height: "50dvh", maxHeight: "55dvh", position: "relative", backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", zIndex: 82 }}>
                 <video
                   ref={videoRef}
                   playsInline
                   muted
-                  style={{ width: "100%", height: "100%", objectFit: "contain", transform: facingMode === "user" ? "scaleX(-1)" : "none", minHeight: "240px", maxHeight: "50dvh" }}
+                  autoPlay
+                  style={{ width: "100%", height: "100%", objectFit: "cover", transform: facingMode === "user" ? "scaleX(-1)" : "none", display: "block" }}
                 />
                 <canvas ref={canvasRef} style={{ display: "none" }} />
                 {cameraCapturing && (
@@ -1916,10 +1919,10 @@ export default function NoraTitanPage() {
         <footer className="fixed bottom-0 left-0 right-0 z-50 p-3 bg-slate-950/95 backdrop-blur-md border-t border-white/10 pb-[max(12px,env(safe-area-inset-bottom))]">
           <div className="max-w-4xl mx-auto flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-full px-3 py-1.5 shadow-2xl">
             <button onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', flexShrink: 0 }}><ImageIcon size={20} /></button>
-            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
+            <input type="file" ref={fileInputRef} accept="image/*" className="hidden" style={{ display: 'none', visibility: 'hidden', position: 'absolute', pointerEvents: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = ev => setAttachedImage(ev.target?.result as string); r.readAsDataURL(f); } }} />
             
             <button onClick={() => audioInputRef.current?.click()} disabled={isTranscribingAudio} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', flexShrink: 0 }}><FileAudio size={20} /></button>
-            <input type="file" ref={audioInputRef} accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4" className="hidden" style={{ display: 'none' }} onChange={async (e) => {
+            <input type="file" ref={audioInputRef} accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.opus,.mp4" className="hidden" style={{ display: 'none', visibility: 'hidden', position: 'absolute', pointerEvents: 'none' }} onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
                   e.target.value = "";
