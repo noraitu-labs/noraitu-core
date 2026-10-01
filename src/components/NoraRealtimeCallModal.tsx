@@ -214,9 +214,11 @@ export default function NoraRealtimeCallModal({
           };
           audio.play().catch(() => resolve(false));
         });
+      } else {
+        alert(`AUDIO ENGINE ERROR: Status ${res.status} | Content-Type: ${res.headers.get("content-type")}`);
       }
-    } catch {
-      // Degradar fluidamente a síntesis neural local
+    } catch (err: any) {
+      alert(`AUDIO NETWORK FAILURE: ${err?.message || err}`);
     }
     return false;
   }, []);
