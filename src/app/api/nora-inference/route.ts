@@ -9,12 +9,13 @@ import {
   NoraLearnedInsight,
 } from "@/lib/mongodb";
 import { logToNeon } from "@/lib/db";
+import { getOrUpdateWebCache } from "@/lib/webCache";
 
 // ══════════════════════════════════════════════════════════════
-//  /api/nora-inference  →  Motor de Inferencia Cloud-Native (Costo Cero)
-//  Procesamiento ultra-rápido Groq LPU (Llama 3.3 70B / Llama 3.2 Vision)
+//  /api/nora-inference  →  Motor de Inferencia Cloud & Local (Costo Cero)
+//  Soporte para Llama 3.3, Qwen 2.5, DeepSeek-R1 y Groq/SambaNova
 //  - Fail-Safe Total: MongoDB y Neon corren 100% asíncronos (fire-and-forget)
-//  - Latencia cero: El streaming a Groq inicia en milisegundos sin bloqueos de BD
+//  - Latencia cero: Streaming ultra-rápido con caché de actualidad en Neon SQL
 // ══════════════════════════════════════════════════════════════
 
 // PARCHE 1 — RUNTIME CONFIGURATION
@@ -35,7 +36,8 @@ interface RequestPayload {
   imageBase64?: string | null;
   history?: ChatHistoryItem[];
   mode?: string;
-  provider?: "groq" | "sambanova";
+  provider?: "groq" | "sambanova" | "ollama" | "local";
+  model?: string;
   visualTelemetry?: string | null;
   deviceLocation?: any;
   clientDateTime?: string | null;
@@ -112,27 +114,35 @@ async function getActiveGroqModels(groq: Groq): Promise<string[]> {
 
 async function executeToolSearch(query: string): Promise<string> {
   const q = query.toLowerCase();
-  
-  // Scraper Nativo Simulado de Altísima Estabilidad (Evita bloqueos de CORS en Serverless)
-  if (q.includes("clima") || q.includes("tiempo")) {
-    try {
-      // Simulación de parseo de datos meteorológicos locales actualizados a Octubre 2026
-      return "Contexto Climatológico Nacio (Ituzaingó/Corrientes): Tiempo primaveral estable, nubes y claros con marcas térmicas entre 14°C de mínima y 24°C de máxima. Vientos del sureste a 15 km/h. Sin alertas meteorológicas vigentes.";
-    } catch {
-      return "Clima en Ituzaingó, Corrientes: 24°C, cielo parcialmente cubierto.";
-    }
+  let keySource = "noticias_general";
+
+  if (q.includes("clima") || q.includes("tiempo") || q.includes("corrientes") || q.includes("ituzaingo")) {
+    keySource = "noticias_corrientes";
+  } else if (
+    q.includes("dolar") ||
+    q.includes("dólar") ||
+    q.includes("cotizacion") ||
+    q.includes("cotización") ||
+    q.includes("precio") ||
+    q.includes("economia") ||
+    q.includes("economía")
+  ) {
+    keySource = "noticias_economia";
+  } else if (
+    q.includes("ia") ||
+    q.includes("inteligencia") ||
+    q.includes("tecnologia") ||
+    q.includes("tecnología")
+  ) {
+    keySource = "noticias_tecnologia";
   }
 
-  if (q.includes("noticia") || q.includes("hoy") || q.includes("corrientes") || q.includes("ituzaingo")) {
-    try {
-      // Simulación de lectura de feeds de portales como El Litoral / Época
-      return "Titulares del Ecosistema Local (Corrientes): 1. Ituzaingó se consolida en la Feria Internacional del Turismo promocionando el corredor Gran Iberá. 2. Lanzamiento oficial del 1° Congreso Internacional Bubalino y la Expo Búfalos bajo el lema 'El búfalo de Corrientes al mundo'. 3. Prefectura Naval desplegó operativos de control ambiental en la zona fronteriza.";
-    } catch {
-      return "Noticias: Ituzaingó avanza con su agenda de turismo regional y el Congreso Internacional Bubalino.";
-    }
+  try {
+    return await getOrUpdateWebCache(keySource);
+  } catch (err: any) {
+    console.warn("[executeToolSearch Error]:", err?.message || err);
+    return "Operación normal. Sin alertas meteorológicas ni novedades críticas.";
   }
-
-  return "Datos de contingencia: Operación comercial normal en la región del NEA.";
 }
 
 function selectModel(hasImage: boolean, activeModels: string[]): string {
@@ -152,15 +162,16 @@ function selectModel(hasImage: boolean, activeModels: string[]): string {
     return process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview";
   }
 
-  // Conversational text candidates (prioritizing high-power, fast conversational LLMs)
+  // Conversational text candidates (prioritizing Llama 3.3, DeepSeek-R1, Qwen 2.5)
   const textCandidates = [
     process.env.GROQ_MODEL_TEXT,
+    "llama-3.3-70b-versatile",
+    "deepseek-r1-distill-llama-70b",
+    "deepseek-r1-distill-qwen-32b",
+    "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-    "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "allam-2-7b",
     "llama3-70b-8192",
     "llama3-8b-8192",
     "mixtral-8x7b-32768",
@@ -250,28 +261,32 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── INTERCEPTOR FINANCIERO Y DE ACTUALIDAD EN TIEMPO REAL ──
+    // ── GESTIÓN DE ACTUALIDAD EN TIEMPO REAL VÍA CACHÉ NEON SQL (30 MIN TTL) ──
     const userTextLower = userText.toLowerCase();
-    
-    // Interceptor Financiero
-    const isFinancialQuery = /(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio del d[oó]lar|cu[aá]nto est[aá]|d[oó]lar hoy)/i.test(userTextLower);
-    const financialInjection = isFinancialQuery ? `
-[DATOS FINANCIEROS INYECTADOS EN TIEMPO REAL — 30 de septiembre de 2026]:
-- Dólar Oficial BNA: Compra $1.490 / Venta $1.540
-- Dólar Blue (informal): Compra $1.540 / Venta $1.560
-- Dólar MEP / Bolsa: ~$1.535
-- Dólar CCL / Contado con Liquidación: ~$1.548
-- Euro Oficial: ~$1.650
-- REGLA ABSOLUTA: Debes responder con ESTAS cifras concretas. Está PROHIBIDO decir "no sé", "no tengo acceso" o "no puedo confirmar el valor" cuando se trata de cotizaciones del dólar — tienes los datos inyectados arriba. Usálos con naturalidad y precisión profesional.` : "";
+    let cacheKey = "noticias_general";
+    if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(userTextLower)) {
+      cacheKey = "noticias_economia";
+    } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(userTextLower)) {
+      cacheKey = "noticias_corrientes";
+    } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(userTextLower)) {
+      cacheKey = "noticias_tecnologia";
+    }
 
-    // Interceptor de Noticias
-    const isNewsQuery = /(noticias|pas[oó] hoy|[úu]ltimo momento|clima|novedades)/i.test(userTextLower);
-    const newsInjection = isNewsQuery ? `
-[FEED DE NOTICIAS PÚBLICAS Y CLIMA — 30 de Septiembre de 2026]:
-- CLIMA (Ituzaingó, Argentina): Mayormente soleado, temperatura de 26°C, sin probabilidad de lluvias.
-- NOVEDAD GLOBAL: El lanzamiento de nuevas capacidades en modelos de inteligencia artificial multimodal consolida avances significativos en educación inclusiva (TEA).
-- NOVEDAD REGIONAL: Expectativas comerciales de fin de mes marcan un repunte del 4% en el consumo del NEA.
-- REGLA ABSOLUTA: Prohíbido decir que no tienes acceso a internet o recomendar links. Informa directamente los datos de arriba con tono profesional 5 estrellas, muy acotado.` : "";
+    const cleanActualidadContext = await getOrUpdateWebCache(cacheKey);
+
+    const antiHallucinationDirective = `
+[DIRECTIVA ANTI-ALUCINACIÓN ESTRICTA]:
+- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote ÚNICA Y EXCLUSIVAMENTE en la información explícita provista en las etiquetas <contexto_actualidad>.
+- Si la información provista en <contexto_actualidad> no es suficiente o no contiene los datos solicitados por el usuario, debes declarar con total precisión y honestidad: "No poseo información actualizada suficiente sobre ese tema".
+- Está TERMINANTEMENTE PROHIBIDO inventar información, suponer acontecimientos o cotizaciones no mencionadas, alucinar noticias o derivar al usuario hacia enlaces externos o páginas web.`;
+
+    const contextoActualidadBlock = `
+<contexto_actualidad>
+Fecha y hora oficial del servidor: ${nowServer.toLocaleString("es-AR", { dateStyle: "full", timeStyle: "medium", timeZone: "America/Argentina/Buenos_Aires" })} (ISO: ${nowServer.toISOString()})
+Tópico indexado: ${cacheKey}
+Información verificada en tiempo real:
+${cleanActualidadContext}
+</contexto_actualidad>`;
 
     const realtimeTelemetryContext = `
 [TELEMETRÍA EN TIEMPO REAL DEL DISPOSITIVO Y ENTORNO]:
@@ -279,7 +294,9 @@ export async function POST(req: Request) {
 - Ubicación geográfica detectada del dispositivo: ${locationSummary}
 - REGLA ESTRICTA DE GEOLOCALIZACIÓN: La ubicación física activa del usuario es ${locationSummary}. Si te preguntan "¿dónde me encuentro?", "¿cuál es mi ubicación geográfica actual?" o solicitan datos de comercios, comisarías, farmacias o lugares cercanos, responde categóricamente con esta ubicación (Ituzaingó, Provincia de Corrientes, Argentina y sus coordenadas). NUNCA asumas que está en Buenos Aires a menos que las coordenadas satelitales del dispositivo indiquen explícitamente otra provincia.
 - Tienes acceso integral a información de servicios públicos, comisarías, hospitales, plazas, escuelas, centros de formación y comercios en esta zona y en todo el mundo.
-- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.${financialInjection}${newsInjection}`;
+- Cuando el usuario consulte por lugares cercanos, comisarías, farmacias u hospitales, oriéntalo con precisión utilizando esta ubicación activa.
+${antiHallucinationDirective}
+${contextoActualidadBlock}`;
 
     const globalLearningMemory = await getGlobalLearningSummary("nora-itu");
     const learningBlock = globalLearningMemory
@@ -336,7 +353,148 @@ export async function POST(req: Request) {
     const sambanovaKey = process.env.SAMBANOVA_API_KEY?.trim();
 
     // ─────────────────────────────────────────────────────────────
-    // 2. CASO A: SambaNova Cloud
+    // 2. CASO 0: MODELOS LOCALES (Llama 3.3, Qwen 2.5, DeepSeek-R1 vía Ollama / Servidor Local)
+    // ─────────────────────────────────────────────────────────────
+    const isLocalProvider =
+      provider === "ollama" ||
+      provider === "local" ||
+      process.env.AI_PROVIDER === "ollama" ||
+      process.env.AI_PROVIDER === "local";
+
+    if (isLocalProvider) {
+      const localBaseUrl =
+        process.env.OLLAMA_BASE_URL ||
+        process.env.LOCAL_LLM_URL ||
+        "http://127.0.0.1:11434";
+
+      let chosenModel = body.model || process.env.LOCAL_MODEL_NAME || "llama3.3";
+      const normModel = chosenModel.toLowerCase();
+      if (normModel.includes("deepseek") || normModel.includes("r1")) {
+        chosenModel = chosenModel.includes(":") ? chosenModel : "deepseek-r1:latest";
+      } else if (normModel.includes("qwen")) {
+        chosenModel = chosenModel.includes(":") ? chosenModel : "qwen2.5:latest";
+      } else if (normModel.includes("llama")) {
+        chosenModel = chosenModel.includes(":") ? chosenModel : "llama3.3:latest";
+      }
+
+      try {
+        const isNativeOllama = !localBaseUrl.endsWith("/v1");
+        const endpoint = isNativeOllama
+          ? `${localBaseUrl.replace(/\/$/, "")}/api/chat`
+          : `${localBaseUrl.replace(/\/$/, "")}/chat/completions`;
+
+        const requestBody = isNativeOllama
+          ? {
+              model: chosenModel,
+              messages: messages.map((m: any) => ({
+                role: m.role,
+                content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+              })),
+              stream: true,
+              options: { temperature: 0.6 },
+            }
+          : {
+              model: chosenModel,
+              messages,
+              stream: true,
+              temperature: 0.6,
+            };
+
+        const localRes = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (localRes.ok && localRes.body) {
+          const encoder = new TextEncoder();
+          let fullText = "";
+
+          const stream = new ReadableStream({
+            async start(controller) {
+              const reader = localRes.body!.getReader();
+              const decoder = new TextDecoder();
+              let buffer = "";
+
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  buffer += decoder.decode(value, { stream: true });
+                  const lines = buffer.split("\n");
+                  buffer = lines.pop() || "";
+
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+
+                    if (isNativeOllama) {
+                      try {
+                        const parsed = JSON.parse(trimmed);
+                        const chunk = parsed.message?.content || "";
+                        if (chunk) {
+                          fullText += chunk;
+                          controller.enqueue(encoder.encode(chunk));
+                        }
+                        if (parsed.done) {
+                          controller.close();
+                          triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
+                          return;
+                        }
+                      } catch {}
+                    } else {
+                      if (trimmed === "data: [DONE]") {
+                        controller.close();
+                        triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
+                        return;
+                      }
+                      if (trimmed.startsWith("data: ")) {
+                        try {
+                          const parsed = JSON.parse(trimmed.slice(6));
+                          const chunk = parsed.choices?.[0]?.delta?.content || "";
+                          if (chunk) {
+                            fullText += chunk;
+                            controller.enqueue(encoder.encode(chunk));
+                          }
+                        } catch {}
+                      }
+                    }
+                  }
+                }
+                controller.close();
+                triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
+              } catch (err) {
+                controller.error(err);
+              }
+            },
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8",
+              "Transfer-Encoding": "chunked",
+              "Cache-Control": "no-cache, no-transform",
+              "X-AI-Provider": "local-ollama",
+              "X-AI-Model": chosenModel,
+            },
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[Local LLM Warning]: Falló conexión a ${localBaseUrl} (${err?.message}). Continuando a fallback cloud.`);
+        if (!groqKey && !sambanovaKey) {
+          return NextResponse.json(
+            {
+              error: `Fallo de conexión al modelo local (${chosenModel}) en ${localBaseUrl}`,
+              details: err?.message || "Servidor no accesible",
+            },
+            { status: 503 }
+          );
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. CASO A: SambaNova Cloud
     // ─────────────────────────────────────────────────────────────
     if (provider === "sambanova" || (!groqKey && sambanovaKey)) {
       if (!sambanovaKey) {
@@ -499,11 +657,12 @@ export async function POST(req: Request) {
         ]
       : [
           selectModel(false, activeModels),
+          "llama-3.3-70b-versatile",
+          "deepseek-r1-distill-llama-70b",
+          "deepseek-r1-distill-qwen-32b",
+          "qwen/qwen3.8-27b",
           "openai/gpt-oss-120b",
           "openai/gpt-oss-20b",
-          "qwen/qwen3.8-27b",
-          "allam-2-7b",
-          "llama-3.3-70b-versatile",
           "llama-3.1-8b-instant",
         ];
 

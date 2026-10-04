@@ -26,6 +26,17 @@ export async function ensureTablesExist() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS web_cache (
+        id SERIAL PRIMARY KEY,
+        key_source VARCHAR(255) UNIQUE NOT NULL,
+        content TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_web_cache_key ON web_cache(key_source);
+    `;
     tableChecked = true;
   } catch (err) {
     console.warn("[Neon DB Init Warning]:", err);
