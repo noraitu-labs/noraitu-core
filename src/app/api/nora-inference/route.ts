@@ -270,6 +270,8 @@ export async function POST(req: Request) {
       cacheKey = "noticias_corrientes";
     } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(userTextLower)) {
       cacheKey = "noticias_tecnologia";
+    } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1)/i.test(userTextLower)) {
+      cacheKey = "noticias_deportes";
     }
 
     const cleanActualidadContext = await getOrUpdateWebCache(cacheKey);
@@ -363,8 +365,8 @@ ${contextoActualidadBlock}`;
 
     if (isLocalProvider) {
       const localBaseUrl =
-        process.env.OLLAMA_BASE_URL ||
-        process.env.LOCAL_LLM_URL ||
+        process.env.OLLAMA_BASE_URL?.trim() ||
+        process.env.LOCAL_LLM_URL?.trim() ||
         "http://127.0.0.1:11434";
 
       let chosenModel = body.model || process.env.LOCAL_MODEL_NAME || "llama3.3";

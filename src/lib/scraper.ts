@@ -24,6 +24,10 @@ const SOURCES: Record<string, string[]> = {
   noticias_tecnologia: [
     "https://news.google.com/rss/search?q=inteligencia+artificial+tecnologia&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
+  noticias_deportes: [
+    "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419&gl=AR&ceid=AR:es-419",
+    "https://news.google.com/rss/search?q=futbol+deportes+argentina&hl=es-419&gl=AR&ceid=AR:es-419",
+  ],
 };
 
 function decodeHtmlEntities(str: string): string {
