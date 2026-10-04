@@ -10,6 +10,7 @@ import {
 } from "@/lib/mongodb";
 import { logToNeon } from "@/lib/db";
 import { getOrUpdateWebCache } from "@/lib/webCache";
+import { createWorkflow, RetryableError } from "@/lib/workflow";
 
 // ══════════════════════════════════════════════════════════════
 //  /api/nora-inference  →  Motor de Inferencia Cloud & Local (Costo Cero)
@@ -196,6 +197,188 @@ function selectModel(hasImage: boolean, activeModels: string[]): string {
   return process.env.GROQ_MODEL_TEXT || "openai/gpt-oss-120b";
 }
 
+interface WorkflowInput {
+  sessionId: string;
+  systemPrompt: string;
+  userText: string;
+  imageBase64: string | null;
+  history: ChatHistoryItem[];
+  mode: string;
+  model?: string;
+  deviceLocation: any;
+  clientDateTime?: string | null;
+}
+
+interface WorkflowOutput {
+  content: string;
+  model: string;
+  provider: string;
+  cacheKey: string;
+}
+
+/**
+ * Workflow durable de inferencia estructurado en pasos (Steps)
+ * Mitiga Function Timeouts en Vercel aislando scraping y LLM pesado con retries automáticos.
+ */
+const noraInferenceWorkflow = createWorkflow<WorkflowInput, WorkflowOutput>(
+  "nora_inference_pipeline",
+  async (step, input) => {
+    // ─────────────────────────────────────────────────────────────
+    // STEP 1: Scraping y Caché Neon ('obtener_contexto')
+    // ─────────────────────────────────────────────────────────────
+    const contextData = await step.run(
+      "obtener_contexto",
+      async () => {
+        const textLower = (input.userText || "").toLowerCase();
+        let cacheKey = "noticias_general";
+
+        if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(textLower)) {
+          cacheKey = "noticias_economia";
+        } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(textLower)) {
+          cacheKey = "noticias_corrientes";
+        } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(textLower)) {
+          cacheKey = "noticias_tecnologia";
+        } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1)/i.test(textLower)) {
+          cacheKey = "noticias_deportes";
+        }
+
+        const content = await getOrUpdateWebCache(cacheKey);
+        return { cacheKey, content };
+      },
+      { retries: 2, backoffMs: 1000 }
+    );
+
+    // Preparación del Prompt Estructurado con Contexto y Directivas Anti-Alucinación
+    const nowServer = new Date();
+    const formattedDateTime = input.clientDateTime || nowServer.toLocaleString("es-AR", {
+      dateStyle: "full",
+      timeStyle: "medium",
+      timeZone: "America/Argentina/Buenos_Aires",
+    });
+
+    const antiHallucinationDirective = `
+[DIRECTIVA ANTI-ALUCINACIÓN ESTRICTA]:
+- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote ÚNICA Y EXCLUSIVAMENTE en la información explícita provista en las etiquetas <contexto_actualidad>.
+- Si la información provista en <contexto_actualidad> no es suficiente o no contiene los datos solicitados por el usuario, debes declarar con total precisión y honestidad: "No poseo información actualizada suficiente sobre ese tema".
+- Está TERMINANTEMENTE PROHIBIDO inventar información, suponer acontecimientos o cotizaciones no mencionadas, alucinar noticias o derivar al usuario hacia enlaces externos o páginas web.`;
+
+    const contextoActualidadBlock = `
+<contexto_actualidad>
+Fecha y hora oficial del servidor: ${nowServer.toLocaleString("es-AR", { dateStyle: "full", timeStyle: "medium", timeZone: "America/Argentina/Buenos_Aires" })} (ISO: ${nowServer.toISOString()})
+Tópico indexado: ${contextData.cacheKey}
+Información verificada en tiempo real:
+${contextData.content}
+</contexto_actualidad>`;
+
+    const telemetryBlock = `
+[TELEMETRÍA EN TIEMPO REAL DEL DISPOSITIVO Y ENTORNO]:
+- Fecha y hora exacta actual: ${formattedDateTime}
+${antiHallucinationDirective}
+${contextoActualidadBlock}`;
+
+    const effectivePrompt = input.systemPrompt && !input.systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
+      ? `${NORA_SYSTEM_DIRECTIVE}\n${telemetryBlock}\n\n[Directiva adicional de modo: ${input.mode}]:\n${input.systemPrompt}`
+      : `${NORA_SYSTEM_DIRECTIVE}\n${telemetryBlock}`;
+
+    const messages: any[] = [{ role: "system", content: effectivePrompt }];
+    for (const h of input.history.slice(-10)) {
+      if (h.content) {
+        messages.push({
+          role: h.role === "assistant" ? "assistant" : "user",
+          content: h.content,
+        });
+      }
+    }
+    messages.push({ role: "user", content: input.userText || "Hola Nora" });
+
+    // ─────────────────────────────────────────────────────────────
+    // STEP 2: Inferencia en Ollama ('ejecutar_llm' con Retries Automáticos)
+    // ─────────────────────────────────────────────────────────────
+    const llmResult = await step.run(
+      "ejecutar_llm",
+      async () => {
+        const localBaseUrl =
+          process.env.OLLAMA_BASE_URL?.trim() ||
+          process.env.LOCAL_LLM_URL?.trim() ||
+          "http://127.0.0.1:11434";
+
+        let chosenModel = input.model || process.env.LOCAL_MODEL_NAME || "llama3.3";
+        const normModel = chosenModel.toLowerCase();
+        if (normModel.includes("deepseek") || normModel.includes("r1")) {
+          chosenModel = chosenModel.includes(":") ? chosenModel : "deepseek-r1:latest";
+        } else if (normModel.includes("qwen")) {
+          chosenModel = chosenModel.includes(":") ? chosenModel : "qwen2.5:latest";
+        } else if (normModel.includes("llama")) {
+          chosenModel = chosenModel.includes(":") ? chosenModel : "llama3.3:latest";
+        }
+
+        const isNativeOllama = !localBaseUrl.endsWith("/v1");
+        const endpoint = isNativeOllama
+          ? `${localBaseUrl.replace(/\/$/, "")}/api/chat`
+          : `${localBaseUrl.replace(/\/$/, "")}/chat/completions`;
+
+        const requestBody = isNativeOllama
+          ? {
+              model: chosenModel,
+              messages: messages.map((m: any) => ({
+                role: m.role,
+                content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+              })),
+              stream: false,
+              options: { temperature: 0.6 },
+            }
+          : {
+              model: chosenModel,
+              messages,
+              stream: false,
+              temperature: 0.6,
+            };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 38000);
+
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            throw new RetryableError(`Clúster Ollama retornó código ${res.status}: ${errText}`);
+          }
+
+          const data = await res.json();
+          const textOutput = isNativeOllama
+            ? data.message?.content || ""
+            : data.choices?.[0]?.message?.content || "";
+
+          if (!textOutput) {
+            throw new RetryableError("Ollama respondió con texto vacío.");
+          }
+
+          return {
+            content: textOutput,
+            model: chosenModel,
+            provider: "local-ollama",
+            cacheKey: contextData.cacheKey,
+          };
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          throw new RetryableError(`Error de conexión o timeout con Ollama: ${fetchErr?.message || fetchErr}`);
+        }
+      },
+      { retries: 3, backoffMs: 2000, timeoutMs: 40000 }
+    );
+
+    return llmResult;
+  }
+);
+
 export async function POST(req: Request) {
   try {
     const body: RequestPayload = await req.json();
@@ -355,7 +538,7 @@ ${contextoActualidadBlock}`;
     const sambanovaKey = process.env.SAMBANOVA_API_KEY?.trim();
 
     // ─────────────────────────────────────────────────────────────
-    // 2. CASO 0: MODELOS LOCALES (Llama 3.3, Qwen 2.5, DeepSeek-R1 vía Ollama / Servidor Local)
+    // 2. CASO 0: WORKFLOW DURABLE (Ollama / Clúster Local Llama 3.3, Qwen 2.5, DeepSeek-R1)
     // ─────────────────────────────────────────────────────────────
     const isLocalProvider =
       provider === "ollama" ||
@@ -364,132 +547,47 @@ ${contextoActualidadBlock}`;
       process.env.AI_PROVIDER === "local";
 
     if (isLocalProvider) {
-      const localBaseUrl =
-        process.env.OLLAMA_BASE_URL?.trim() ||
-        process.env.LOCAL_LLM_URL?.trim() ||
-        "http://127.0.0.1:11434";
-
-      let chosenModel = body.model || process.env.LOCAL_MODEL_NAME || "llama3.3";
-      const normModel = chosenModel.toLowerCase();
-      if (normModel.includes("deepseek") || normModel.includes("r1")) {
-        chosenModel = chosenModel.includes(":") ? chosenModel : "deepseek-r1:latest";
-      } else if (normModel.includes("qwen")) {
-        chosenModel = chosenModel.includes(":") ? chosenModel : "qwen2.5:latest";
-      } else if (normModel.includes("llama")) {
-        chosenModel = chosenModel.includes(":") ? chosenModel : "llama3.3:latest";
-      }
-
       try {
-        const isNativeOllama = !localBaseUrl.endsWith("/v1");
-        const endpoint = isNativeOllama
-          ? `${localBaseUrl.replace(/\/$/, "")}/api/chat`
-          : `${localBaseUrl.replace(/\/$/, "")}/chat/completions`;
-
-        const requestBody = isNativeOllama
-          ? {
-              model: chosenModel,
-              messages: messages.map((m: any) => ({
-                role: m.role,
-                content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-              })),
-              stream: true,
-              options: { temperature: 0.6 },
-            }
-          : {
-              model: chosenModel,
-              messages,
-              stream: true,
-              temperature: 0.6,
-            };
-
-        const localRes = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
+        const workflowResult = await noraInferenceWorkflow({
+          sessionId,
+          systemPrompt,
+          userText,
+          imageBase64,
+          history: contextualHistory,
+          mode,
+          model: body.model,
+          deviceLocation,
+          clientDateTime,
         });
 
-        if (localRes.ok && localRes.body) {
-          const encoder = new TextEncoder();
-          let fullText = "";
+        // Disparo asíncrono de persistencia
+        triggerBackgroundPersist(sessionId, userText, workflowResult.content, mode, workflowResult.model, hasImage);
 
-          const stream = new ReadableStream({
-            async start(controller) {
-              const reader = localRes.body!.getReader();
-              const decoder = new TextDecoder();
-              let buffer = "";
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(workflowResult.content));
+            controller.close();
+          },
+        });
 
-              try {
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-                  buffer += decoder.decode(value, { stream: true });
-                  const lines = buffer.split("\n");
-                  buffer = lines.pop() || "";
-
-                  for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (!trimmed) continue;
-
-                    if (isNativeOllama) {
-                      try {
-                        const parsed = JSON.parse(trimmed);
-                        const chunk = parsed.message?.content || "";
-                        if (chunk) {
-                          fullText += chunk;
-                          controller.enqueue(encoder.encode(chunk));
-                        }
-                        if (parsed.done) {
-                          controller.close();
-                          triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
-                          return;
-                        }
-                      } catch {}
-                    } else {
-                      if (trimmed === "data: [DONE]") {
-                        controller.close();
-                        triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
-                        return;
-                      }
-                      if (trimmed.startsWith("data: ")) {
-                        try {
-                          const parsed = JSON.parse(trimmed.slice(6));
-                          const chunk = parsed.choices?.[0]?.delta?.content || "";
-                          if (chunk) {
-                            fullText += chunk;
-                            controller.enqueue(encoder.encode(chunk));
-                          }
-                        } catch {}
-                      }
-                    }
-                  }
-                }
-                controller.close();
-                triggerBackgroundPersist(sessionId, userText, fullText, mode, chosenModel, hasImage);
-              } catch (err) {
-                controller.error(err);
-              }
-            },
-          });
-
-          return new Response(stream, {
-            headers: {
-              "Content-Type": "text/plain; charset=utf-8",
-              "Transfer-Encoding": "chunked",
-              "Cache-Control": "no-cache, no-transform",
-              "X-AI-Provider": "local-ollama",
-              "X-AI-Model": chosenModel,
-            },
-          });
-        }
-      } catch (err: any) {
-        console.warn(`[Local LLM Warning]: Falló conexión a ${localBaseUrl} (${err?.message}). Continuando a fallback cloud.`);
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "X-AI-Provider": "local-ollama",
+            "X-AI-Model": workflowResult.model,
+            "X-Workflow-Executed": "true",
+          },
+        });
+      } catch (workflowErr: any) {
+        console.warn(`[Workflow Ollama Error]: ${workflowErr?.message}. Continuando a fallback cloud si disponible.`);
         if (!groqKey && !sambanovaKey) {
           return NextResponse.json(
             {
-              error: `Fallo de conexión al modelo local (${chosenModel}) en ${localBaseUrl}`,
-              details: err?.message || "Servidor no accesible",
+              error: `El Workflow de inferencia en Ollama falló tras múltiples reintentos: ${workflowErr?.message}`,
+              hint: "Verifica que el clúster local de Ollama esté accesible desde Vercel.",
             },
-            { status: 503 }
+            { status: 504 }
           );
         }
       }
