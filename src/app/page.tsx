@@ -160,8 +160,25 @@ const DEFAULT_ITUZAINGO_LOCATION: DeviceLocation = {
 };
 
 /**
+ * Resultado del Workflow de Inferencia Cloud-Native.
+ * Puede ser un stream de texto plano (modo normal) o un payload de control
+ * del Step 0 — Vision Gate (low_light_fallback / exposure_boosted).
+ */
+type WorkflowStreamResult = {
+  type: "stream";
+  body: ReadableStream<Uint8Array>;
+} | {
+  type: "low_light_fallback";
+  message: string;
+  model: string;
+  provider: string;
+}
+
+/**
  * Llama al motor de inferencia Cloud-Native en /api/nora-inference.
- * Devuelve un stream de texto o null si hay error.
+ * Interpreta el ciclo de vida del Workflow duradero:
+ *  - Si el backend responde con JSON { status: "low_light_fallback" } → retorna payload de control.
+ *  - Si responde con stream text/plain → retorna el ReadableStream para consumo incremental.
  */
 async function callCloudInferenceStream(payload: {
   systemPrompt: string;
@@ -173,7 +190,7 @@ async function callCloudInferenceStream(payload: {
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   mode?: string;
   sessionId?: string;
-}): Promise<ReadableStream<Uint8Array> | null> {
+}): Promise<WorkflowStreamResult | null> {
   try {
     const res = await fetch("/api/nora-inference", {
       method: "POST",
@@ -181,11 +198,31 @@ async function callCloudInferenceStream(payload: {
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok || !res.body) {
+    if (!res.ok) {
       console.warn("[Cloud AI] Status no-OK:", res.status);
       return null;
     }
-    return res.body;
+
+    // ── Detección del payload de control del Vision Gate (Step 0) ──
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const json = await res.json();
+      if (json.status === "low_light_fallback") {
+        return {
+          type: "low_light_fallback",
+          message: json.message || "La imagen recibida está demasiado oscura para ser analizada.",
+          model: json.model || "clef-flash",
+          provider: json.provider || "vision-gate",
+        };
+      }
+      // Otros JSON inesperados → tratar como error
+      console.warn("[Cloud AI] JSON inesperado del Workflow:", json);
+      return null;
+    }
+
+    // ── Stream normal de texto plano (Workflow resuelto con éxito) ──
+    if (!res.body) return null;
+    return { type: "stream", body: res.body };
   } catch (err) {
     console.error("[Cloud AI Network Error]:", err);
     return null;
@@ -816,7 +853,7 @@ export default function NoraTitanPage() {
       });
 
       // ── VISIÓN MULTIMODAL CLOUD CON TELEMETRÍA INTEGRADA ──
-      const cloudBody = await callCloudInferenceStream({
+      const workflowResult = await callCloudInferenceStream({
         systemPrompt,
         userText: visionPrompt,
         imageBase64: b64,
@@ -827,15 +864,23 @@ export default function NoraTitanPage() {
         sessionId,
       });
 
-      if (!cloudBody) {
+      if (!workflowResult) {
         const localAns = inferClientSemantic(promptOverride || "que ves", activeMode, true, visualTelemetry);
         setCameraAnalysis(localAns);
         if (localAns.trim()) speakText(localAns.trim());
         return;
       }
 
+      // ── Compuerta Lumínica: Interceptar low_light_fallback del Vision Gate (Step 0) ──
+      if (workflowResult.type === "low_light_fallback") {
+        const fallbackMsg = "Se detectó oscuridad. Por favor, estabiliza la iluminación.";
+        setCameraAnalysis(fallbackMsg);
+        speakText(fallbackMsg);
+        return;
+      }
+
       let acc = "";
-      for await (const chunk of parseCloudStream(cloudBody)) {
+      for await (const chunk of parseCloudStream(workflowResult.body)) {
         acc += chunk;
         setCameraAnalysis(acc);
       }
@@ -1150,8 +1195,8 @@ export default function NoraTitanPage() {
         timeZone: "America/Argentina/Buenos_Aires",
       });
 
-      // ── INFERENCIA CLOUD-NATIVE (Groq LPUs / SambaNova) ──
-      const cloudBody = await callCloudInferenceStream({
+      // ── INFERENCIA CLOUD-NATIVE (Workflow Duradero con Vision Gate) ──
+      const workflowResult = await callCloudInferenceStream({
         systemPrompt,
         userText: trimmed,
         imageBase64: img,
@@ -1163,7 +1208,7 @@ export default function NoraTitanPage() {
         sessionId,
       });
 
-      if (!cloudBody) {
+      if (!workflowResult) {
         // Fallback local semántico si el servicio en la nube no responde
         const localFallback = inferClientSemantic(trimmed, activeMode, Boolean(img));
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: localFallback } : m));
@@ -1174,9 +1219,19 @@ export default function NoraTitanPage() {
         return;
       }
 
+      // ── Compuerta Lumínica: Interceptar low_light_fallback del Vision Gate (Step 0) ──
+      if (workflowResult.type === "low_light_fallback") {
+        const fallbackMsg = "Se detectó oscuridad. Por favor, estabiliza la iluminación.";
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: fallbackMsg } : m));
+        // TTS inmediato: alertar al alumno por voz sin esperar interacción
+        speakText(fallbackMsg, assistantMsgId);
+        setIsLoading(false);
+        return;
+      }
+
       // ── STREAMING DE TEXTO CONTINUO EN TIEMPO REAL ──
       let full = "";
-      for await (const chunk of parseCloudStream(cloudBody)) {
+      for await (const chunk of parseCloudStream(workflowResult.body)) {
         full += chunk;
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: full } : m));
       }

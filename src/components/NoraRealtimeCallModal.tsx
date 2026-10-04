@@ -402,8 +402,28 @@ export default function NoraRealtimeCallModal({
           signal: controller.signal,
         });
 
-        if (!response.ok || !response.body) {
+        if (!response.ok) {
           throw new Error(`Respuesta no-OK del servidor (${response.status})`);
+        }
+
+        // ── Compuerta Lumínica: Interceptar low_light_fallback del Vision Gate (Step 0) ──
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const json = await response.json();
+          if (json.status === "low_light_fallback") {
+            const fallbackMsg = "Se detectó oscuridad. Por favor, estabiliza la iluminación.";
+            conversationHistoryRef.current.push({ role: "assistant", content: fallbackMsg });
+            setCallHistory(prev => [...prev, { role: "assistant", text: fallbackMsg }]);
+            setAssistantText(fallbackMsg);
+            isStreamActiveRef.current = false;
+            enqueueSentenceForSpeech(fallbackMsg);
+            setStatus("listening");
+            return;
+          }
+        }
+
+        if (!response.body) {
+          throw new Error("Respuesta sin body del servidor");
         }
 
         const reader = response.body.getReader();
