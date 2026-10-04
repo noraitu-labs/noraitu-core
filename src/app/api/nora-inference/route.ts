@@ -11,6 +11,7 @@ import {
 import { logToNeon } from "@/lib/db";
 import { getOrUpdateWebCache } from "@/lib/webCache";
 import { createWorkflow, RetryableError } from "@/lib/workflow";
+import { validateCameraLuminance, normalizeExposureHistogram } from "@/lib/visionValidation";
 
 // ══════════════════════════════════════════════════════════════
 //  /api/nora-inference  →  Motor de Inferencia Cloud & Local (Costo Cero)
@@ -214,15 +215,50 @@ interface WorkflowOutput {
   model: string;
   provider: string;
   cacheKey: string;
+  status?: "ok" | "low_light_fallback" | "exposure_boosted";
 }
 
 /**
  * Workflow durable de inferencia estructurado en pasos (Steps)
  * Mitiga Function Timeouts en Vercel aislando scraping y LLM pesado con retries automáticos.
+ * Incluye compuerta de validación lumínica (clef-flash) antes de inferencia pesada.
  */
 const noraInferenceWorkflow = createWorkflow<WorkflowInput, WorkflowOutput>(
   "nora_inference_pipeline",
   async (step, input) => {
+    // ─────────────────────────────────────────────────────────────
+    // STEP 0: Compuerta de Validación Lumínica ('validar_camara')
+    // Intercepta fotogramas corruptos o subexpuestos antes de inferencia pesada
+    // ─────────────────────────────────────────────────────────────
+    if (input.imageBase64 && input.imageBase64.length > 50) {
+      const visionGate = await step.run(
+        "validar_camara",
+        async () => {
+          return validateCameraLuminance(
+            input.imageBase64 as string,
+            process.env.OLLAMA_BASE_URL?.trim() || process.env.LOCAL_LLM_URL?.trim()
+          );
+        },
+        { retries: 1, backoffMs: 500 }
+      );
+
+      if (!visionGate.isValid) {
+        // Interrupción controlada: fotograma inválido por falta de luz
+        return {
+          content: visionGate.message || "La imagen recibida está oscura o no tiene luz suficiente para ser analizada.",
+          model: "clef-flash",
+          provider: "vision-gate",
+          cacheKey: "none",
+          status: "low_light_fallback" as const,
+        };
+      }
+
+      // Si la imagen es legible pero con baja iluminación: normalización de exposición
+      if (visionGate.status === "exposure_boosted" && visionGate.processedImageBase64) {
+        (input as any).imageBase64 = visionGate.processedImageBase64;
+      }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // STEP 1: Scraping y Caché Neon ('obtener_contexto')
     // ─────────────────────────────────────────────────────────────
@@ -560,6 +596,16 @@ ${contextoActualidadBlock}`;
           clientDateTime,
         });
 
+        // Interrupción controlada por validación lumínica — devuelve payload limpio para TTS del frontend
+        if (workflowResult.status === "low_light_fallback") {
+          return NextResponse.json({
+            status: "low_light_fallback",
+            message: workflowResult.content,
+            model: workflowResult.model,
+            provider: workflowResult.provider,
+          });
+        }
+
         // Disparo asíncrono de persistencia
         triggerBackgroundPersist(sessionId, userText, workflowResult.content, mode, workflowResult.model, hasImage);
 
@@ -574,9 +620,10 @@ ${contextoActualidadBlock}`;
         return new Response(stream, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
-            "X-AI-Provider": "local-ollama",
+            "X-AI-Provider": workflowResult.provider || "local-ollama",
             "X-AI-Model": workflowResult.model,
             "X-Workflow-Executed": "true",
+            "X-Vision-Status": workflowResult.status || "ok",
           },
         });
       } catch (workflowErr: any) {
