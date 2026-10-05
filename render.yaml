@@ -1,0 +1,75 @@
+services:
+  - type: web
+    name: nora-n8n
+    runtime: docker
+    dockerfilePath: ./Dockerfile.n8n
+    plan: free
+    region: oregon
+    healthCheckPath: /healthz
+
+    envVars:
+      # ── Base de datos: Neon PostgreSQL ──────────────────────────────
+      - key: DB_TYPE
+        value: postgresdb
+
+      - key: DB_POSTGRESDB_HOST
+        value: ep-damp-night-b61ubsxl-pooler.c-2.sa-east-1.aws.neon.tech
+
+      - key: DB_POSTGRESDB_PORT
+        value: "5432"
+
+      - key: DB_POSTGRESDB_DATABASE
+        value: neondb
+
+      - key: DB_POSTGRESDB_USER
+        value: neondb_owner
+
+      - key: DB_POSTGRESDB_PASSWORD
+        value: npg_qVCS9Hr2Btuc
+
+      - key: DB_POSTGRESDB_SSL
+        value: "true"
+
+      # ── Crítico: Permite túnel SSL a Neon sin bloqueo de certificados ──
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+
+      # ── Optimización crítica de RAM (límite Free: 512MB) ───────────
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=400"
+
+      # ── Desactivar telemetría pesada en arranque en frío ───────────
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "24"
+
+      - key: N8N_METRICS
+        value: "false"
+
+      - key: N8N_METRICS_ENABLED
+        value: "false"
+
+      # ── Reducir footprint de workers ───────────────────────────────
+      - key: N8N_DEFAULT_BINARY_DATA_MODE
+        value: filesystem
+
+      - key: N8N_PAYLOAD_SIZE_MAX
+        value: "4"
+
+      - key: QUEUE_BULL_REDIS_TIMEOUT_THRESHOLDS
+        value: "0"
+
+      # ── n8n config básica ──────────────────────────────────────────
+      - key: N8N_PROTOCOL
+        value: https
+
+      - key: WEBHOOK_URL
+        value: https://nora-n8n.onrender.com/
+
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+
+      - key: GENERIC_TIMEZONE
+        value: America/Argentina/Buenos_Aires

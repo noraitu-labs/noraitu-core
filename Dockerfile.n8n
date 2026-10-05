@@ -1,0 +1,18 @@
+# Dockerfile.n8n — Imagen mínima de n8n optimizada para Render Free (512MB RAM)
+# Punto de entrada nativo de n8n: sin overrides de Entrypoint ni CMD
+
+FROM n8nio/n8n:latest
+
+# Usar usuario root temporalmente para permisos, luego devolver a node
+USER root
+
+# Eliminar archivos de telemetría y diagnóstico que consumen RAM en frío
+RUN rm -rf /usr/local/lib/node_modules/n8n/node_modules/@sentry \
+           /usr/local/lib/node_modules/n8n/node_modules/bull/node_modules \
+    || true
+
+# Volver al usuario seguro de n8n
+USER node
+
+# El entrypoint nativo de n8n/n8n permanece intacto (no se modifica)
+# No hay CMD ni ENTRYPOINT override — Render usa el nativo de la imagen base
