@@ -182,7 +182,7 @@ export default function NoraRealtimeCallModal({
   // ── PIPELINE DE VOZ REAL NEURAL (Deepgram Aura / XTTS v2 / Audio MPEG) ──
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const playNeuralAudioStream = useCallback(async (text: string, voiceModel: string = "aura-2-javier-es"): Promise<boolean> => {
+  const playNeuralAudioStream = useCallback(async (text: string, voiceModel: string = "aura-2-diana-es"): Promise<boolean> => {
     try {
       const res = await fetch("/api/nora-transcribe?tts=true", {
         method: "POST",
@@ -192,14 +192,17 @@ export default function NoraRealtimeCallModal({
         },
         body: JSON.stringify({
           text,
-          voice: voiceModel, // "aura-2-javier-es" o "aura-2-diana-es"
-          model: "aura-2-latino",
+          voice: voiceModel,
           format: "audio/mpeg"
         })
       });
 
       if (res.ok && res.headers.get("content-type")?.includes("audio")) {
         const blob = await res.blob();
+        if (blob.size === 0) {
+          console.warn("[TTS Neural] Blob vacío recibido — usando fallback WebSpeech");
+          return false;
+        }
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         currentAudioRef.current = audio;
@@ -212,13 +215,17 @@ export default function NoraRealtimeCallModal({
             URL.revokeObjectURL(url);
             resolve(false);
           };
-          audio.play().catch(() => resolve(false));
+          audio.play().catch(() => {
+            URL.revokeObjectURL(url);
+            resolve(false);
+          });
         });
       } else {
-        alert(`AUDIO ENGINE ERROR: Status ${res.status} | Content-Type: ${res.headers.get("content-type")}`);
+        // Fallo silencioso — cae al fallback WebSpeech sin interrumpir el flujo
+        console.warn(`[TTS Neural] Status ${res.status} | Content-Type: ${res.headers.get("content-type")} — activando fallback WebSpeech`);
       }
     } catch (err: any) {
-      alert(`AUDIO NETWORK FAILURE: ${err?.message || err}`);
+      console.warn(`[TTS Neural] Network failure: ${err?.message || err} — activando fallback WebSpeech`);
     }
     return false;
   }, []);
@@ -272,51 +279,75 @@ export default function NoraRealtimeCallModal({
       return;
     }
 
-    // 2. Fallback de alta fidelidad: Síntesis neural con cadencia humana y pausas respiratorias
+    // 2. Fallback de alta fidelidad: Síntesis WebSpeech con idioma forzado en español
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const lang = callLanguageRef.current || "es-419";
-      const utterance = new SpeechSynthesisUtterance(sentence);
-      utterance.lang = lang;
-      utterance.rate = 0.98; // Cadencia natural humana realista
-      utterance.pitch = 1.02;
 
-      const voices = window.speechSynthesis.getVoices();
-      const voice =
-        voices.find(v => v.name.toLowerCase().includes("aura-2-javier") || v.name.toLowerCase().includes("aura-2-diana")) ||
-        voices.find(v => v.name.toLowerCase().includes("natural") || v.name.toLowerCase().includes("neural") || v.name.toLowerCase().includes("online")) ||
-        voices.find(v => (v.lang.startsWith("es") || v.lang.includes("es-")) && (v.name.includes("Google") || v.name.includes("Sabina") || v.name.includes("Paulina") || v.name.includes("Monica") || v.name.includes("Elena"))) ||
-        voices.find(v => v.lang.toLowerCase().startsWith("es-419") || v.lang.toLowerCase().startsWith("es-us")) ||
-        voices.find(v => v.lang.toLowerCase().startsWith("es"));
-      if (voice) utterance.voice = voice;
+      const speakWithVoice = (voices: SpeechSynthesisVoice[]) => {
+        const utterance = new SpeechSynthesisUtterance(sentence);
+        // CRÍTICO: forzar idioma español antes de asignar voz
+        utterance.lang = lang.startsWith("es") ? lang : "es-419";
+        utterance.rate = 0.97;
+        utterance.pitch = 1.02;
 
-      utterance.onend = () => {
-        isSpeakingRef.current = false;
-        if (!isCallAliveRef.current) return;
-        if (speechQueueRef.current.length > 0) {
-          setTimeout(processNextSpeechSentence, 140); // Pausa respiratoria natural entre oraciones
-        } else if (!isStreamActiveRef.current) {
-          setStatus("listening");
-          activateMicrophoneSafely();
+        // Selector de voz española — prioridad descendente
+        const NOMBRES_ES = ["sabina", "paulina", "monica", "elena", "diego", "jorge", "español", "spanish", "celeste", "conchita", "lucia"];
+        const spanishVoice =
+          voices.find(v => v.lang.toLowerCase().startsWith("es-419")) ||
+          voices.find(v => v.lang.toLowerCase() === "es-us") ||
+          voices.find(v => v.lang.toLowerCase().startsWith("es") && NOMBRES_ES.some(n => v.name.toLowerCase().includes(n))) ||
+          voices.find(v => v.lang.toLowerCase().startsWith("es") && v.name.toLowerCase().includes("google")) ||
+          voices.find(v => v.lang.toLowerCase().startsWith("es"));
+
+        // Asignar voz española si existe; si no, forzar lang para evitar voz extranjera
+        if (spanishVoice) {
+          utterance.voice = spanishVoice;
         } else {
-          setStatus("thinking");
+          utterance.lang = "es-419"; // sobrescribir para impedir fallback del sistema a francés
         }
+
+        utterance.onend = () => {
+          isSpeakingRef.current = false;
+          if (!isCallAliveRef.current) return;
+          if (speechQueueRef.current.length > 0) {
+            setTimeout(processNextSpeechSentence, 140);
+          } else if (!isStreamActiveRef.current) {
+            setStatus("listening");
+            activateMicrophoneSafely();
+          } else {
+            setStatus("thinking");
+          }
+        };
+
+        utterance.onerror = () => {
+          isSpeakingRef.current = false;
+          if (!isCallAliveRef.current) return;
+          if (speechQueueRef.current.length > 0) {
+            setTimeout(() => processNextSpeechSentence(), 50);
+          } else if (!isStreamActiveRef.current) {
+            setStatus("listening");
+            activateMicrophoneSafely();
+          } else {
+            setStatus("thinking");
+          }
+        };
+
+        window.speechSynthesis.speak(utterance);
       };
 
-      utterance.onerror = () => {
-        isSpeakingRef.current = false;
-        if (!isCallAliveRef.current) return;
-        if (speechQueueRef.current.length > 0) {
-          setTimeout(() => processNextSpeechSentence(), 50);
-        } else if (!isStreamActiveRef.current) {
-          setStatus("listening");
-          activateMicrophoneSafely();
-        } else {
-          setStatus("thinking");
-        }
-      };
+      // Carga asíncrona de voces (necesario en Chrome/Android donde getVoices() es async)
+      const currentVoices = window.speechSynthesis.getVoices();
+      if (currentVoices.length > 0) {
+        speakWithVoice(currentVoices);
+      } else {
+        // Esperar evento voiceschanged para obtener voces cargadas
+        window.speechSynthesis.addEventListener("voiceschanged", function onVoicesLoaded() {
+          window.speechSynthesis.removeEventListener("voiceschanged", onVoicesLoaded);
+          speakWithVoice(window.speechSynthesis.getVoices());
+        });
+      }
 
-      window.speechSynthesis.speak(utterance);
     } else {
       // Sin WebSpeech disponible: liberar flag y continuar ciclo
       isSpeakingRef.current = false;
