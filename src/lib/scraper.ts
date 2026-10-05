@@ -12,21 +12,31 @@ export interface ScrapedNewsItem {
 
 const SOURCES: Record<string, string[]> = {
   noticias_general: [
+    // Fuentes directas que NO bloquean IPs de data center (Vercel/Render)
+    "https://www.infobae.com/feeds/rss/",
+    "https://tn.com.ar/feed/",
+    "https://www.ambito.com/rss/noticias.xml",
+    "https://www.telam.com.ar/rss2/ultimasnoticias.xml",
+    // Google News como último recurso (puede bloquearse desde data centers)
     "https://news.google.com/rss?hl=es-419&gl=AR&ceid=AR:es-419",
-    "https://rss.app/feeds/v1.1/open_news_es.xml",
   ],
   noticias_economia: [
+    "https://www.ambito.com/rss/economia.xml",
+    "https://www.infobae.com/feeds/rss/tag/economia/",
     "https://news.google.com/rss/search?q=dolar+economia+argentina&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
   noticias_corrientes: [
+    "https://www.diarioellibertador.com.ar/feed/",
     "https://news.google.com/rss/search?q=corrientes+ituzaingo&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
   noticias_tecnologia: [
+    "https://www.infobae.com/feeds/rss/tag/tecnologia/",
     "https://news.google.com/rss/search?q=inteligencia+artificial+tecnologia&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
   noticias_deportes: [
+    "https://www.espn.com.ar/espn/rss/news",
+    "https://www.infobae.com/feeds/rss/tag/deportes/",
     "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419&gl=AR&ceid=AR:es-419",
-    "https://news.google.com/rss/search?q=futbol+deportes+argentina&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
 };
 
@@ -65,12 +75,12 @@ export async function scrapeNews(keySource: string = "noticias_general", limit: 
   for (const url of urls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       const res = await fetch(url, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/rss+xml, application/xml, text/xml, */*",
+          "User-Agent": "Mozilla/5.0 (compatible; NoraITU/2.0; +https://noraitu.vercel.app)",
+          Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
         },
         signal: controller.signal,
         cache: "no-store",
@@ -78,20 +88,25 @@ export async function scrapeNews(keySource: string = "noticias_general", limit: 
 
       clearTimeout(timeoutId);
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        console.warn(`[Scraper] ${url} → HTTP ${res.status}`);
+        continue;
+      }
 
       const xml = await res.text();
       const items: ScrapedNewsItem[] = [];
-      const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+
+      // Soporte dual: RSS 2.0 (<item>) y Atom (<entry>)
+      const itemRegex = /<(?:item|entry)>([\s\S]*?)<\/(?:item|entry)>/gi;
       let match: RegExpExecArray | null;
 
       while ((match = itemRegex.exec(xml)) !== null && items.length < limit) {
         const itemContent = match[1];
 
-        const titleMatch = itemContent.match(/<title>([\s\S]*?)<\/title>/i);
-        const pubDateMatch = itemContent.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+        const titleMatch = itemContent.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const pubDateMatch = itemContent.match(/<(?:pubDate|published|updated)>([\s\S]*?)<\/(?:pubDate|published|updated)>/i);
         const sourceMatch = itemContent.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
-        const descMatch = itemContent.match(/<description>([\s\S]*?)<\/description>/i);
+        const descMatch = itemContent.match(/<(?:description|summary|content)[^>]*>([\s\S]*?)<\/(?:description|summary|content)>/i);
 
         if (titleMatch) {
           const rawTitle = decodeHtmlEntities(titleMatch[1]);
@@ -99,7 +114,6 @@ export async function scrapeNews(keySource: string = "noticias_general", limit: 
           const rawDate = pubDateMatch ? pubDateMatch[1].trim() : "";
           const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1]) : "";
 
-          // Limpiar si el título ya incluye la fuente al final (ej: "Título - Fuente")
           items.push({
             title: rawTitle,
             source: rawSource,
