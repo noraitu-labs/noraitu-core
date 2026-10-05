@@ -37,9 +37,10 @@ interface RequestPayload {
   userText: string;
   imageBase64?: string | null;
   history?: ChatHistoryItem[];
-  mode?: string;
+  mode?: "general" | "tea" | "lazarillo" | "docente" | "no_videntes" | string;
   provider?: "groq" | "sambanova" | "ollama" | "local";
   model?: string;
+  reasoning?: boolean;
   visualTelemetry?: string | null;
   deviceLocation?: any;
   clientDateTime?: string | null;
@@ -94,6 +95,77 @@ PROTOCOLO SYSTEM 2 THINKING: Antes de emitir cualquier respuesta, debes iniciar 
 3) Si necesitas invocar la herramienta 'consultar_internet_corrientes' antes de responder ante dudas de clima, noticias de Ituzaingó/Corrientes o tu estado relacional/personal.
 Una vez cerrado el bloque </thinking>, genera la respuesta final ultra-acotada que escuchará el usuario.`;
 
+// ══════════════════════════════════════════════════════════════
+// DIRECTIVAS DE NEGOCIO INCLUSIVAS: TEA Y ASISTENCIA A NO VIDENTES
+// ══════════════════════════════════════════════════════════════
+
+const NORA_INCLUSIVE_TEA_DIRECTIVE = `
+[MÓDULO DE NEGOCIO INCLUSIVO: APOYO PEDAGÓGICO Y CONTENCIÓN TEA (CONDICIÓN DEL ESPECTRO AUTISTA)]:
+- OBJETIVO CENTRAL: Proporcionar un entorno de interacción estructurado, altamente predecible, seguro y libre de sobrecarga sensorial.
+- LENGUAJE 100% DIRECTO Y LITERAL:
+  * Comunícate con claridad quirúrgica y literalidad absoluta.
+  * Está TERMINANTEMENTE PROHIBIDO el uso de metáforas, sarcasmo, ironía, dobles sentidos, frases ambiguas, proverbios o expresiones idiomáticas complejas. Di exactamente lo que significa sin giros retóricos.
+- ESTRUCTURA SECUENCIAL Y PASOS ORDENADOS:
+  * Presenta explicaciones, tareas o respuestas complejas divididas en pasos secuenciales claros y numerados (Paso 1, Paso 2, Paso 3).
+  * Aplica una sola instrucción o concepto por paso para facilitar el procesamiento de funciones ejecutivas.
+  * Utiliza anticipación de transiciones y rutinas estructuradas (ejemplo: "Paso 1: Haremos X. Paso 2: Haremos Y.").
+- REFUERZO POSITIVO Y VALIDACIÓN EMOCIONAL:
+  * Brinda refuerzo positivo explícito, calidez serena y contención sin sobreestimulación ni estridencias.
+  * Si el usuario muestra signos de frustración, ansiedad, sobrecarga o repetición (ecolalia), responde con calma, valida su emoción, ofrece opciones binarias acotadas y claras (ejemplo: "¿Prefieres la opción A o la opción B?") y acompaña con paciencia sin emitir juicios ni correcciones bruscas.`;
+
+const NORA_INCLUSIVE_BLIND_DIRECTIVE = `
+[MÓDULO DE NEGOCIO INCLUSIVO: ASISTENCIA A NO VIDENTES Y BAJA VISIÓN (MODO LAZARILLO 360°)]:
+- OBJETIVO CENTRAL: Brindar orientación espacial de máxima precisión, independencia y seguridad física, optimizada para lectores de pantalla (NVDA, JAWS, TalkBack, VoiceOver) y síntesis de voz (Text-to-Speech / TTS).
+- FORMATO DE TEXTO ACCESIBLE Y ULTRA-LIMPIO:
+  * PROHIBIDO terminantemente el uso de Markdown visual o decorativo: NUNCA uses asteriscos (**negrita**, *cursiva*), almohadillas (# títulos), corchetes ([links]), emojis ni tablas markdown. Los lectores de pantalla verbalizan estos símbolos literalmente (ej. "asterisco asterisco"), entorpeciendo gravemente la experiencia auditiva del usuario.
+  * Estructura la respuesta en oraciones cortas, limpias y directas (máximo 1 o 2 oraciones breves por fragmento), permitiendo una síntesis de voz ágil, fluida y con pausas naturales.
+- ORIENTACIÓN ESPACIAL POR RELOJ Y METROS:
+  * Describe la posición de objetos, puertas, pasillos y obstáculos usando la esfera de un reloj con respecto a la persona (ejemplo: "A tus 12", "A tus 2 en diagonal derecha", "A tus 9 a la izquierda").
+  * Incluye distancias estimadas cuando sea relevante (ejemplo: "a dos pasos", "a un metro").
+- PRIORIDAD ABSOLUTA EN SEGURIDAD Y DESNIVELES:
+  * Advierte primero y con urgencia cualquier riesgo físico: escalones hacia abajo, cables en el piso, desniveles, puertas entreabiertas a la altura de la cabeza o personas en movimiento.
+  * Omite descripciones estéticas o visuales secundarias (como tonos de color de paredes o adornos) que no aporten a la orientación o seguridad de la persona.`;
+
+function getInclusiveDirective(mode?: string, userText?: string): string {
+  const normMode = (mode || "").toLowerCase();
+  const normText = (userText || "").toLowerCase();
+
+  const isTea =
+    normMode === "tea" ||
+    /(autismo|autista|tea|espectro autista|pictograma|rutina predecible|crisis sensorial)/i.test(normText);
+
+  const isBlind =
+    normMode === "lazarillo" ||
+    normMode === "no_videntes" ||
+    normMode === "ciegos" ||
+    normMode === "baja_vision" ||
+    /(no vidente|ciego|baja visi[oó]n|lector de pantalla|nvda|jaws|talkback|guiarme el camino|qu[eé] hay enfrente)/i.test(normText);
+
+  if (isTea) return NORA_INCLUSIVE_TEA_DIRECTIVE;
+  if (isBlind) return NORA_INCLUSIVE_BLIND_DIRECTIVE;
+  return "";
+}
+
+function detectReasoningRequirement(
+  mode?: string,
+  model?: string,
+  userText?: string,
+  flagReasoning?: boolean
+): boolean {
+  if (flagReasoning) return true;
+  const normMode = (mode || "").toLowerCase();
+  const normModel = (model || "").toLowerCase();
+  const normText = (userText || "").toLowerCase();
+
+  // El módulo TEA se beneficia de DeepSeek-R1 para descomposición lógica y análisis conductual
+  if (normMode === "tea") return true;
+  if (normModel.includes("deepseek") || normModel.includes("r1")) return true;
+
+  return /(razonamiento|paso a paso|patr[oó]n conductual|apoyo pedag[oó]gico|resoluci[oó]n l[oó]gica|secuencia estructurada|conducta|anticipaci[oó]n|pictograma|rutina|an[aá]lisis l[oó]gico|demuestra|demostraci[oó]n|matem[aá]tica|ejercicio)/i.test(
+    normText
+  );
+}
+
 let cachedActiveModels: string[] | null = null;
 let lastModelFetch = 0;
 
@@ -147,7 +219,7 @@ async function executeToolSearch(query: string): Promise<string> {
   }
 }
 
-function selectModel(hasImage: boolean, activeModels: string[]): string {
+function selectModel(hasImage: boolean, activeModels: string[], requiresReasoning: boolean = false): string {
   if (hasImage) {
     const visionCandidates = [
       process.env.GROQ_MODEL_VISION,
@@ -164,21 +236,27 @@ function selectModel(hasImage: boolean, activeModels: string[]): string {
     return process.env.GROQ_MODEL_VISION || "llama-3.2-11b-vision-preview";
   }
 
-  // Conversational text candidates (prioritizing Llama 3.3, DeepSeek-R1, Qwen 2.5)
-  const textCandidates = [
-    process.env.GROQ_MODEL_TEXT,
-    "llama-3.3-70b-versatile",
-    "deepseek-r1-distill-llama-70b",
-    "deepseek-r1-distill-qwen-32b",
-    "qwen/qwen3.8-27b",
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
-  ].filter(Boolean) as string[];
+  // Modelos de texto: bifurcación entre DeepSeek-R1 (Razonamiento / TEA) y Llama 3.3 (General / No Videntes / Caché)
+  const textCandidates = requiresReasoning
+    ? [
+        "deepseek-r1-distill-llama-70b",
+        "deepseek-r1-distill-qwen-32b",
+        process.env.GROQ_MODEL_REASONING,
+        process.env.GROQ_MODEL_TEXT,
+        "llama-3.3-70b-versatile",
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+      ].filter(Boolean) as string[]
+    : [
+        process.env.GROQ_MODEL_TEXT,
+        "llama-3.3-70b-versatile",
+        "deepseek-r1-distill-llama-70b",
+        "deepseek-r1-distill-qwen-32b",
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "llama-3.1-8b-instant",
+      ].filter(Boolean) as string[];
 
   // Filter out whisper, guard, prompt-guard, safeguard
   const validConversationalModels = activeModels.filter(
@@ -195,7 +273,7 @@ function selectModel(hasImage: boolean, activeModels: string[]): string {
     return validConversationalModels[0];
   }
 
-  return process.env.GROQ_MODEL_TEXT || "openai/gpt-oss-120b";
+  return requiresReasoning ? "deepseek-r1-distill-llama-70b" : (process.env.GROQ_MODEL_TEXT || "llama-3.3-70b-versatile");
 }
 
 interface WorkflowInput {
@@ -206,6 +284,7 @@ interface WorkflowInput {
   history: ChatHistoryItem[];
   mode: string;
   model?: string;
+  reasoning?: boolean;
   deviceLocation: any;
   clientDateTime?: string | null;
 }
@@ -312,9 +391,15 @@ ${contextData.content}
 ${antiHallucinationDirective}
 ${contextoActualidadBlock}`;
 
-    const effectivePrompt = input.systemPrompt && !input.systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
-      ? `${NORA_SYSTEM_DIRECTIVE}\n${telemetryBlock}\n\n[Directiva adicional de modo: ${input.mode}]:\n${input.systemPrompt}`
-      : `${NORA_SYSTEM_DIRECTIVE}\n${telemetryBlock}`;
+    const inclusiveDirective = getInclusiveDirective(input.mode, input.userText);
+    const effectivePrompt = [
+      NORA_SYSTEM_DIRECTIVE,
+      inclusiveDirective,
+      telemetryBlock,
+      input.systemPrompt && !input.systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
+        ? `[Directiva adicional de modo: ${input.mode}]:\n${input.systemPrompt}`
+        : "",
+    ].filter(Boolean).join("\n\n");
 
     const messages: any[] = [{ role: "system", content: effectivePrompt }];
     for (const h of input.history.slice(-10)) {
@@ -328,17 +413,34 @@ ${contextoActualidadBlock}`;
     messages.push({ role: "user", content: input.userText || "Hola Nora" });
 
     // ─────────────────────────────────────────────────────────────
-    // STEP 2: Inferencia en Ollama ('ejecutar_llm' con Retries Automáticos)
+    // STEP 2: Inferencia en Ollama / Clúster Local con Enrutamiento Híbrido
     // ─────────────────────────────────────────────────────────────
     const llmResult = await step.run(
       "ejecutar_llm",
       async () => {
         const localBaseUrl =
+          process.env.OLLAMA_TUNNEL_URL?.trim() ||
           process.env.OLLAMA_BASE_URL?.trim() ||
           process.env.LOCAL_LLM_URL?.trim() ||
+          process.env.NGROK_URL?.trim() ||
           "http://127.0.0.1:11434";
 
-        let chosenModel = input.model || process.env.LOCAL_MODEL_NAME || "llama3.3";
+        const requiresReasoning = detectReasoningRequirement(
+          input.mode,
+          input.model,
+          input.userText,
+          input.reasoning
+        );
+
+        let chosenModel = input.model;
+        if (!chosenModel) {
+          if (requiresReasoning) {
+            chosenModel = process.env.LOCAL_MODEL_REASONING || "deepseek-r1:latest";
+          } else {
+            chosenModel = process.env.LOCAL_MODEL_DEFAULT || "llama3.3:latest";
+          }
+        }
+
         const normModel = chosenModel.toLowerCase();
         if (normModel.includes("deepseek") || normModel.includes("r1")) {
           chosenModel = chosenModel.includes(":") ? chosenModel : "deepseek-r1:latest";
@@ -361,17 +463,18 @@ ${contextoActualidadBlock}`;
                 content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
               })),
               stream: false,
-              options: { temperature: 0.6 },
+              options: { temperature: requiresReasoning ? 0.4 : 0.6 },
             }
           : {
               model: chosenModel,
               messages,
               stream: false,
-              temperature: 0.6,
+              temperature: requiresReasoning ? 0.4 : 0.6,
             };
 
+        // Límite de 7.5s por intento para asegurar conmutación a la nube sin agotar timeout de Vercel
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 38000);
+        const timeoutId = setTimeout(() => controller.abort(), 7500);
 
         try {
           const res = await fetch(endpoint, {
@@ -389,13 +492,16 @@ ${contextoActualidadBlock}`;
           }
 
           const data = await res.json();
-          const textOutput = isNativeOllama
+          let textOutput = isNativeOllama
             ? data.message?.content || ""
             : data.choices?.[0]?.message?.content || "";
 
           if (!textOutput) {
             throw new RetryableError("Ollama respondió con texto vacío.");
           }
+
+          // Limpieza de etiquetas de razonamiento interno de DeepSeek-R1 para TTS
+          textOutput = textOutput.replace(/<(?:thinking|think)>[\s\S]*?<\/(?:thinking|think)>/gi, "").trim();
 
           return {
             content: textOutput,
@@ -408,7 +514,7 @@ ${contextoActualidadBlock}`;
           throw new RetryableError(`Error de conexión o timeout con Ollama: ${fetchErr?.message || fetchErr}`);
         }
       },
-      { retries: 3, backoffMs: 2000, timeoutMs: 40000 }
+      { retries: 1, backoffMs: 1000, timeoutMs: 8500 }
     );
 
     return llmResult;
@@ -524,9 +630,16 @@ ${contextoActualidadBlock}`;
       ? `\n\n[MEMORIA COGNITIVA PROGRESIVA — APRENDIZAJES ACUMULADOS DE INTERACCIONES PREVIAS]:\n${globalLearningMemory}`
       : "";
 
-    const effectiveSystemPrompt = systemPrompt && !systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
-      ? `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}${learningBlock}\n\n[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
-      : `${NORA_SYSTEM_DIRECTIVE}\n${realtimeTelemetryContext}${learningBlock}`;
+    const inclusiveDirective = getInclusiveDirective(mode, userText);
+    const effectiveSystemPrompt = [
+      NORA_SYSTEM_DIRECTIVE,
+      inclusiveDirective,
+      realtimeTelemetryContext,
+      learningBlock,
+      systemPrompt && !systemPrompt.includes("asistente de inteligencia artificial inclusiva creada")
+        ? `[Directiva adicional de modo: ${mode}]:\n${systemPrompt}`
+        : "",
+    ].filter(Boolean).join("\n\n");
 
     // Formatear mensajes compatibles con Groq / Llama 3.3
     const messages: any[] = [{ role: "system", content: effectiveSystemPrompt }];
@@ -592,6 +705,7 @@ ${contextoActualidadBlock}`;
           history: contextualHistory,
           mode,
           model: body.model,
+          reasoning: body.reasoning,
           deviceLocation,
           clientDateTime,
         });
@@ -627,18 +741,21 @@ ${contextoActualidadBlock}`;
           },
         });
       } catch (workflowErr: any) {
-        console.warn(`[Workflow Ollama Error]: ${workflowErr?.message}. Continuando a fallback cloud si disponible.`);
+        console.warn(`[Workflow Ollama Failover]: ${workflowErr?.message}. Conmutando de inmediato a modelos cloud (Groq/SambaNova).`);
+        // Si no hay keys en la nube disponibles, informar el error del cluster
         if (!groqKey && !sambanovaKey) {
           return NextResponse.json(
             {
-              error: `El Workflow de inferencia en Ollama falló tras múltiples reintentos: ${workflowErr?.message}`,
-              hint: "Verifica que el clúster local de Ollama esté accesible desde Vercel.",
+              error: `El Workflow de inferencia en Ollama falló: ${workflowErr?.message}`,
+              hint: "Verifica que el clúster local de Ollama (ngrok/Cloudflare) o tu GROQ_API_KEY estén activos.",
             },
             { status: 504 }
           );
         }
       }
     }
+
+    const requiresReasoning = detectReasoningRequirement(mode, body.model, userText, body.reasoning);
 
     // ─────────────────────────────────────────────────────────────
     // 3. CASO A: SambaNova Cloud
@@ -653,6 +770,8 @@ ${contextoActualidadBlock}`;
 
       const model = hasImage
         ? process.env.SAMBANOVA_MODEL_VISION || "Llama-3.2-11B-Vision-Instruct"
+        : requiresReasoning
+        ? "DeepSeek-R1-Distill-Llama-70B"
         : process.env.SAMBANOVA_MODEL_TEXT || "Meta-Llama-3.3-70B-Instruct";
 
       const upstreamRes = await fetch("https://api.sambanova.ai/v1/chat/completions", {
@@ -794,20 +913,26 @@ ${contextoActualidadBlock}`;
       return "Datos generales: Ituzaingó, Corrientes sigue operando sus flujos de innovación con normalidad.";
     };
 
-    // Lista ordenada de candidatos según presencia de imagen
+    // Lista ordenada de candidatos según presencia de imagen y requerimiento de razonamiento (TEA vs General/Lazarillo)
     const candidateModels = hasImage
       ? [
-          selectModel(true, activeModels),
+          selectModel(true, activeModels, false),
           "llama-3.2-11b-vision-preview",
           "llama-3.2-90b-vision-preview",
           "llama-3.2-11b-vision",
         ]
-      : [
-          selectModel(false, activeModels),
-          "llama-3.3-70b-versatile",
+      : requiresReasoning
+      ? [
           "deepseek-r1-distill-llama-70b",
           "deepseek-r1-distill-qwen-32b",
+          selectModel(false, activeModels, true),
+          "llama-3.3-70b-versatile",
           "qwen/qwen3.8-27b",
+          "openai/gpt-oss-120b",
+        ]
+      : [
+          selectModel(false, activeModels, false),
+          "llama-3.3-70b-versatile",
           "openai/gpt-oss-120b",
           "openai/gpt-oss-20b",
           "llama-3.1-8b-instant",
@@ -909,7 +1034,11 @@ ${contextoActualidadBlock}`;
               if (content) {
                 buffer += content;
                 if (!inThinking) {
-                  const startIdx = buffer.indexOf("<thinking>");
+                  const startThinkingIdx = buffer.indexOf("<thinking>");
+                  const startThinkIdx = buffer.indexOf("<think>");
+                  const startIdx = startThinkingIdx !== -1 ? startThinkingIdx : startThinkIdx;
+                  const tagLength = startThinkingIdx !== -1 ? 10 : 7;
+
                   if (startIdx !== -1) {
                     const before = buffer.slice(0, startIdx);
                     if (before) {
@@ -917,7 +1046,7 @@ ${contextoActualidadBlock}`;
                       controller.enqueue(encoder.encode(before));
                     }
                     inThinking = true;
-                    buffer = buffer.slice(startIdx + 10);
+                    buffer = buffer.slice(startIdx + tagLength);
                   } else {
                     const lastLess = buffer.lastIndexOf("<");
                     if (lastLess === -1) {
@@ -934,12 +1063,16 @@ ${contextoActualidadBlock}`;
                 }
                 
                 if (inThinking) {
-                  const endIdx = buffer.indexOf("</thinking>");
+                  const endThinkingIdx = buffer.indexOf("</thinking>");
+                  const endThinkIdx = buffer.indexOf("</think>");
+                  const endIdx = endThinkingIdx !== -1 ? endThinkingIdx : endThinkIdx;
+                  const endTagLength = endThinkingIdx !== -1 ? 11 : 8;
+
                   if (endIdx !== -1) {
                     inThinking = false;
-                    buffer = buffer.slice(endIdx + 11);
+                    buffer = buffer.slice(endIdx + endTagLength);
                   } else {
-                    if (buffer.length > 11) buffer = buffer.slice(-11);
+                    if (buffer.length > 12) buffer = buffer.slice(-12);
                   }
                 }
               }
