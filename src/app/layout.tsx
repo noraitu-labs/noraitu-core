@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
   title: "Nora Itu PRO",
-  description: "Plataforma de IA Inclusiva Corporativa - MyJNexoraVisual",
+  description: "Plataforma de IA Inclusiva Corporativa - Nexora One",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

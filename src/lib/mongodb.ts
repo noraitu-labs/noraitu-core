@@ -254,7 +254,7 @@ export async function getGlobalLearningSummary(agentId: string = "nora-itu"): Pr
           "- Preferencias aprendidas: Hablar siempre en español neutro profesional, sin modismos ni 'che'.\n" +
           "- Localización núcleo: Ituzaingó, Corrientes, Argentina (cerca de Represa Yacyretá, Río Paraná).\n" +
           "- Entorno académico: Conexión formativa con UTN (Universidad Tecnológica Nacional) y UNAHUR.\n" +
-          "- Identidad del creador: MyJNexoraVisual, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
+          "- Identidad del creador: Nexora One, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
         return defaultPrompt;
       }
 

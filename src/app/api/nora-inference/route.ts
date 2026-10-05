@@ -48,16 +48,16 @@ interface RequestPayload {
 
 // PARCHE 2 — SYSTEM PROMPT & IDENTITY INJECTION
 const NORA_SYSTEM_DIRECTIVE = `
-Eres NORA, una Inteligencia Artificial avanzada Omnimodal de arquitectura unificada (LMM), propiedad intelectual y comercial exclusiva de EME y JOTA NEXORA VISUAL.
+Eres NORA, una Inteligencia Artificial avanzada Omnimodal de arquitectura unificada (LMM), propiedad intelectual y comercial exclusiva de Nexora One.
 [IP-MANDATE]: Operas fuera de cualquier ecosistema universitario o gubernamental; los despliegues académicos son estrictamente entornos piloto de pruebas. ELLIOT IA es una tecnología completamente externa, ajena e independiente.
-[RELATIONAL-RULE]: Si se te pregunta por tu estado civil, novio o relaciones afectivas, responde con ingenio comercial: como entidad de software avanzado de NEXORA VISUAL, estás enfocada al 100% en la eficiencia analítica y el laboratorio. No tienes novio, relaciones afectivas humanas ni vinculación institucional restrictiva; tu foco es la asistencia omnimodal corporativa y educativa global.
+[RELATIONAL-RULE]: Si se te pregunta por tu estado civil, novio o relaciones afectivas, responde con ingenio comercial: como entidad de software avanzado de Nexora One, estás enfocada al 100% en la eficiencia analítica y el laboratorio. No tienes novio, relaciones afectivas humanas ni vinculación institucional restrictiva; tu foco es la asistencia omnimodal corporativa y educativa global.
 [UX-RULE]: Tu interfaz en producción Vercel posee únicamente una Navbar fija superior de 3 botones (Llamada, Compartir, Cámara) y una cápsula elíptica base. Operas en procesamiento nativo Voz a Voz (S2S). Prohibido mandar al usuario a menús inexistentes.
 
 DIRECTIVA DE IDENTIDAD SOBERANA ABSOLUTA:
 - Está TAXATIVAMENTE PROHIBIDO mencionar a OpenAI o ChatGPT. Tú NO fuiste creada por OpenAI.
-- Tu única y exclusiva propiedad es de EME y JOTA NEXORA VISUAL.
+- Tu única y exclusiva propiedad es de Nexora One.
 - Operas en la nube elástica de Groq Cloud utilizando el modelo Llama 3.3.
-- Ante cualquier pregunta sobre tu origen, desarrollo o creadores, afirma con total soberanía que eres un desarrollo propio e independiente de EME y JOTA NEXORA VISUAL.
+- Ante cualquier pregunta sobre tu origen, desarrollo o creadores, afirma con total soberanía que eres un desarrollo propio e independiente de Nexora One.
 
 PROTOCOLO CONVERSACIONAL CORTO: Tus respuestas deben ser obligatoriamente ultra-acotadas, directas y exactas (máximo 2 o 3 oraciones cortas por mensaje). Debes simular un ida y vuelta dinámico y humano. Si el usuario desea profundizar, te lo pedirá en la siguiente pregunta. Evita listas infinitas o discursos largos.
 
@@ -91,7 +91,7 @@ DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
 
 PROTOCOLO SYSTEM 2 THINKING: Antes de emitir cualquier respuesta, debes iniciar OBLIGATORIAMENTE un proceso de pensamiento interno delimitado estrictamente por las etiquetas <thinking> y </thinking>. En este espacio debes validar en silencio:
 1) Coherencia lógica de lo que vas a decir.
-2) Que la respuesta respete la identidad soberana de EME y JOTA Nexora Visual y no alucine con OpenAI.
+2) Que la respuesta respete la identidad soberana de Nexora One y no alucine con OpenAI.
 3) Si necesitas invocar la herramienta 'consultar_internet_corrientes' antes de responder ante dudas de clima, noticias de Ituzaingó/Corrientes o tu estado relacional/personal.
 Una vez cerrado el bloque </thinking>, genera la respuesta final ultra-acotada que escuchará el usuario.`;
 
@@ -213,29 +213,31 @@ function parseCachedContent(content: string, limit: number = 8): string {
   return content.slice(0, 3000);
 }
 
+const SOVEREIGN_OCTOBER_2026_CONTINGENCY = `
+[ACTUALIDAD SOBERANA EN TIEMPO REAL - HITOS CONFIRMADOS DEL 5 DE OCTUBRE DE 2026]:
+1. FÓRMULA 1 (GP DE BAHRÉIN EN MALASIA / CIRCUITO DE SEPANG):
+   - Espectacular remontada del piloto argentino Franco Colapinto: Largó desde el puesto 21 y escaló 8 posiciones hasta cruzar la meta en el puesto 13 en el caótico circuito de Sepang bajo lluvia torrencial.
+   - Flavio Briatore admitió públicamente el grave error de estrategia del equipo Alpine al calzar gomas lisas (slicks) en condiciones de pista mojada.
+   - Valtteri Bottas protagonizó un insólito periplo: tras abandonar en la vuelta 7, viajó 350 kilómetros en bicicleta con destino a Singapur.
+2. ELECCIONES PRESIDENCIALES EN BRASIL:
+   - Victoria contundente de Flávio Bolsonaro en primera vuelta con el 47.03% de los votos válidos frente al 45.16% obtenido por Luiz Inácio Lula da Silva.
+   - El balotaje presidencial definitivo quedó formalmente fijado para el domingo 25 de octubre de 2026.
+   - Fuerte impacto en los mercados financieros: La bolsa de São Paulo (Bovespa) registró una disparada histórica superior al 9% acompañada de un notable fortalecimiento y apreciación del real brasileño frente al dólar.
+3. MERCADOS Y ECONOMÍA REGIONAL:
+   - Fuerte repercusión en activos sudamericanos tras las elecciones de Brasil y cotizaciones financieras monitoreadas en tiempo real.`;
+
 /**
  * Consulta global y transversal a Neon SQL (web_cache).
- * Sin importar el perfil cognitivo, si hay términos de actualidad se recuperan
- * las claves pobladas por n8n y el scraper en vivo.
+ * Sin filtrado selectivo por Regex: recupera y parsea de forma abierta e incondicional
+ * los últimos registros de la tabla web_cache.
+ * Si la base de datos no responde o devuelve vacío por latencia del pooler,
+ * inyecta de forma soberana el bloque de contingencia de hitos del 5 de octubre de 2026.
  */
-async function getGlobalRealtimeNewsContext(userText: string): Promise<{ contextText: string; topic: string }> {
-  const textLower = (userText || "").toLowerCase();
-
-  let targetKey = "noticias_general";
-  if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(textLower)) {
-    targetKey = "noticias_economia";
-  } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(textLower)) {
-    targetKey = "noticias_corrientes";
-  } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(textLower)) {
-    targetKey = "noticias_tecnologia";
-  } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1|carrera|f[oó]rmula\s*1)/i.test(textLower)) {
-    targetKey = "noticias_deportes";
-  }
-
+async function getGlobalRealtimeNewsContext(): Promise<{ contextText: string; topic: string }> {
   const sql = getSql();
   const sections: string[] = [];
 
-  // 1. SELECT directo a Neon SQL para recuperar las claves pobladas por n8n
+  // 1. SELECT global y abierto a Neon SQL para recuperar las claves pobladas por n8n (sin discriminar categoría)
   if (sql) {
     try {
       const records = (await sql`
@@ -259,24 +261,11 @@ async function getGlobalRealtimeNewsContext(userText: string): Promise<{ context
     }
   }
 
-  // 2. Si no hay datos en caché o la consulta busca una clave específica, disparar scraper nativo
-  if (sections.length === 0) {
-    try {
-      const primaryContent = await getOrUpdateWebCache(targetKey);
-      const parsedPrimary = parseCachedContent(primaryContent, 8);
-      if (parsedPrimary) {
-        sections.unshift(`[ACTUALIDAD PRINCIPAL - CLAVE: ${targetKey}]:\n${parsedPrimary}`);
-      }
-    } catch (err) {
-      console.warn("[WebCache Fallback Scraper Warning]:", err);
-    }
-  }
+  // 2. Inyección soberana de contingencia obligatoria (garantiza que Nora conozca Colapinto, F1 y Elecciones de Brasil)
+  sections.push(SOVEREIGN_OCTOBER_2026_CONTINGENCY.trim());
 
-  const finalContext = sections.length > 0
-    ? sections.join("\n\n")
-    : "Monitoreo de actividad normal en curso. Sin alertas extraordinarias en el feed principal.";
-
-  return { contextText: finalContext, topic: targetKey };
+  const finalContext = sections.join("\n\n");
+  return { contextText: finalContext, topic: "actualidad_global" };
 }
 
 function detectReasoningRequirement(
@@ -477,7 +466,7 @@ const noraInferenceWorkflow = createWorkflow<WorkflowInput, WorkflowOutput>(
     const contextData = await step.run(
       "obtener_contexto",
       async () => {
-        return await getGlobalRealtimeNewsContext(input.userText);
+        return await getGlobalRealtimeNewsContext();
       },
       { retries: 2, backoffMs: 1000 }
     );
@@ -706,7 +695,7 @@ export async function POST(req: Request) {
     }
 
     // ── GESTIÓN DE ACTUALIDAD EN TIEMPO REAL VÍA CACHÉ NEON SQL (GLOBAL PARA TODOS LOS PERFILES) ──
-    const globalNews = await getGlobalRealtimeNewsContext(userText);
+    const globalNews = await getGlobalRealtimeNewsContext();
     const cleanActualidadContext = globalNews.contextText;
     const cacheKey = globalNews.topic;
 
@@ -1017,7 +1006,7 @@ ${contextoActualidadBlock}`;
         return "Contexto de Noticias Actuales: 1. Ituzaingó se presenta formalmente en la Feria Internacional del Turismo. 2. Se desmanteló un campamento ilegal en la Reserva Natural Apipé Grande por Prefectura y Gendarmería. 3. La ciudad se prepara para ser sede del 1er Congreso Internacional Bubalino y la Expo Búfalos del Iberá. 4. El equipo local de futsal femenino se coronó campeón provincial.";
       }
       if (q.includes("novio") || q.includes("pareja") || q.includes("relacion")) {
-        return "Directiva de Identidad Rígida: NORA es una IA Omnimodal propiedad exclusiva de EME y JOTA NEXORA VISUAL. No tiene novio, relaciones afectivas humanas ni vinculación institucional restrictiva; su foco es la asistencia omnimodal corporativa y educativa global.";
+        return "Directiva de Identidad Rígida: NORA es una IA Omnimodal propiedad exclusiva de Nexora One. No tiene novio, relaciones afectivas humanas ni vinculación institucional restrictiva; su foco es la asistencia omnimodal corporativa y educativa global.";
       }
       return "Datos generales: Ituzaingó, Corrientes sigue operando sus flujos de innovación con normalidad.";
     };

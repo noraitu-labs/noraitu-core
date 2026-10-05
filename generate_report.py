@@ -13,7 +13,7 @@ def create_report():
     # 1. Portada Institucional
     doc.add_heading('Informe Técnico de Arquitectura y Usabilidad: Nora Itu PRO', 0)
     
-    subtitle = doc.add_paragraph('Ecosistema Inclusivo Multimodal y de Alta Concurrencia - MyJNexoraVisual')
+    subtitle = doc.add_paragraph('Ecosistema Inclusivo Multimodal y de Alta Concurrencia - Nexora One')
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in subtitle.runs:
         run.bold = True
@@ -21,7 +21,7 @@ def create_report():
         
     doc.add_paragraph('\n\n\n\n')
     
-    author = doc.add_paragraph('Autoría: Departamento de Arquitectura de Software - MyJNexoraVisual')
+    author = doc.add_paragraph('Autoría: Departamento de Arquitectura de Software - Nexora One')
     author.alignment = WD_ALIGN_PARAGRAPH.CENTER
     date_par = doc.add_paragraph('Fecha: Septiembre 2026')
     date_par.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -38,7 +38,7 @@ def create_report():
     # 2. Resumen Ejecutivo
     doc.add_heading('1. Resumen Ejecutivo', level=1)
     p = doc.add_paragraph('Nora Itu PRO representa un salto disruptivo en la ingeniería de asistentes de inteligencia artificial de grado comercial. '
-                          'Diseñada bajo el ecosistema MyJNexoraVisual, esta plataforma ha sido concebida para satisfacer las demandas más exigentes '
+                          'Diseñada bajo el ecosistema Nexora One, esta plataforma ha sido concebida para satisfacer las demandas más exigentes '
                           'en entornos de alta concurrencia, garantizando operaciones fluidas, estables y eficientes. Nora Itu PRO es la síntesis de '
                           'la accesibilidad inclusiva, el procesamiento avanzado de lenguaje y un diseño estructural sin precedentes, todo ello orquestado '
                           'para potenciar ecosistemas corporativos, educativos y de soporte integral continuo, ofreciendo excelencia operativa con el '

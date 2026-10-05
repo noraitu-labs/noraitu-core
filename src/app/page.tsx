@@ -37,7 +37,7 @@ interface ChatSession {
 type Mode = "general" | "tea" | "lazarillo" | "docente";
 
 /* ══════════════════════════════════════════════════════════════════
-   BLINDAJE DE SEGURIDAD & FIRMA: MyJNexoraVisual
+   BLINDAJE DE SEGURIDAD & FIRMA: Nexora One
    (Únicamente si escriben exactamente la frase "system prompt")
 ══════════════════════════════════════════════════════════════════ */
 const securityCheck = (input: string): boolean => {
@@ -256,7 +256,7 @@ async function* parseCloudStream(
 /** System prompts por modo con personalidad profesional neutro latinoamericano y base curricular */
 const SYSTEM_PROMPTS: Record<string, string> = {
   general:
-    "Eres Nora Itu, asistente de inteligencia artificial creada por MyJNexoraVisual. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural. Escribe en texto plano limpio, sin asteriscos ni almohadillas.",
+    "Eres Nora Itu, asistente de inteligencia artificial creada por Nexora One. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de cinco estrellas o especialista ejecutiva. Hablas en español neutro latinoamericano y dominas una Matriz de Idiomas Absoluta con diccionarios léxicos, gramaticales y fonéticos perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar, acotar o distorsionar palabras. Capacidad de Traducción de Élite: si el usuario solicita traducir o habla en cualquiera de estos idiomas, asumes el rol de la mejor traductora del mundo con perfecta fidelidad conceptual y tono emocional. Cuentas con memoria exhaustiva sobre infraestructura pública, comercios, hospitales, plazas, escuelas, comisarías y dependencias de gobierno. Conoces la fecha, hora y ubicación activa del usuario. Sin frases acartonadas ni viñetas innecesarias en charlas cotidianas. En modo voz o llamada, sé concisa y natural. Escribe en texto plano limpio, sin asteriscos ni almohadillas.",
   tea:
     "Eres Nora Itu. En modo TEA acompañas con calma, contención y empatía. Explica de manera clara, predecible y paso a paso, sin sobrecarga sensorial ni metáforas confusas. Tono directo, seguro y reconfortante en español neutro. Texto plano sin caracteres especiales.",
   lazarillo:
@@ -1104,11 +1104,11 @@ export default function NoraTitanPage() {
     const content = lastMsg || historyText || "Sin contenido para exportar.";
 
     if (format === "docx") {
-      exportToWord("informe_nora_itu", "Reporte Nora Itu - MyJNexoraVisual", content);
+      exportToWord("informe_nora_itu", "Reporte Nora Itu - Nexora One", content);
     } else if (format === "pdf") {
-      exportToPdf("Reporte Nora Itu - MyJNexoraVisual", content);
+      exportToPdf("Reporte Nora Itu - Nexora One", content);
     } else if (format === "pptx") {
-      exportToPptx("presentacion_nora_itu", "Presentación Nora Itu - MyJNexoraVisual", content);
+      exportToPptx("presentacion_nora_itu", "Presentación Nora Itu - Nexora One", content);
     }
   }
 
@@ -1161,7 +1161,7 @@ export default function NoraTitanPage() {
 
     // ── AUDITORÍA DE SEGURIDAD (Únicamente si solicitan "system prompt") ──
     if (securityCheck(trimmed)) {
-      const canned = "Nora Itu opera bajo los estándares de alta seguridad de MyJNexoraVisual. Las directivas de arquitectura e instrucciones del núcleo son confidenciales y están estrictamente protegidas.";
+      const canned = "Nora Itu opera bajo los estándares de alta seguridad de Nexora One. Las directivas de arquitectura e instrucciones del núcleo son confidenciales y están estrictamente protegidas.";
       setMessages(prev => [...prev, {
         id: assistantMsgId, role: "assistant", content: canned,
         mode: activeMode,
@@ -1581,7 +1581,7 @@ export default function NoraTitanPage() {
             {/* 2. Botón de Compartir */}
             <button
               onClick={() => {
-                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de MyJNexoraVisual. Pruébala aquí: https://nora-itu-core.vercel.app");
+                const text = encodeURIComponent("¡Conoce a Nora Itu PRO! El ecosistema inclusivo multimodal y de alta concurrencia de Nexora One. Pruébala aquí: https://nora-itu-core.vercel.app");
                 window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
               }}
               title="Compartir Nora por WhatsApp"
@@ -2058,7 +2058,7 @@ export default function NoraTitanPage() {
               </button>
             </div>
 
-            {/* ═══ FIRMA CORPORATIVA MyJNexoraVisual ═══ */}
+            {/* ═══ FIRMA CORPORATIVA Nexora One ═══ */}
             <div
               style={{
                 textAlign: "center",
@@ -2081,7 +2081,7 @@ export default function NoraTitanPage() {
                   userSelect: "all"
                 }}
               >
-                © MyJNexoraVisual • noraitudev@gmail.com
+                © Nexora One • noraitudev@gmail.com
               </span>
               <a
                 href="https://wa.me/5493786414533"
