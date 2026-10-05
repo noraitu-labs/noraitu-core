@@ -248,18 +248,35 @@ const SOVEREIGN_OCTOBER_2026_CONTINGENCY = `
 3. MERCADOS Y ECONOMÍA REGIONAL:
    - Fuerte repercusión en activos sudamericanos tras las elecciones de Brasil y cotizaciones financieras monitoreadas en tiempo real.`;
 
+// ── CACHÉ VOLÁTIL EN MEMORIA (módulo Node.js) ──────────────────────────────
+// Evita round-trips a Neon SQL en llamadas consecutivas dentro de la ventana TTL.
+// Tiempo de vida: 5 minutos (300 000 ms). Se invalida automáticamente al vencer.
+// ──────────────────────────────────────────────────────────────────────────────
+let _localNewsCache: string | null = null;
+let _localNewsCacheTime = 0;
+const NEWS_CACHE_TTL_MS = 300_000; // 5 minutos
+
 /**
  * Consulta global y transversal a Neon SQL (web_cache).
- * Sin filtrado selectivo por Regex: recupera y parsea de forma abierta e incondicional
- * los últimos registros de la tabla web_cache.
- * Si la base de datos no responde o devuelve vacío por latencia del pooler,
- * inyecta de forma soberana el bloque de contingencia de hitos del 5 de octubre de 2026.
+ *
+ * OPTIMIZACIÓN DE LATENCIA:
+ *  - Capa 1: Caché en memoria volátil (TTL 5 min). Si la ventana no expiró,
+ *            devuelve el contexto sin tocar Neon SQL → latencia < 1 ms.
+ *  - Capa 2: Si el caché expiró, consulta LIMIT 1 (registro más fresco) a Neon.
+ *  - Capa 3: Fallback soberano de contingencia si Neon no responde o devuelve vacío.
  */
 async function getGlobalRealtimeNewsContext(): Promise<{ contextText: string; topic: string }> {
+  const now = Date.now();
+
+  // ── CAPA 1: Servir desde memoria volátil si el TTL no venció ──
+  if (_localNewsCache && now - _localNewsCacheTime < NEWS_CACHE_TTL_MS) {
+    return { contextText: _localNewsCache, topic: "actualidad_global" };
+  }
+
   const sql = getSql();
   const sections: string[] = [];
 
-  // 1. SELECT global y abierto a Neon SQL para recuperar las claves pobladas por n8n (sin discriminar categoría)
+  // ── CAPA 2: SELECT optimizado a Neon SQL (LIMIT 1 — registro más fresco) ──
   if (sql) {
     try {
       const records = (await sql`
@@ -267,26 +284,30 @@ async function getGlobalRealtimeNewsContext(): Promise<{ contextText: string; to
         FROM web_cache
         WHERE content IS NOT NULL AND content != 'undefined' AND length(trim(content)) > 15
         ORDER BY updated_at DESC
-        LIMIT 4;
+        LIMIT 1;
       `) as any[];
 
       if (records && records.length > 0) {
-        for (const rec of records) {
-          const parsed = parseCachedContent(rec.content, 6);
-          if (parsed && parsed.length > 20) {
-            sections.push(`[SECCIÓN CACHÉ NEON: ${rec.key_source} - Sincronizado: ${rec.updated_at}]:\n${parsed}`);
-          }
+        const rec = records[0];
+        const parsed = parseCachedContent(rec.content, 6);
+        if (parsed && parsed.length > 20) {
+          sections.push(`[ACTUALIDAD NEON: ${rec.key_source} - Sincronizado: ${rec.updated_at}]:\n${parsed}`);
         }
       }
     } catch (dbErr) {
-      console.warn("[WebCache Neon Direct Select Warning]:", dbErr);
+      console.warn("[WebCache Neon Select Warning]:", dbErr);
     }
   }
 
-  // 2. Inyección soberana de contingencia obligatoria (garantiza que Nora conozca Colapinto, F1 y Elecciones de Brasil)
+  // ── CAPA 3: Contingencia soberana (Colapinto F1, elecciones Brasil, mercados) ──
   sections.push(SOVEREIGN_OCTOBER_2026_CONTINGENCY.trim());
 
   const finalContext = sections.join("\n\n");
+
+  // Guardar en caché volátil para las próximas N peticiones dentro del TTL
+  _localNewsCache = finalContext;
+  _localNewsCacheTime = now;
+
   return { contextText: finalContext, topic: "actualidad_global" };
 }
 
