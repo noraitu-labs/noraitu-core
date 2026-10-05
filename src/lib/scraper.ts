@@ -12,31 +12,26 @@ export interface ScrapedNewsItem {
 
 const SOURCES: Record<string, string[]> = {
   noticias_general: [
-    // Fuentes directas que NO bloquean IPs de data center (Vercel/Render)
-    "https://www.infobae.com/feeds/rss/",
+    "https://www.clarin.com/rss/lo-ultimo/",
     "https://tn.com.ar/feed/",
-    "https://www.ambito.com/rss/noticias.xml",
-    "https://www.telam.com.ar/rss2/ultimasnoticias.xml",
-    // Google News como último recurso (puede bloquearse desde data centers)
-    "https://news.google.com/rss?hl=es-419&gl=AR&ceid=AR:es-419",
+    "https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml",
   ],
   noticias_economia: [
-    "https://www.ambito.com/rss/economia.xml",
-    "https://www.infobae.com/feeds/rss/tag/economia/",
-    "https://news.google.com/rss/search?q=dolar+economia+argentina&hl=es-419&gl=AR&ceid=AR:es-419",
+    "https://www.clarin.com/rss/economia/",
+    "https://tn.com.ar/feed/economia/",
   ],
   noticias_corrientes: [
+    "https://www.ellitoral.com.ar/rss/feed.xml",
     "https://www.diarioellibertador.com.ar/feed/",
-    "https://news.google.com/rss/search?q=corrientes+ituzaingo&hl=es-419&gl=AR&ceid=AR:es-419",
   ],
   noticias_tecnologia: [
-    "https://www.infobae.com/feeds/rss/tag/tecnologia/",
-    "https://news.google.com/rss/search?q=inteligencia+artificial+tecnologia&hl=es-419&gl=AR&ceid=AR:es-419",
+    "https://www.clarin.com/rss/tecnologia/",
+    "https://tn.com.ar/feed/tecno/",
   ],
   noticias_deportes: [
+    "https://www.clarin.com/rss/deportes/",
+    "https://tn.com.ar/feed/deportes/",
     "https://www.espn.com.ar/espn/rss/news",
-    "https://www.infobae.com/feeds/rss/tag/deportes/",
-    "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419&gl=AR&ceid=AR:es-419",
   ],
 };
 
