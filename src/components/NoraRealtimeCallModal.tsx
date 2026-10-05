@@ -493,12 +493,27 @@ export default function NoraRealtimeCallModal({
           conversationHistoryRef.current.push({ role: "assistant", content: accumulatedFull.trim() });
           setCallHistory(prev => [...prev, { role: "assistant", text: accumulatedFull.trim() }]);
         }
+
       } catch (err: any) {
         if (err.name !== "AbortError") {
-          console.error("[Call Stream Error]:", err);
-          setErrorMsg("Error de conexión durante la llamada.");
+          console.warn("[Call Stream Warning]:", err?.message || err);
+          // Error amigable: no bloquear la llamada con cartel permanente.
+          // Auto-limpiar tras 3s y reactivar micrófono silenciosamente.
+          const isNetworkHiccup =
+            err?.message?.toLowerCase().includes("network") ||
+            err?.message?.toLowerCase().includes("failed to fetch") ||
+            err?.message?.toLowerCase().includes("rate") ||
+            err?.message?.toLowerCase().includes("timeout") ||
+            err?.message?.toLowerCase().includes("connection");
+
+          const friendlyMsg = isNetworkHiccup
+            ? "Reconectando... (red inestable)"
+            : "Error temporal. Volviendo a escucharte.";
+
+          setErrorMsg(friendlyMsg);
           setStatus("listening");
           activateMicrophoneSafely();
+          setTimeout(() => setErrorMsg(null), 3000);
         }
       } finally {
         isStreamActiveRef.current = false;

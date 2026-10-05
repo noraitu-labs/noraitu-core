@@ -156,16 +156,21 @@ function getInclusiveDirective(mode?: string, userText?: string): string {
 // ══════════════════════════════════════════════════════════════
 function stripToolCallArtifacts(text: string): string {
   if (!text) return text;
+  // IMPORTANTE: reemplazar los bloques eliminados con un espacio (' ') en lugar de ''
+  // para preservar los espacios entre palabras cuando los chunks del stream
+  // llegan fragmentados y el artefacto queda al inicio o fin de un chunk.
   return text
-    .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, "")
-    .replace(/<function_calls>[\s\S]*?<\/function_calls>/gi, "")
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
-    .replace(/<invoke[^>]*>[\s\S]*?<\/invoke>/gi, "")
-    .replace(/<\/?function[^>]*>/gi, "")
-    .replace(/<\/?tool_call[^>]*>/gi, "")
-    .replace(/<\/?invoke[^>]*>/gi, "")
-    .replace(/\{\s*"name"\s*:\s*"(consultar_internet_corrientes|buscar_informacion_en_vivo)"[^}]*\}/g, "")
-    .trim();
+    .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, " ")
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/gi, " ")
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, " ")
+    .replace(/<invoke[^>]*>[\s\S]*?<\/invoke>/gi, " ")
+    .replace(/<\/?function[^>]*>/gi, " ")
+    .replace(/<\/?tool_call[^>]*>/gi, " ")
+    .replace(/<\/?invoke[^>]*>/gi, " ")
+    .replace(/\{\s*"name"\s*:\s*"(consultar_internet_corrientes|buscar_informacion_en_vivo)"[^}]*\}/g, " ")
+    // Colapsar múltiples espacios en uno solo (producto de los reemplazos anteriores)
+    // pero NO hacer trim() global para no cortar espacios entre chunks del stream
+    .replace(/ {2,}/g, " ");
 }
 
 function decodeHtmlEntities(str: string): string {
