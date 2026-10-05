@@ -146,6 +146,28 @@ function getInclusiveDirective(mode?: string, userText?: string): string {
   return "";
 }
 
+// ══════════════════════════════════════════════════════════════
+// FILTRO DE SANIDAD: elimina artefactos de tool-calls crudos del stream
+// antes de que lleguen al frontend o al motor de audio TTS.
+// Patrones interceptados:
+//   <function=foo>{...}</function>   <function_calls>...</function_calls>
+//   <tool_call>...</tool_call>       <invoke name="...">...</invoke>
+//   Inline JSON { "name": "consultar_..." }
+// ══════════════════════════════════════════════════════════════
+function stripToolCallArtifacts(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/<function=[^>]*>[\s\S]*?<\/function>/gi, "")
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/gi, "")
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "")
+    .replace(/<invoke[^>]*>[\s\S]*?<\/invoke>/gi, "")
+    .replace(/<\/?function[^>]*>/gi, "")
+    .replace(/<\/?tool_call[^>]*>/gi, "")
+    .replace(/<\/?invoke[^>]*>/gi, "")
+    .replace(/\{\s*"name"\s*:\s*"(consultar_internet_corrientes|buscar_informacion_en_vivo)"[^}]*\}/g, "")
+    .trim();
+}
+
 function decodeHtmlEntities(str: string): string {
   return str
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
@@ -924,7 +946,8 @@ ${contextoActualidadBlock}`;
                 }
                 try {
                   const parsed = JSON.parse(data);
-                  const chunk = parsed.choices?.[0]?.delta?.content || "";
+                  const rawChunk = parsed.choices?.[0]?.delta?.content || "";
+                  const chunk = stripToolCallArtifacts(rawChunk);
                   if (chunk) {
                     fullText += chunk;
                     controller.enqueue(encoder.encode(chunk));
@@ -1138,7 +1161,7 @@ ${contextoActualidadBlock}`;
                   const tagLength = startThinkingIdx !== -1 ? 10 : 7;
 
                   if (startIdx !== -1) {
-                    const before = buffer.slice(0, startIdx);
+                    const before = stripToolCallArtifacts(buffer.slice(0, startIdx));
                     if (before) {
                       fullText += before;
                       controller.enqueue(encoder.encode(before));
@@ -1148,13 +1171,12 @@ ${contextoActualidadBlock}`;
                   } else {
                     const lastLess = buffer.lastIndexOf("<");
                     if (lastLess === -1) {
-                      fullText += buffer;
-                      controller.enqueue(encoder.encode(buffer));
+                      const clean = stripToolCallArtifacts(buffer);
+                      if (clean) { fullText += clean; controller.enqueue(encoder.encode(clean)); }
                       buffer = "";
                     } else {
-                      const before = buffer.slice(0, lastLess);
-                      fullText += before;
-                      controller.enqueue(encoder.encode(before));
+                      const before = stripToolCallArtifacts(buffer.slice(0, lastLess));
+                      if (before) { fullText += before; controller.enqueue(encoder.encode(before)); }
                       buffer = buffer.slice(lastLess);
                     }
                   }
@@ -1213,8 +1235,8 @@ ${contextoActualidadBlock}`;
           }
 
           if (!inThinking && buffer) {
-            fullText += buffer;
-            controller.enqueue(encoder.encode(buffer));
+            const cleanBuf = stripToolCallArtifacts(buffer);
+            if (cleanBuf) { fullText += cleanBuf; controller.enqueue(encoder.encode(cleanBuf)); }
           }
 
           controller.close();
