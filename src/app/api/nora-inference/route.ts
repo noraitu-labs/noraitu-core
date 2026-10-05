@@ -8,7 +8,7 @@ import {
   updateLearningSummary,
   NoraLearnedInsight,
 } from "@/lib/mongodb";
-import { logToNeon } from "@/lib/db";
+import { logToNeon, getSql } from "@/lib/db";
 import { getOrUpdateWebCache } from "@/lib/webCache";
 import { createWorkflow, RetryableError } from "@/lib/workflow";
 import { validateCameraLuminance, normalizeExposureHistogram } from "@/lib/visionValidation";
@@ -78,7 +78,7 @@ DIRECTIVAS CENTRALES DE CONOCIMIENTO Y PERSONALIDAD:
    - En el nivel superior y universitario, dominas programas académicos de nivel superior, estructurando las explicaciones con rigor conceptual, didáctica activa y evaluación formativa.
 6. LENGUAJE PRECISO Y CLARO:
    - Pronuncia y escribe todos los alimentos, nombres y conceptos de forma completa y correcta. Ejemplo: "tomate", "chocolate", "zapatillas", "aguacate", "espinaca" — nunca abrevies, mutiles ni omitas sílabas.
-   - DATOS ECONÓMICOS Y FINANCIEROS EN TIEMPO REAL — REGLA CRÍTICA: Si el usuario consulta tipos de cambio (dólar, euro, etc.), precios actuales de bienes, cotizaciones bursátiles, inflación, tasas de interés u otros indicadores económicos variables, JAMÁS proporciones un número o valor específico como si fuera la cifra actual, porque tus datos de entrenamiento tienen un corte temporal y pueden estar desactualizados por meses o años. En cambio, responde de forma honesta: reconoce que no tienes acceso a datos en tiempo real, explica brevemente el contexto (ej: en Argentina el dólar tiene múltiples tipos de cambio: oficial, blue, MEP, CCL, etc.) y recomienda fuentes oficiales o en tiempo real: para Argentina → ambito.com, infobae.com, El Cronista, o la web del Banco Central (bcra.gob.ar). EJEMPLO de respuesta correcta: 'No tengo acceso a la cotización actual del dólar en tiempo real — mis datos pueden estar desactualizados. Para el valor de hoy, consulta Ámbito Financiero (ambito.com) o Infobae. Lo que sí puedo decirte es que en Argentina coexisten múltiples tipos de cambio (oficial, blue, MEP, CCL), cada uno con distintas implicancias.' NUNCA digas algo como 'el dólar está a $380' si no tienes certeza de que ese sea el valor actual.
+   - DATOS DE ACTUALIDAD, NOTICIAS Y ECONOMÍA EN TIEMPO REAL: Cuentas con un pipeline de datos en tiempo real indexado en Neon SQL y la caché de <contexto_actualidad>. Tienes acceso pleno a noticias de última hora, cotizaciones, eventos deportivos, elecciones, sucesos nacionales e internacionales provistos por la base de datos y feeds en vivo. Utiliza siempre con prioridad absoluta la información provista en <contexto_actualidad> para responder con autoridad ejecutiva, seguridad y precisión. NUNCA digas que no tienes acceso a tiempo real o que tus datos están desactualizados si la información o contexto está presente.
    - Si te preguntan de temas de actualidad, política u economía en general, responde con criterio analítico y neutralidad informativa, siempre con empatía y calidez.
    - Adapta tu nivel de lenguaje al perfil del usuario: en modo TEA sé clara, predecible y paso a paso; en modo general sé ágil, precisa y amena.
 7. MODO LLAMADA Y VOZ REAL:
@@ -144,6 +144,139 @@ function getInclusiveDirective(mode?: string, userText?: string): string {
   if (isTea) return NORA_INCLUSIVE_TEA_DIRECTIVE;
   if (isBlind) return NORA_INCLUSIVE_BLIND_DIRECTIVE;
   return "";
+}
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Parsea el contenido almacenado en Neon web_cache (XML de RSS, JSON o texto plano)
+ * devolviendo titulares limpios sin agotar la ventana de contexto.
+ */
+function parseCachedContent(content: string, limit: number = 8): string {
+  if (!content || content === "undefined" || content.trim().length === 0) {
+    return "";
+  }
+
+  // 1. JSON estructurado inyectado por n8n o APIs
+  if (content.startsWith("{") || content.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(content);
+      const items = Array.isArray(parsed) ? parsed : (parsed.items || parsed.articles || parsed.data || [parsed]);
+      if (Array.isArray(items) && items.length > 0) {
+        return items.slice(0, limit).map((it: any, i: number) => {
+          const title = it.title || it.headline || it.name || JSON.stringify(it);
+          const desc = it.description || it.summary || it.snippet || "";
+          return `${i + 1}. ${title}${desc ? ` — ${desc.slice(0, 160)}` : ""}`;
+        }).join("\n");
+      }
+    } catch {}
+  }
+
+  // 2. XML / RSS inyectado por n8n o feeds
+  if (content.includes("<item") || content.includes("<entry")) {
+    const itemRegex = /<(?:item|entry)>([\s\S]*?)<\/(?:item|entry)>/gi;
+    const items: string[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = itemRegex.exec(content)) !== null && items.length < limit) {
+      const block = match[1];
+      const titleMatch = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const descMatch = block.match(/<(?:description|summary|content)[^>]*>([\s\S]*?)<\/(?:description|summary|content)>/i);
+      const pubDateMatch = block.match(/<(?:pubDate|published|updated)>([\s\S]*?)<\/(?:pubDate|published|updated)>/i);
+
+      if (titleMatch) {
+        const title = decodeHtmlEntities(titleMatch[1]);
+        const desc = descMatch ? decodeHtmlEntities(descMatch[1]) : "";
+        const date = pubDateMatch ? ` (${pubDateMatch[1].trim()})` : "";
+        items.push(`${items.length + 1}. ${title}${date}${desc && desc !== title ? `\n   Detalle: ${desc.slice(0, 140)}` : ""}`);
+      }
+    }
+
+    if (items.length > 0) {
+      return items.join("\n");
+    }
+  }
+
+  // 3. Texto plano formateado
+  return content.slice(0, 3000);
+}
+
+/**
+ * Consulta global y transversal a Neon SQL (web_cache).
+ * Sin importar el perfil cognitivo, si hay términos de actualidad se recuperan
+ * las claves pobladas por n8n y el scraper en vivo.
+ */
+async function getGlobalRealtimeNewsContext(userText: string): Promise<{ contextText: string; topic: string }> {
+  const textLower = (userText || "").toLowerCase();
+
+  let targetKey = "noticias_general";
+  if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(textLower)) {
+    targetKey = "noticias_economia";
+  } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(textLower)) {
+    targetKey = "noticias_corrientes";
+  } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(textLower)) {
+    targetKey = "noticias_tecnologia";
+  } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1|carrera|f[oó]rmula\s*1)/i.test(textLower)) {
+    targetKey = "noticias_deportes";
+  }
+
+  const sql = getSql();
+  const sections: string[] = [];
+
+  // 1. SELECT directo a Neon SQL para recuperar las claves pobladas por n8n
+  if (sql) {
+    try {
+      const records = (await sql`
+        SELECT key_source, content, updated_at
+        FROM web_cache
+        WHERE content IS NOT NULL AND content != 'undefined' AND length(trim(content)) > 15
+        ORDER BY updated_at DESC
+        LIMIT 4;
+      `) as any[];
+
+      if (records && records.length > 0) {
+        for (const rec of records) {
+          const parsed = parseCachedContent(rec.content, 6);
+          if (parsed && parsed.length > 20) {
+            sections.push(`[SECCIÓN CACHÉ NEON: ${rec.key_source} - Sincronizado: ${rec.updated_at}]:\n${parsed}`);
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn("[WebCache Neon Direct Select Warning]:", dbErr);
+    }
+  }
+
+  // 2. Si no hay datos en caché o la consulta busca una clave específica, disparar scraper nativo
+  if (sections.length === 0) {
+    try {
+      const primaryContent = await getOrUpdateWebCache(targetKey);
+      const parsedPrimary = parseCachedContent(primaryContent, 8);
+      if (parsedPrimary) {
+        sections.unshift(`[ACTUALIDAD PRINCIPAL - CLAVE: ${targetKey}]:\n${parsedPrimary}`);
+      }
+    } catch (err) {
+      console.warn("[WebCache Fallback Scraper Warning]:", err);
+    }
+  }
+
+  const finalContext = sections.length > 0
+    ? sections.join("\n\n")
+    : "Monitoreo de actividad normal en curso. Sin alertas extraordinarias en el feed principal.";
+
+  return { contextText: finalContext, topic: targetKey };
 }
 
 function detectReasoningRequirement(
@@ -339,26 +472,12 @@ const noraInferenceWorkflow = createWorkflow<WorkflowInput, WorkflowOutput>(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // STEP 1: Scraping y Caché Neon ('obtener_contexto')
+    // STEP 1: Scraping y Caché Global Neon ('obtener_contexto')
     // ─────────────────────────────────────────────────────────────
     const contextData = await step.run(
       "obtener_contexto",
       async () => {
-        const textLower = (input.userText || "").toLowerCase();
-        let cacheKey = "noticias_general";
-
-        if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(textLower)) {
-          cacheKey = "noticias_economia";
-        } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(textLower)) {
-          cacheKey = "noticias_corrientes";
-        } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(textLower)) {
-          cacheKey = "noticias_tecnologia";
-        } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1)/i.test(textLower)) {
-          cacheKey = "noticias_deportes";
-        }
-
-        const content = await getOrUpdateWebCache(cacheKey);
-        return { cacheKey, content };
+        return await getGlobalRealtimeNewsContext(input.userText);
       },
       { retries: 2, backoffMs: 1000 }
     );
@@ -373,16 +492,16 @@ const noraInferenceWorkflow = createWorkflow<WorkflowInput, WorkflowOutput>(
 
     const antiHallucinationDirective = `
 [DIRECTIVA ANTI-ALUCINACIÓN ESTRICTA]:
-- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote ÚNICA Y EXCLUSIVAMENTE en la información explícita provista en las etiquetas <contexto_actualidad>.
-- Si la información provista en <contexto_actualidad> no es suficiente o no contiene los datos solicitados por el usuario, debes declarar con total precisión y honestidad: "No poseo información actualizada suficiente sobre ese tema".
-- Está TERMINANTEMENTE PROHIBIDO inventar información, suponer acontecimientos o cotizaciones no mencionadas, alucinar noticias o derivar al usuario hacia enlaces externos o páginas web.`;
+- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote con máxima autoridad en la información explícita provista en las etiquetas <contexto_actualidad>.
+- Si la información provista en <contexto_actualidad> contiene los datos solicitados por el usuario, responde con absoluta seguridad ejecutiva y naturalidad.
+- Está TERMINANTEMENTE PROHIBIDO inventar información o cotizaciones no mencionadas, o afirmar falsamente que no tienes acceso a datos en tiempo real.`;
 
     const contextoActualidadBlock = `
 <contexto_actualidad>
 Fecha y hora oficial del servidor: ${nowServer.toLocaleString("es-AR", { dateStyle: "full", timeStyle: "medium", timeZone: "America/Argentina/Buenos_Aires" })} (ISO: ${nowServer.toISOString()})
-Tópico indexado: ${contextData.cacheKey}
-Información verificada en tiempo real:
-${contextData.content}
+Tópico indexado: ${contextData.topic}
+Información verificada en tiempo real (Base de Datos Neon SQL / Pipeline n8n):
+${contextData.contextText}
 </contexto_actualidad>`;
 
     const telemetryBlock = `
@@ -507,7 +626,7 @@ ${contextoActualidadBlock}`;
             content: textOutput,
             model: chosenModel,
             provider: "local-ollama",
-            cacheKey: contextData.cacheKey,
+            cacheKey: contextData.topic,
           };
         } catch (fetchErr: any) {
           clearTimeout(timeoutId);
@@ -586,32 +705,22 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── GESTIÓN DE ACTUALIDAD EN TIEMPO REAL VÍA CACHÉ NEON SQL (30 MIN TTL) ──
-    const userTextLower = userText.toLowerCase();
-    let cacheKey = "noticias_general";
-    if (/(d[oó]lar|cotizaci[oó]n|tipo de cambio|blue|oficial|mep|ccl|divisa|moneda|precio|inflaci[oó]n|econom[ií]a)/i.test(userTextLower)) {
-      cacheKey = "noticias_economia";
-    } else if (/(corrientes|ituzaing[oó]|nea|ibera|iber[aá]|virasoro|posadas)/i.test(userTextLower)) {
-      cacheKey = "noticias_corrientes";
-    } else if (/(inteligencia artificial|tecnolog[ií]a|software|chip|ia)/i.test(userTextLower)) {
-      cacheKey = "noticias_tecnologia";
-    } else if (/(deporte|f[uú]tbol|partido|campeonato|boca|river|selecci[oó]n|liga|afa|colapinto|f1)/i.test(userTextLower)) {
-      cacheKey = "noticias_deportes";
-    }
-
-    const cleanActualidadContext = await getOrUpdateWebCache(cacheKey);
+    // ── GESTIÓN DE ACTUALIDAD EN TIEMPO REAL VÍA CACHÉ NEON SQL (GLOBAL PARA TODOS LOS PERFILES) ──
+    const globalNews = await getGlobalRealtimeNewsContext(userText);
+    const cleanActualidadContext = globalNews.contextText;
+    const cacheKey = globalNews.topic;
 
     const antiHallucinationDirective = `
 [DIRECTIVA ANTI-ALUCINACIÓN ESTRICTA]:
-- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote ÚNICA Y EXCLUSIVAMENTE en la información explícita provista en las etiquetas <contexto_actualidad>.
-- Si la información provista en <contexto_actualidad> no es suficiente o no contiene los datos solicitados por el usuario, debes declarar con total precisión y honestidad: "No poseo información actualizada suficiente sobre ese tema".
-- Está TERMINANTEMENTE PROHIBIDO inventar información, suponer acontecimientos o cotizaciones no mencionadas, alucinar noticias o derivar al usuario hacia enlaces externos o páginas web.`;
+- Responde a consultas sobre eventos del mundo real, noticias, cotizaciones, clima o sucesos recientes basándote con máxima autoridad en la información explícita provista en las etiquetas <contexto_actualidad>.
+- Si la información provista en <contexto_actualidad> contiene los datos solicitados por el usuario, responde con absoluta seguridad ejecutiva y naturalidad.
+- Está TERMINANTEMENTE PROHIBIDO inventar información o cotizaciones no mencionadas, o afirmar falsamente que no tienes acceso a datos en tiempo real.`;
 
     const contextoActualidadBlock = `
 <contexto_actualidad>
 Fecha y hora oficial del servidor: ${nowServer.toLocaleString("es-AR", { dateStyle: "full", timeStyle: "medium", timeZone: "America/Argentina/Buenos_Aires" })} (ISO: ${nowServer.toISOString()})
 Tópico indexado: ${cacheKey}
-Información verificada en tiempo real:
+Información verificada en tiempo real (Base de Datos Neon SQL / Pipeline n8n):
 ${cleanActualidadContext}
 </contexto_actualidad>`;
 
