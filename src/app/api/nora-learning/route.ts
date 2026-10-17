@@ -36,11 +36,16 @@ export async function GET() {
   }
 }
 
+import { validateOrigin } from "@/lib/security";
+
 /**
  * POST /api/nora-learning
  * Permite registrar un aprendizaje nuevo explícito o actualizar la memoria sintética
  */
 export async function POST(req: Request) {
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
   try {
     const body = await req.json();
     const { topic, insight, category = "general", summaryPrompt } = body;

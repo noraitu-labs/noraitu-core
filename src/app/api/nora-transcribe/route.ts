@@ -15,7 +15,12 @@ export const dynamic = "force-dynamic";
 let serverTtsSupported = true;
 let serverTtsCheckCooldown = 0;
 
+import { validateOrigin } from "@/lib/security";
+
 export async function POST(req: Request) {
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
   const url = new URL(req.url);
   const isTTS = url.searchParams.get("tts") === "true";
 

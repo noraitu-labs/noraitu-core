@@ -12,6 +12,9 @@ const withPWA = withPWAInit({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Blindaje Antirrobo y Seguridad en Producción
+  productionBrowserSourceMaps: false,
+  poweredByHeader: false,
   typescript: {
     ignoreBuildErrors: true,
   },

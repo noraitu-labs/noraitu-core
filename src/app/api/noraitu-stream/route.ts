@@ -17,7 +17,12 @@ interface LogPayload {
   hasImage?: boolean;
 }
 
+import { validateOrigin } from "@/lib/security";
+
 export async function POST(req: Request) {
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
   try {
     const body: LogPayload = await req.json();
     const {

@@ -23,6 +23,8 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
+import { NoraSecurityProvider } from "@/components/NoraSecurityProvider";
+
 export default function RootLayout({
   children,
 }: {
@@ -55,7 +57,9 @@ export default function RootLayout({
         `}} />
       </head>
       <body style={{ margin: 0, padding: 0, backgroundColor: "#090d16", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch" as any }}>
-        {children}
+        <NoraSecurityProvider>
+          {children}
+        </NoraSecurityProvider>
       </body>
     </html>
   );

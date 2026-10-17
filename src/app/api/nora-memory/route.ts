@@ -31,7 +31,12 @@ export async function GET(req: Request) {
 //  POST /api/nora-memory
 //  Persistencia fire-and-forget: Responde 200 INMEDIATO sin bloquear
 // ══════════════════════════════════════════════════════════════
+import { validateOrigin } from "@/lib/security";
+
 export async function POST(req: Request) {
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
   try {
     const body = await req.json();
     const {

@@ -33,6 +33,8 @@ interface RequestPayload {
   clientDateTime?: string | null;
 }
 
+import { validateOrigin } from "@/lib/security";
+
 // Instanciación del Router con cascada de proveedores (Groq -> Ollama Local)
 const llmRouter = new NoraLLMRouter([
   new GroqAdapter(),
@@ -40,6 +42,10 @@ const llmRouter = new NoraLLMRouter([
 ]);
 
 export async function POST(req: Request) {
+  // Blindaje Antirrobo: Bloqueo de orígenes no autorizados, Postman, cURL o clones
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
   try {
     const body: RequestPayload = await req.json();
     const {
