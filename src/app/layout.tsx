@@ -37,13 +37,20 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#09090b" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        {/* Fuerza scroll vertical en todo momento — anula overflow:hidden de modales en móvil */}
+        <script src="https://cdn.tailwindcss.com"></script>
+        {/* Fuerza scroll vertical y estructura en todo momento */}
         <style dangerouslySetInnerHTML={{__html: `
           html, body {
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            height: auto !important;
-            -webkit-overflow-scrolling: touch !important;
+            overflow: hidden !important;
+            height: 100dvh !important;
+            width: 100vw !important;
+            margin: 0;
+            padding: 0;
+            background-color: #020617;
+          }
+          img {
+            max-width: 100%;
+            height: auto;
           }
         `}} />
       </head>

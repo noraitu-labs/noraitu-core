@@ -72,12 +72,13 @@ export function NoraHeader({
   return (
     <header className="h-14 border-b border-white/10 bg-slate-900/90 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
       {/* IDENTIDAD & SELECTOR DE MODO */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 shrink-0" style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+        <div className="flex items-center gap-2 shrink-0" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <img
             src="/avatar-nora.png"
             alt="Nora"
-            className="w-8 h-8 rounded-full border border-indigo-500/40 object-cover shadow-sm"
+            className="w-8 h-8 rounded-full border border-indigo-500/40 object-cover shadow-sm shrink-0"
+            style={{ width: "32px", height: "32px", maxWidth: "32px", maxHeight: "32px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
           />
           <div className="hidden sm:block">
             <div className="text-sm font-bold text-white leading-none">NORA ITU</div>

@@ -103,7 +103,10 @@ export default function NoraPage() {
   }, [audio]);
 
   return (
-    <main className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative">
+    <main
+      className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative"
+      style={{ height: "100dvh", maxHeight: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}
+    >
       {/* 1. Header Modular con selector de modos y exportaciones */}
       <NoraHeader
         currentMode={mode}
@@ -125,18 +128,20 @@ export default function NoraPage() {
         isProcessing={vision.isProcessing}
       />
 
-      {/* 3. Feed de Chat y Pictogramas TEA */}
-      <NoraChatFeed
-        messages={chat.messages}
-        currentResponseStream={chat.currentResponseStream}
-        isStreaming={chat.isStreaming}
-        mode={mode}
-        userName={device.userName}
-        onSpeakText={(text) => audio.speakText(text)}
-        chatBottomRef={chatBottomRef}
-      />
+      {/* 3. Feed de Chat y Pictogramas TEA (Desplazable en el centro) */}
+      <div className="flex-1 overflow-y-auto w-full min-h-0" style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
+        <NoraChatFeed
+          messages={chat.messages}
+          currentResponseStream={chat.currentResponseStream}
+          isStreaming={chat.isStreaming}
+          mode={mode}
+          userName={device.userName}
+          onSpeakText={(text) => audio.speakText(text)}
+          chatBottomRef={chatBottomRef}
+        />
+      </div>
 
-      {/* 4. Footer de Control Único Limpio */}
+      {/* 4. Footer de Control Único Limpio (Siempre anclado al fondo) */}
       <NoraControlFooter
         inputText={inputText}
         onInputChange={setInputText}

@@ -54,11 +54,14 @@ export function NoraChatFeed({
       {/* ESTADO VACÍO (BIENVENIDA PERSONALIZADA CON CALIDEZ INSTITUCIONAL) */}
       {messages.length === 0 && !isStreaming && (
         <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto my-auto py-12 text-slate-400">
-          <img
-            src="/avatar-nora.png"
-            alt="Nora"
-            className="w-16 h-16 rounded-full border-2 border-indigo-500/50 mb-4 shadow-lg object-cover"
-          />
+          <div className="w-20 h-20 mb-4 relative shrink-0">
+            <img
+              src="/avatar-nora.png"
+              alt="Nora"
+              className="w-20 h-20 rounded-full border-2 border-indigo-500/50 shadow-lg object-cover"
+              style={{ width: "80px", height: "80px", maxWidth: "80px", maxHeight: "80px" }}
+            />
+          </div>
           <h2 className="text-lg font-bold text-white mb-1">Hola {userName}, soy Nora</h2>
           <p className="text-xs leading-relaxed text-slate-400">
             {mode === "lazarillo"
