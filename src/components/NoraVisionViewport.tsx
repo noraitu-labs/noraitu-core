@@ -23,15 +23,15 @@ export function NoraVisionViewport({
   telemetry,
   isProcessing = false,
 }: NoraVisionViewportProps) {
-  if (!isCameraActive) {
-    // Renderizamos el canvas oculto para procesar snapshots sin alterar la UI
-    return <canvas ref={canvasRef} className="sr-only" aria-hidden="true" />;
-  }
-
   const isLowLight = telemetry?.ambientLight === "Baja iluminación ambiental";
 
   return (
-    <div className="absolute top-16 right-4 w-72 bg-slate-900/95 border border-white/15 rounded-xl shadow-2xl overflow-hidden z-40 backdrop-blur-md transition-all">
+    <div
+      className={`fixed top-16 right-4 w-72 bg-slate-900/95 border border-white/20 rounded-xl shadow-2xl overflow-hidden z-50 backdrop-blur-md transition-all duration-300 ${
+        isCameraActive ? "opacity-100 scale-100 pointer-events-auto" : "opacity-0 scale-95 pointer-events-none hidden"
+      }`}
+      style={{ zIndex: 999 }}
+    >
       {/* HEADER DEL HUD */}
       <div className="px-3 py-2 bg-slate-950/80 border-b border-white/10 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">

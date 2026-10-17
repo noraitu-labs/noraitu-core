@@ -45,12 +45,28 @@ export default function NoraPage() {
 
   // Sincronizar el modo de chat y calibración acústica de voz al cambiar en el Header
   const handleModeChange = useCallback(
-    (newMode: NoraMode) => {
+    async (newMode: NoraMode) => {
       setMode(newMode);
       audio.setCognitiveMode(newMode);
       chat.setMode(newMode === "executive" ? "general" : newMode);
+
+      if (newMode === "lazarillo") {
+        // 1. Encendido inmediato del hardware óptico
+        try {
+          await vision.startCamera("environment");
+          // 2. Feedback acústico inmediato para personas no videntes
+          audio.speakText("Modo Lazarillo activado, cámara encendida.", undefined, "lazarillo");
+        } catch (e) {
+          console.warn("[page.tsx] Error al auto-iniciar cámara en modo lazarillo:", e);
+        }
+      } else {
+        // Si salimos de modo Lazarillo y la cámara estaba activa, la apagamos para ahorrar batería
+        if (vision.isCameraActive) {
+          vision.stopCamera();
+        }
+      }
     },
-    [chat, audio]
+    [chat, audio, vision]
   );
 
   // Autoscroll del feed de chat
@@ -102,6 +118,18 @@ export default function NoraPage() {
     }
   }, [audio]);
 
+  // Toggle bidireccional de cámara desde el footer
+  const handleToggleCamera = useCallback(async () => {
+    if (vision.isCameraActive) {
+      vision.stopCamera();
+    } else {
+      await vision.startCamera("environment");
+      if (mode === "lazarillo") {
+        audio.speakText("Cámara encendida.", undefined, "lazarillo");
+      }
+    }
+  }, [vision, mode, audio]);
+
   return (
     <main
       className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative"
@@ -149,7 +177,7 @@ export default function NoraPage() {
         isRecording={audio.isRecording}
         onToggleRecording={handleToggleRecording}
         isCameraActive={vision.isCameraActive}
-        onToggleCamera={() => (vision.isCameraActive ? vision.stopCamera() : vision.startCamera())}
+        onToggleCamera={handleToggleCamera}
         isLoading={chat.isLoading}
         selectedImageBase64={selectedImageBase64}
         onSelectImage={setSelectedImageBase64}
