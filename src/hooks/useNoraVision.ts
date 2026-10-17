@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { sanitizeForTTS } from "@/utils/audioUtils";
 
 export type ClockPosition =
   | "9 en punto"
@@ -95,7 +96,10 @@ export function useNoraVision() {
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
+      const cleanMessage = sanitizeForTTS(message);
+      if (!cleanMessage) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanMessage);
       utterance.lang = "es-419";
       utterance.rate = 1.35; // Rápida y de urgencia
       utterance.pitch = 1.15; // Tono de advertencia acústica clara

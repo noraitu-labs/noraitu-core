@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { NoraMode } from "@/lib/prompts/types";
+import { sanitizeForTTS } from "@/utils/audioUtils";
 
 export type AudioEngineType = "cloud-whisper" | "native-edge";
 
@@ -98,13 +99,7 @@ export function useNoraAudio(options: UseNoraAudioOptions = {}) {
 
         window.speechSynthesis.cancel();
 
-        const cleanText = text
-          .replace(/[*#_~`>\[\]\(\)\{\}\\]+/g, " ")
-          .replace(/<think>[\s\S]*?<\/think>/gi, "")
-          .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
-          .replace(/^Thinking:?\s*/i, "")
-          .replace(/\s+/g, " ")
-          .trim();
+        const cleanText = sanitizeForTTS(text);
 
         if (!cleanText) {
           resolve();

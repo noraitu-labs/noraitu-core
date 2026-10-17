@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, MicOff, PhoneOff, Volume2, VolumeX, Sparkles, Send, Radio, MessageSquare, Loader2 } from "lucide-react";
+import { sanitizeForTTS } from "@/utils/audioUtils";
 
 interface NoraRealtimeCallModalProps {
   isOpen: boolean;
@@ -289,9 +290,14 @@ export default function NoraRealtimeCallModal({
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const lang = callLanguageRef.current || "es-419";
+      const sanitizedSentence = sanitizeForTTS(sentence);
+      if (!sanitizedSentence) {
+        isSpeakingRef.current = false;
+        return;
+      }
 
       const speakWithVoice = (voices: SpeechSynthesisVoice[]) => {
-        const utterance = new SpeechSynthesisUtterance(sentence);
+        const utterance = new SpeechSynthesisUtterance(sanitizedSentence);
         // CRÍTICO: forzar idioma español antes de asignar voz
         utterance.lang = lang.startsWith("es") ? lang : "es-419";
         utterance.rate = 0.97;
