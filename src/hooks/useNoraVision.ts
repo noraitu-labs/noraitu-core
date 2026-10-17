@@ -159,24 +159,40 @@ export function useNoraVision() {
     return w.loadingCocoPromise;
   }, []);
 
-  // Inicializar stream de video de la cámara
+  // Inicializar stream de video de la cámara con fallback de cámara trasera a delantera
   const startCamera = useCallback(async (facingMode: "user" | "environment" = "environment") => {
     try {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 480 }, // Optimizado para latencia y velocidad de transferencia
-          height: { ideal: 360 },
-          frameRate: { ideal: 24, max: 30 },
-        },
-        audio: false,
-      });
+
+      let stream: MediaStream | null = null;
+      try {
+        // Intento 1: Cámara trasera ("environment")
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 480 },
+            height: { ideal: 360 },
+            frameRate: { ideal: 24, max: 30 },
+          },
+          audio: false,
+        });
+      } catch (errEnvironment) {
+        console.warn("[useNoraVision] Fallback a cámara disponible por defecto:", errEnvironment);
+        // Intento 2: Cualquier cámara disponible (ej. webcams en laptop / desktop)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("autoplay", "true");
+        videoRef.current.muted = true;
         await videoRef.current.play().catch(() => {});
       }
       setState((prev) => ({ ...prev, isCameraActive: true, error: null }));
@@ -188,6 +204,7 @@ export function useNoraVision() {
         isCameraActive: false,
         error: "No se pudo acceder a la cámara. Revisa los permisos del dispositivo.",
       }));
+      throw err;
     }
   }, [ensureCocoModel]);
 

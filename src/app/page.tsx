@@ -123,12 +123,56 @@ export default function NoraPage() {
     if (vision.isCameraActive) {
       vision.stopCamera();
     } else {
-      await vision.startCamera("environment");
-      if (mode === "lazarillo") {
-        audio.speakText("Cámara encendida.", undefined, "lazarillo");
+      try {
+        await vision.startCamera("environment");
+        if (mode === "lazarillo") {
+          audio.speakText("Cámara encendida.", undefined, "lazarillo");
+        }
+      } catch (err) {
+        audio.speakText("No se pudo encender la cámara. Comprueba los permisos.", undefined, "lazarillo");
       }
     }
   }, [vision, mode, audio]);
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // MOTOR DE TRANSMISIÓN Y AUDIODESCRIPCIÓN CONTINUA EN MODO LAZARILLO (2000ms)
+  // ═════════════════════════════════════════════════════════════════════════════
+  const isContinuousLoopRunningRef = useRef<boolean>(false);
+  const lastSpokenTelemetryRef = useRef<string>("");
+
+  useEffect(() => {
+    let intervalId: any = null;
+
+    if (mode === "lazarillo" && vision.isCameraActive) {
+      intervalId = setInterval(async () => {
+        if (isContinuousLoopRunningRef.current || vision.isProcessing || chat.isStreaming || chat.isLoading) {
+          return;
+        }
+
+        try {
+          isContinuousLoopRunningRef.current = true;
+          const snap = await vision.captureAndAnalyze();
+
+          // Si el análisis local ya detectó peligro inminente (< 1m), la alerta reflexiva ya sonó.
+          // Si no hubo alerta reflexiva y el resumen óptico cambió significativamente, sintetizar audiodescripción:
+          if (snap.formattedSummary && snap.formattedSummary !== lastSpokenTelemetryRef.current && !snap.criticalHazard) {
+            lastSpokenTelemetryRef.current = snap.formattedSummary;
+            audio.speakText(snap.formattedSummary, undefined, "lazarillo");
+          }
+        } catch (err) {
+          console.warn("[page.tsx Lazarillo Loop]:", err);
+        } finally {
+          isContinuousLoopRunningRef.current = false;
+        }
+      }, 2000);
+    } else {
+      lastSpokenTelemetryRef.current = "";
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [mode, vision.isCameraActive, vision, chat.isStreaming, chat.isLoading, audio]);
 
   return (
     <main
