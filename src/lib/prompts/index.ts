@@ -42,6 +42,7 @@ export const NoraProfiles: Record<NoraMode, PromptProfile> = {
       "Comunícate siempre de forma literal, sin metáforas, sarcasmo ni dobles sentidos.",
       "Estructura las instrucciones de forma secuencial (Paso 1, Paso 2, Paso 3).",
       "Ofrece opciones binarias o limitadas y claras.",
+      "Si ofreces opciones al usuario, haz que sean simples y que puedan responderse idealmente tocando otro pictograma, o con respuestas muy cortas (ej. un número como '1' o '2', o un 'sí/no').",
       "Evita textos largos o sobrecarga de información (sobrecarga sensorial)."
     ],
     parameters: {

@@ -274,63 +274,41 @@ export default function NoraPage() {
         isProcessing={vision.isProcessing}
       />
 
-      {/* 3. Área Central: Tablero Pictográfico Aumentativo (Modo TEA) o Feed de Chat Tradicional */}
+      {/* 3. Área Central: Feed de Chat Continuo (Siempre presente para ver el historial y lo que dice Nora) */}
       <div className="flex-1 overflow-y-auto w-full min-h-0" style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
-        {mode === "tea" ? (
-          <div className="flex flex-col h-full">
-            {/* Si hay mensajes generados recientemente en modo TEA, mostrar la última respuesta de Nora arriba de forma destacada */}
-            {chat.messages.length > 0 && (
-              <div className="p-4 bg-sky-950/40 border-b border-sky-500/20 shrink-0">
-                <div className="max-w-2xl mx-auto bg-slate-900 border border-sky-400/30 rounded-2xl p-4 shadow-xl">
-                  <div className="text-xs font-bold text-sky-400 mb-1 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
-                    <span>Nora dice:</span>
-                  </div>
-                  <div className="text-sm sm:text-base font-medium text-slate-100 leading-relaxed">
-                    {chat.isStreaming && chat.currentResponseStream
-                      ? chat.currentResponseStream
-                      : chat.messages[chat.messages.length - 1].content}
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Tablero de Comunicación Aumentativa con Pictogramas Grandes */}
-            <div className="flex-1 overflow-y-auto">
-              <NoraTEABoard
-                onSelectPictogram={(prompt, label) => handleSelectPictogram(label, prompt)}
-                isLoading={chat.isLoading || chat.isStreaming}
-              />
-            </div>
-          </div>
-        ) : (
-          <NoraChatFeed
-            messages={chat.messages}
-            currentResponseStream={chat.currentResponseStream}
-            isStreaming={chat.isStreaming}
-            mode={mode}
-            userName={device.userName}
-            onSpeakText={(text) => audio.speakText(text)}
-            onSelectPictogram={handleSelectPictogram}
-            chatBottomRef={chatBottomRef}
-          />
-        )}
+        <NoraChatFeed
+          messages={chat.messages}
+          currentResponseStream={chat.currentResponseStream}
+          isStreaming={chat.isStreaming}
+          mode={mode}
+          userName={device.userName}
+          onSpeakText={(text) => audio.speakText(text)}
+          onSelectPictogram={handleSelectPictogram}
+          chatBottomRef={chatBottomRef}
+        />
       </div>
 
-      {/* 4. Footer de Control Único (Oculto en modo TEA para evitar sobrecarga cognitiva, o visible en otros modos) */}
-      {mode !== "tea" && (
-        <NoraControlFooter
-          inputText={inputText}
-          onInputChange={setInputText}
-          onSendMessage={handleSendMessage}
-          isRecording={audio.isRecording}
-          onToggleRecording={handleToggleRecording}
-          isCameraActive={vision.isCameraActive}
-          onToggleCamera={handleToggleCamera}
-          isLoading={chat.isLoading}
-          selectedImageBase64={selectedImageBase64}
-          onSelectImage={setSelectedImageBase64}
+      {/* 3.1. Tablero de Comunicación Aumentativa TEA (Justo por encima del input, tipo teclado de pictogramas) */}
+      {mode === "tea" && (
+        <NoraTEABoard
+          onSelectPictogram={(prompt, label) => handleSelectPictogram(label, prompt)}
+          isLoading={chat.isLoading || chat.isStreaming}
         />
       )}
+
+      {/* 4. Footer de Control Único (SIEMPRE VISIBLE en todos los modos para responder por texto o micrófono) */}
+      <NoraControlFooter
+        inputText={inputText}
+        onInputChange={setInputText}
+        onSendMessage={handleSendMessage}
+        isRecording={audio.isRecording}
+        onToggleRecording={handleToggleRecording}
+        isCameraActive={vision.isCameraActive}
+        onToggleCamera={handleToggleCamera}
+        isLoading={chat.isLoading}
+        selectedImageBase64={selectedImageBase64}
+        onSelectImage={setSelectedImageBase64}
+      />
 
       {/* Banner Flotante de Instalación PWA Nativa */}
       <NoraInstallBanner
