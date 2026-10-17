@@ -1,9 +1,9 @@
 import { MongoClient, Db, Collection } from "mongodb";
 
 // ══════════════════════════════════════════════════════════════
-//  NORA ITU — MongoDB Fail-Safe Edge Layer
+//  NORA ITU — MongoDB Fail-Safe Edge Layer con Circuit Breaker
 //  Capa NoSQL para memoria conversacional multi-agente
-//  Resiliencia Absoluta: NUNCA bloquea el flujo si Atlas tarda o rechaza IP
+//  Resiliencia Absoluta: Latencia Cero bajo fallos de red / IP rejection
 // ══════════════════════════════════════════════════════════════
 
 const DB_NAME = "nora_itu_db";
@@ -13,10 +13,49 @@ declare global {
   var __mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
+// ── PATRÓN CIRCUIT BREAKER ─────────────────────────────────────
+// Si Atlas no responde o rechaza la IP (TLS alert 80 / timeout),
+// el circuito se abre durante 60 segundos. Durante este tiempo,
+// ninguna función espera ni bloquea el event-loop: retornan en 0ms.
+let mongoCircuitOpenUntil = 0;
+let indexesCreated = false;
+
+function isCircuitOpen(): boolean {
+  return Date.now() < mongoCircuitOpenUntil;
+}
+
+function tripCircuit(cooldownMs: number = 60_000) {
+  mongoCircuitOpenUntil = Date.now() + cooldownMs;
+  global.__mongoClientPromise = undefined;
+}
+
+function resetCircuit() {
+  mongoCircuitOpenUntil = 0;
+}
+
+/**
+ * Ejecuta una promesa con timeout estricto garantizando la limpieza
+ * inmediata del temporizador para evitar fugas de memoria o bloqueos.
+ */
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallbackValue), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function getMongoClientPromise(): Promise<MongoClient> | null {
+  if (isCircuitOpen()) {
+    return null;
+  }
+
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    console.warn("[Nora MongoDB]: MONGODB_URI no configurado.");
     return null;
   }
 
@@ -26,51 +65,83 @@ function getMongoClientPromise(): Promise<MongoClient> | null {
 
   try {
     const client = new MongoClient(uri, {
-      maxPoolSize: 2,               // Conservador para capa Free M0
+      maxPoolSize: 10,                 // Concurrencia elástica optimizada
       minPoolSize: 0,
       maxIdleTimeMS: 15000,
-      serverSelectionTimeoutMS: 2000, // Máximo 2s para evitar colgar Vercel
-      connectTimeoutMS: 2000,
-      socketTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 1500, // Máximo 1.5s
+      connectTimeoutMS: 1500,
+      socketTimeoutMS: 4000,
     });
 
-    const promise = client.connect().catch((err) => {
-      console.warn("[Nora MongoDB Connect Fail-Safe]:", err?.message || err);
-      global.__mongoClientPromise = undefined;
-      throw err;
-    });
+    const promise = client.connect()
+      .then((connectedClient) => {
+        resetCircuit();
+        return connectedClient;
+      })
+      .catch((err) => {
+        tripCircuit(60_000); // Abrir circuito por 60s
+        console.warn("[Nora MongoDB Circuit Tripped]:", err?.message || err);
+        throw err;
+      });
 
     global.__mongoClientPromise = promise;
     return promise;
   } catch (err) {
-    console.warn("[Nora MongoDB Init Warning]:", err);
+    tripCircuit(60_000);
     return null;
   }
 }
 
 /**
- * Conecta con un timeout estricto de 2000ms. Si Atlas no responde, retorna null de inmediato.
+ * Conecta con un timeout estricto de 1500ms y Circuit Breaker.
+ * Si el circuito está abierto, retorna null en 0ms sin latencia.
  */
 export async function connectMongo(): Promise<{ client: MongoClient; db: Db } | null> {
+  if (isCircuitOpen()) {
+    return null;
+  }
+
   try {
     const promise = getMongoClientPromise();
     if (!promise) return null;
 
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2000)
+    const conn = await withTimeout(
+      promise.then((client) => ({ client, db: client.db(DB_NAME) })),
+      1500,
+      null
     );
 
-    const conn = await Promise.race([
-      promise.then((client) => ({ client, db: client.db(DB_NAME) })),
-      timeoutPromise,
-    ]);
+    if (!conn) {
+      tripCircuit(45_000);
+      return null;
+    }
+
+    // Creación no-bloqueante de índices en primer arranque
+    if (!indexesCreated) {
+      indexesCreated = true;
+      ensureIndexes(conn.db).catch(() => {});
+    }
 
     return conn;
   } catch (err) {
-    console.warn("[Nora MongoDB Non-blocking Bypass]:", (err as Error)?.message || err);
-    global.__mongoClientPromise = undefined;
+    tripCircuit(45_000);
     return null;
   }
+}
+
+async function ensureIndexes(db: Db) {
+  try {
+    await Promise.all([
+      db.collection("nora_conversations").createIndex(
+        { sessionId: 1, agentId: 1 },
+        { background: true }
+      ),
+      db.collection("nora_global_learning").createIndex(
+        { agentId: 1 },
+        { background: true, unique: true }
+      ),
+    ]);
+  } catch {}
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -121,7 +192,7 @@ export async function getConversationsCollection(): Promise<Collection<NoraConve
 }
 
 /**
- * Agrega mensajes en MongoDB de forma completamente asíncrona y segura.
+ * Agrega mensajes en MongoDB de forma asíncrona, tolerante y no-bloqueante.
  */
 export async function appendMessages(
   sessionId: string,
@@ -129,12 +200,10 @@ export async function appendMessages(
   maxHistory: number = 40,
   agentId: string = "nora-itu"
 ): Promise<boolean> {
-  try {
-    const timeoutPromise = new Promise<boolean>((resolve) =>
-      setTimeout(() => resolve(false), 2500)
-    );
+  if (isCircuitOpen()) return false;
 
-    const opPromise = (async () => {
+  try {
+    const op = (async () => {
       const col = await getConversationsCollection();
       if (!col) return false;
 
@@ -159,7 +228,7 @@ export async function appendMessages(
       return true;
     })();
 
-    return await Promise.race([opPromise, timeoutPromise]);
+    return await withTimeout(op, 2000, false);
   } catch (err) {
     console.warn("[Nora MongoDB appendMessages Fail-Safe]:", (err as Error)?.message || err);
     return false;
@@ -167,19 +236,18 @@ export async function appendMessages(
 }
 
 /**
- * Recupera mensajes recientes. Si MongoDB demora >1500ms, retorna [] sin bloquear.
+ * Recupera mensajes recientes. Si MongoDB no responde en 1200ms o el circuito está abierto,
+ * retorna [] inmediatamente sin congelar la inferencia.
  */
 export async function getRecentMessages(
   sessionId: string,
   limit: number = 10,
   agentId: string = "nora-itu"
 ): Promise<NoraMessage[]> {
-  try {
-    const timeoutPromise = new Promise<NoraMessage[]>((resolve) =>
-      setTimeout(() => resolve([]), 1500)
-    );
+  if (isCircuitOpen()) return [];
 
-    const opPromise = (async () => {
+  try {
+    const op = (async () => {
       const col = await getConversationsCollection();
       if (!col) return [];
       const doc = await col.findOne(
@@ -189,9 +257,8 @@ export async function getRecentMessages(
       return doc?.messages ?? [];
     })();
 
-    return await Promise.race([opPromise, timeoutPromise]);
+    return await withTimeout(op, 1200, []);
   } catch (err) {
-    console.warn("[Nora MongoDB getRecentMessages Fail-Safe]:", (err as Error)?.message || err);
     return [];
   }
 }
@@ -219,6 +286,12 @@ export interface NoraGlobalLearningDoc {
 
 let cachedGlobalSummary: { text: string; timestamp: number } | null = null;
 
+const DEFAULT_GLOBAL_LEARNING_SUMMARY =
+  "- Preferencias aprendidas: Hablar siempre en español neutro profesional, sin modismos ni 'che'.\n" +
+  "- Localización núcleo: Ituzaingó, Corrientes, Argentina (cerca de Represa Yacyretá, Río Paraná).\n" +
+  "- Entorno académico: Conexión formativa con UTN (Universidad Tecnológica Nacional) y UNAHUR.\n" +
+  "- Identidad del creador: Nexora One, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
+
 export async function getGlobalLearningCollection(): Promise<Collection<NoraGlobalLearningDoc> | null> {
   try {
     const conn = await connectMongo();
@@ -230,8 +303,8 @@ export async function getGlobalLearningCollection(): Promise<Collection<NoraGlob
 }
 
 /**
- * Obtiene la síntesis de aprendizajes acumulados para enriquecer el System Prompt en tiempo real.
- * Cuenta con caché de 60 segundos y timeout de 1200ms para latencia cero.
+ * Obtiene la síntesis de aprendizajes acumulados con caché volátil de 60s
+ * y Circuit Breaker instantáneo. Latencia < 1ms cuando el circuito está abierto.
  */
 export async function getGlobalLearningSummary(agentId: string = "nora-itu"): Promise<string> {
   const now = Date.now();
@@ -239,33 +312,27 @@ export async function getGlobalLearningSummary(agentId: string = "nora-itu"): Pr
     return cachedGlobalSummary.text;
   }
 
-  try {
-    const timeoutPromise = new Promise<string>((resolve) =>
-      setTimeout(() => resolve(cachedGlobalSummary?.text || ""), 1200)
-    );
+  if (isCircuitOpen()) {
+    return cachedGlobalSummary?.text || DEFAULT_GLOBAL_LEARNING_SUMMARY;
+  }
 
-    const fetchPromise = (async () => {
+  try {
+    const op = (async () => {
       const col = await getGlobalLearningCollection();
-      if (!col) return cachedGlobalSummary?.text || "";
+      if (!col) return cachedGlobalSummary?.text || DEFAULT_GLOBAL_LEARNING_SUMMARY;
 
       const doc = await col.findOne({ agentId });
       if (!doc || !doc.summaryPrompt) {
-        const defaultPrompt =
-          "- Preferencias aprendidas: Hablar siempre en español neutro profesional, sin modismos ni 'che'.\n" +
-          "- Localización núcleo: Ituzaingó, Corrientes, Argentina (cerca de Represa Yacyretá, Río Paraná).\n" +
-          "- Entorno académico: Conexión formativa con UTN (Universidad Tecnológica Nacional) y UNAHUR.\n" +
-          "- Identidad del creador: Nexora One, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
-        return defaultPrompt;
+        return DEFAULT_GLOBAL_LEARNING_SUMMARY;
       }
 
       cachedGlobalSummary = { text: doc.summaryPrompt, timestamp: now };
       return doc.summaryPrompt;
     })();
 
-    return await Promise.race([fetchPromise, timeoutPromise]);
+    return await withTimeout(op, 1000, cachedGlobalSummary?.text || DEFAULT_GLOBAL_LEARNING_SUMMARY);
   } catch (err) {
-    console.warn("[Global Learning Get Bypassed]:", (err as Error)?.message || err);
-    return cachedGlobalSummary?.text || "";
+    return cachedGlobalSummary?.text || DEFAULT_GLOBAL_LEARNING_SUMMARY;
   }
 }
 
@@ -276,6 +343,8 @@ export async function recordLearnedInsight(
   insight: NoraLearnedInsight,
   agentId: string = "nora-itu"
 ): Promise<boolean> {
+  if (isCircuitOpen()) return false;
+
   try {
     const col = await getGlobalLearningCollection();
     if (!col) return false;
@@ -286,7 +355,7 @@ export async function recordLearnedInsight(
         $push: {
           insights: {
             $each: [insight],
-            $slice: -60, // Conservar los 60 aprendizajes más recientes y relevantes
+            $slice: -60,
           },
         } as any,
         $inc: { totalInteractions: 1 },
@@ -299,11 +368,9 @@ export async function recordLearnedInsight(
       { upsert: true }
     );
 
-    // Invalidar caché local para que la próxima inferencia lea la actualización
     cachedGlobalSummary = null;
     return true;
   } catch (err) {
-    console.warn("[Record Learned Insight Fail-Safe]:", (err as Error)?.message || err);
     return false;
   }
 }
@@ -315,6 +382,8 @@ export async function updateLearningSummary(
   summaryText: string,
   agentId: string = "nora-itu"
 ): Promise<boolean> {
+  if (isCircuitOpen()) return false;
+
   try {
     const col = await getGlobalLearningCollection();
     if (!col) return false;
@@ -333,7 +402,6 @@ export async function updateLearningSummary(
     cachedGlobalSummary = { text: summaryText, timestamp: Date.now() };
     return true;
   } catch (err) {
-    console.warn("[Update Learning Summary Fail-Safe]:", (err as Error)?.message || err);
     return false;
   }
 }

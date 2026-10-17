@@ -7,35 +7,58 @@ export const dynamic = "force-dynamic";
 // ══════════════════════════════════════════════════════════════
 //  /api/nora-transcribe
 //
-//  GET ?tts=true  →  TTS (Text-to-Speech) via Groq PlayAI-TTS
-//                    Devuelve audio/mpeg binario en español
-//
-//  POST (formData) →  STT (Speech-to-Text) via Groq Whisper
-//                    Devuelve JSON con transcripción
+//  GET/POST ?tts=true  →  TTS (Text-to-Speech) con Fail-Safe inteligente
+//  POST (formData)     →  STT (Speech-to-Text) via Groq Whisper
 // ══════════════════════════════════════════════════════════════
 
-// ── RAMA TTS ─────────────────────────────────────────────────
+// Bandera en memoria de estado del motor de voz del servidor
+let serverTtsSupported = true;
+let serverTtsCheckCooldown = 0;
+
 export async function POST(req: Request) {
   const url = new URL(req.url);
   const isTTS = url.searchParams.get("tts") === "true";
 
-  // ── TTS: genera audio desde texto ──
   if (isTTS) {
     return handleTTS(req);
   }
 
-  // ── STT: transcribe audio a texto (Groq Whisper) ──
   return handleSTT(req);
 }
 
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const isTTS = url.searchParams.get("tts") === "true";
+
+  if (isTTS) {
+    return handleTTS(req);
+  }
+
+  return NextResponse.json({ ok: true, service: "nora-transcribe" });
+}
+
 async function handleTTS(req: Request): Promise<Response> {
+  const now = Date.now();
+
+  // Si el motor en la nube falló por modelo dado de baja (decommissioned),
+  // responder en 0ms ordenando al cliente usar WebSpeech nativo sin saturar la red.
+  if (!serverTtsSupported && now < serverTtsCheckCooldown) {
+    return NextResponse.json({
+      ok: false,
+      fallback: "webspeech",
+      reason: "server_tts_decommissioned",
+      message: "Motor PlayAI-TTS en Groq no disponible. Conmutando a síntesis de voz nativa del dispositivo.",
+    });
+  }
+
   try {
     const groqKey = process.env.GROQ_API_KEY?.trim();
     if (!groqKey) {
-      return NextResponse.json(
-        { ok: false, error: "GROQ_API_KEY no configurada en el servidor" },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        ok: false,
+        fallback: "webspeech",
+        reason: "no_api_key",
+      });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -54,7 +77,7 @@ async function handleTTS(req: Request): Promise<Response> {
       .replace(/[<>{}]/g, "")
       .replace(/\s{2,}/g, " ")
       .trim()
-      .slice(0, 4096); // Límite de seguridad Groq TTS
+      .slice(0, 4096);
 
     if (!cleanText) {
       return NextResponse.json(
@@ -63,14 +86,20 @@ async function handleTTS(req: Request): Promise<Response> {
       );
     }
 
-    // Voz española: Celeste-PlayAI (mujer, español neutro latinoamericano)
-    // Alternativa masculina: "Chip-PlayAI" si se requiere
     const voiceRequested: string = body.voice || "";
     const voice = resolveSpanishVoice(voiceRequested);
-
     const groq = new Groq({ apiKey: groqKey });
 
-    // Groq TTS — modelo playai-tts, respuesta audio/mpeg binario
+    if (!groq.audio?.speech?.create) {
+      serverTtsSupported = false;
+      serverTtsCheckCooldown = now + 120_000;
+      return NextResponse.json({
+        ok: false,
+        fallback: "webspeech",
+        reason: "groq_speech_not_implemented",
+      });
+    }
+
     const ttsResponse = await (groq.audio.speech.create as Function)({
       model: "playai-tts",
       voice,
@@ -78,7 +107,6 @@ async function handleTTS(req: Request): Promise<Response> {
       response_format: "mp3",
     });
 
-    // Groq devuelve un Response-like con .arrayBuffer()
     const audioBuffer = await ttsResponse.arrayBuffer();
 
     return new Response(audioBuffer, {
@@ -91,37 +119,40 @@ async function handleTTS(req: Request): Promise<Response> {
       },
     });
   } catch (err: any) {
-    console.error("[Nora TTS API Error]:", err?.message || err);
-    // 500 explícito con JSON para que el cliente detecte el fallo limpiamente
-    return NextResponse.json(
-      { ok: false, error: err?.message || "Error en síntesis de voz" },
-      { status: 500 }
-    );
+    const errMsg = err?.message || String(err);
+    // Si el modelo fue dado de baja o no existe, activar fallback silencioso permanente
+    if (errMsg.includes("decommissioned") || errMsg.includes("not found") || errMsg.includes("400") || errMsg.includes("is no longer supported")) {
+      serverTtsSupported = false;
+      serverTtsCheckCooldown = now + 300_000; // 5 minutos de silencio de red
+      return NextResponse.json({
+        ok: false,
+        fallback: "webspeech",
+        reason: "server_tts_decommissioned",
+        message: "Motor PlayAI-TTS en Groq no disponible. Conmutando a síntesis de voz nativa del dispositivo.",
+      });
+    }
+
+    console.warn("[Nora TTS Non-Blocking Bypass]:", errMsg);
+    return NextResponse.json({
+      ok: false,
+      fallback: "webspeech",
+      error: errMsg,
+    });
   }
 }
 
-/**
- * Resuelve el ID de voz española más adecuado para Groq PlayAI-TTS.
- * Prioriza voces en español; evita que el motor caiga en francés u otro idioma.
- */
 function resolveSpanishVoice(requested: string): string {
-  // Catálogo de voces en español disponibles en PlayAI-TTS (Groq)
   const SPANISH_VOICES: Record<string, string> = {
-    // Femeninas
     "aura-2-diana-es": "Celeste-PlayAI",
     "aura-2-javier-es": "Fritz-PlayAI",
     "diana": "Celeste-PlayAI",
     "celeste": "Celeste-PlayAI",
-    // Masculinas
     "fritz": "Fritz-PlayAI",
     "javier": "Fritz-PlayAI",
   };
 
   const key = requested.toLowerCase();
-  if (SPANISH_VOICES[key]) return SPANISH_VOICES[key];
-
-  // Fallback seguro: voz femenina en español neutro latinoamericano
-  return "Celeste-PlayAI";
+  return SPANISH_VOICES[key] || "Celeste-PlayAI";
 }
 
 // ── STT: Groq Whisper ─────────────────────────────────────────

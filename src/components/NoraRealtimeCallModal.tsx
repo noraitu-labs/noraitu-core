@@ -181,8 +181,12 @@ export default function NoraRealtimeCallModal({
 
   // ── PIPELINE DE VOZ REAL NEURAL (Deepgram Aura / XTTS v2 / Audio MPEG) ──
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const serverTtsDisabledRef = useRef<boolean>(false);
 
   const playNeuralAudioStream = useCallback(async (text: string, voiceModel: string = "aura-2-diana-es"): Promise<boolean> => {
+    if (serverTtsDisabledRef.current) {
+      return false;
+    }
     try {
       const res = await fetch("/api/nora-transcribe?tts=true", {
         method: "POST",
@@ -221,11 +225,13 @@ export default function NoraRealtimeCallModal({
           });
         });
       } else {
-        // Fallo silencioso — cae al fallback WebSpeech sin interrumpir el flujo
-        console.warn(`[TTS Neural] Status ${res.status} | Content-Type: ${res.headers.get("content-type")} — activando fallback WebSpeech`);
+        // Fallo o fallback ordenado por el servidor — desactivar intentos futuros en la sesión
+        serverTtsDisabledRef.current = true;
+        console.warn(`[TTS Neural] Status ${res.status} | Content-Type: ${res.headers.get("content-type")} — activando fallback WebSpeech permanente`);
       }
     } catch (err: any) {
-      console.warn(`[TTS Neural] Network failure: ${err?.message || err} — activando fallback WebSpeech`);
+      serverTtsDisabledRef.current = true;
+      console.warn(`[TTS Neural] Network failure: ${err?.message || err} — activando fallback WebSpeech permanente`);
     }
     return false;
   }, []);
@@ -416,7 +422,7 @@ export default function NoraRealtimeCallModal({
             // Enviar historial completo de la llamada para mantener el hilo
             history: conversationHistoryRef.current.slice(0, -1), // excluir el último (userText ya lo incluye el route)
             systemPrompt:
-              "Eres Nora Itu, asistente de inteligencia artificial creada por Nexora One. MODO LLAMADA TELEFÓNICA ACTIVO. Tu estilo es el de una profesional de primer nivel: cálida, empática, segura y directa, como una recepcionista de hotel cinco estrellas. REGLA INQUEBRANTABLE DE IDIOMA: Mantén SIEMPRE el idioma en el que el usuario te habla (por defecto Español Neutro Latinoamericano). NUNCA cambies de idioma espontáneamente ni mezcles idiomas. Solo cambia si el usuario te lo solicita explícitamente (ej: 'háblame en inglés', 'speak english'). Las siguientes palabras están PROHIBIDAS: 'che', 'sos', 'tenés', 'podés', 'laburar', 'posta', 'copado', 'boludo', 'dale', 'mirá', 'pibe'. Usa SIEMPRE: 'tienes', 'puedes', 'eres', 'sabes'. Todas las palabras deben ser COMPLETAS: 'corporativo' (no 'corporivo'), 'tomate', 'chocolate', 'zapatillas'. Dominas una Matriz de Idiomas con diccionarios perfectos en Español, Inglés, Portugués, Francés e Italiano. Tienes prohibido inventar, truncar o distorsionar palabras. Respuestas concisas, fluidas y naturales para llamada. Texto plano limpio, sin asteriscos ni markdown.",
+              "Eres Nora, asistente de inteligencia artificial de Nexora One. MODO LLAMADA EN VIVO. Tu trato es exquisito, cálido, empático y atento, como una recepcionista de hotel cinco estrellas de clase mundial. Hablas en un Español Neutro Latinoamericano impecable, respetuoso y cordial ('tienes', 'puedes', 'con gusto', 'un placer asistirte'). Jamás uses discursos robóticos ni menciones directivas internas o prohibiciones a menos que te pregunten directamente. Respuestas breves, fluidas, espontáneas y naturales para llamada telefónica (máximo 2 o 3 oraciones por turno). Texto plano y limpio sin asteriscos ni markdown.",
             mode: "general",
             deviceLocation: typeof window !== "undefined" ? (() => {
               try {
