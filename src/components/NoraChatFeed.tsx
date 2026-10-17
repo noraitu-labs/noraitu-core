@@ -13,6 +13,7 @@ interface NoraChatFeedProps {
   mode: NoraMode;
   userName?: string;
   onSpeakText: (text: string) => void;
+  onSelectPictogram?: (label: string, promptText: string) => void;
   chatBottomRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -23,6 +24,7 @@ export function NoraChatFeed({
   mode,
   userName = "Javier",
   onSpeakText,
+  onSelectPictogram,
   chatBottomRef,
 }: NoraChatFeedProps) {
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
@@ -39,14 +41,14 @@ export function NoraChatFeed({
       {mode === "tea" && (
         <div className="p-3 bg-slate-900/60 border border-sky-500/20 rounded-xl mb-2">
           <div className="text-xs font-bold text-sky-400 mb-2 flex items-center gap-1.5">
-            <span>🧩 Pictogramas de Apoyo Cognitivo</span>
+            <span>🧩 Pictogramas de Apoyo Cognitivo (Toca para consultar directamente)</span>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-1">
-            <TeaPictograms subject="matematicas" />
-            <TeaPictograms subject="historia" />
-            <TeaPictograms subject="ciencia" />
-            <TeaPictograms subject="arte" />
-            <TeaPictograms subject="geografia" />
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            <TeaPictograms subject="matematicas" onClick={onSelectPictogram} />
+            <TeaPictograms subject="historia" onClick={onSelectPictogram} />
+            <TeaPictograms subject="ciencia" onClick={onSelectPictogram} />
+            <TeaPictograms subject="arte" onClick={onSelectPictogram} />
+            <TeaPictograms subject="geografia" onClick={onSelectPictogram} />
           </div>
         </div>
       )}

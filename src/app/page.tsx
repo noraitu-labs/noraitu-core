@@ -106,6 +106,25 @@ export default function NoraPage() {
     }
   }, [inputText, selectedImageBase64, vision, chat, mode, audio, device.userName, device.location]);
 
+  // Selección directa e instantánea de pictogramas TEA (dispara inferencia autónoma sin esperar "Enviar")
+  const handleSelectPictogram = useCallback(
+    async (label: string, promptText: string) => {
+      const reply = await chat.sendMessage({
+        text: promptText,
+        userName: device.userName,
+        deviceLocation: device.location,
+        imageBase64: null,
+        visualTelemetry: null,
+      });
+
+      // Si Nora responde en modo TEA, reproducir con calibración acústica pausada
+      if (reply && mode === "tea") {
+        audio.speakText(reply, undefined, "tea");
+      }
+    },
+    [chat, device.userName, device.location, mode, audio]
+  );
+
   // Manejo de grabación por voz (transcripción automática al input)
   const handleToggleRecording = useCallback(async () => {
     if (audio.isRecording) {
@@ -209,6 +228,7 @@ export default function NoraPage() {
           mode={mode}
           userName={device.userName}
           onSpeakText={(text) => audio.speakText(text)}
+          onSelectPictogram={handleSelectPictogram}
           chatBottomRef={chatBottomRef}
         />
       </div>
