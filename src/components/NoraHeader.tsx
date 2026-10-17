@@ -10,6 +10,7 @@ import {
   Puzzle,
   FileText,
   FileDown,
+  Share2,
 } from "lucide-react";
 import { NoraMode } from "@/lib/prompts/types";
 import { exportToWord, exportToPdf, exportToPptx } from "@/lib/exportUtils";
@@ -19,6 +20,7 @@ interface NoraHeaderProps {
   currentMode: NoraMode;
   onModeChange: (mode: NoraMode) => void;
   onOpenCallModal: () => void;
+  onOpenShareModal?: () => void;
   messages: ChatMessage[];
   isStreaming?: boolean;
   audioEngine?: "cloud-whisper" | "native-edge";
@@ -46,6 +48,7 @@ export function NoraHeader({
   currentMode,
   onModeChange,
   onOpenCallModal,
+  onOpenShareModal,
   messages,
   isStreaming = false,
   audioEngine = "cloud-whisper",
@@ -170,6 +173,18 @@ export function NoraHeader({
             </div>
           )}
         </div>
+
+        {/* BOTÓN COMPARTIR / QR / PWA */}
+        {onOpenShareModal && (
+          <button
+            type="button"
+            onClick={onOpenShareModal}
+            className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
+            title="Compartir o instalar Nora (QR / WhatsApp / PWA)"
+          >
+            <Share2 size={16} />
+          </button>
+        )}
 
         {/* LLAMADA EN TIEMPO REAL */}
         <button

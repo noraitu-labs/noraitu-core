@@ -5,23 +5,29 @@ import { useNoraVision } from "@/hooks/useNoraVision";
 import { useNoraAudio } from "@/hooks/useNoraAudio";
 import { useNoraChat } from "@/hooks/useNoraChat";
 import { useNoraDeviceCapabilities } from "@/hooks/useNoraDeviceCapabilities";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { NoraMode } from "@/lib/prompts/types";
 import { NoraHeader } from "@/components/NoraHeader";
 import { NoraVisionViewport } from "@/components/NoraVisionViewport";
 import { NoraChatFeed } from "@/components/NoraChatFeed";
 import { NoraControlFooter } from "@/components/NoraControlFooter";
 import NoraRealtimeCallModal from "@/components/NoraRealtimeCallModal";
+import NoraShareModal from "@/components/NoraShareModal";
+import NoraInstallBanner from "@/components/NoraInstallBanner";
 
 /**
  * NoraPage: Orquestador visual declarativo (< 250 líneas).
  * Desacoplado de WebRTC, SDKs de visión directa y streaming crudo.
- * Consume estrictamente los custom hooks: useNoraVision, useNoraAudio, useNoraChat y useNoraDeviceCapabilities.
+ * Consume estrictamente los custom hooks: useNoraVision, useNoraAudio, useNoraChat, useNoraDeviceCapabilities y usePWAInstall.
  */
 export default function NoraPage() {
   const [mode, setMode] = useState<NoraMode>("executive");
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null);
+
+  const pwa = usePWAInstall();
 
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -203,6 +209,7 @@ export default function NoraPage() {
         currentMode={mode}
         onModeChange={handleModeChange}
         onOpenCallModal={() => setIsCallModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
         messages={chat.messages}
         isStreaming={chat.isStreaming}
         audioEngine={audio.activeEngine}
@@ -246,6 +253,23 @@ export default function NoraPage() {
         selectedImageBase64={selectedImageBase64}
         onSelectImage={setSelectedImageBase64}
       />
+
+      {/* Banner Flotante de Instalación PWA Nativa */}
+      <NoraInstallBanner
+        isInstallable={pwa.isInstallable}
+        onInstall={pwa.triggerInstall}
+      />
+
+      {/* Modal de Distribución y Código QR */}
+      {isShareModalOpen && (
+        <NoraShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          productionUrl="https://nora-itu-core.vercel.app"
+          isInstallable={pwa.isInstallable}
+          onInstallClick={pwa.triggerInstall}
+        />
+      )}
 
       {/* Modal de Llamada en Tiempo Real */}
       {isCallModalOpen && (
