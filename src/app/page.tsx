@@ -105,31 +105,58 @@ export default function NoraPage() {
       imageBase64: imagePayload,
       visualTelemetry: visualTelemetryPayload,
     });
-
-    // Si está en modo lazarillo, reproducir respuesta automáticamente por voz
-    if (reply && mode === "lazarillo") {
-      audio.speakText(reply, undefined, "lazarillo");
-    }
-  }, [inputText, selectedImageBase64, vision, chat, mode, audio, device.userName, device.location]);
+  }, [inputText, selectedImageBase64, vision, chat, device.userName, device.location]);
 
   // Selección directa e instantánea de pictogramas TEA (dispara inferencia autónoma sin esperar "Enviar")
   const handleSelectPictogram = useCallback(
     async (label: string, promptText: string) => {
-      const reply = await chat.sendMessage({
+      // Interrupción suave (Barge-in): si Nora está hablando, cancelar antes de iniciar nueva consulta
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      audio.stopSpeaking();
+
+      await chat.sendMessage({
         text: promptText,
         userName: device.userName,
         deviceLocation: device.location,
         imageBase64: null,
         visualTelemetry: null,
       });
-
-      // Si Nora responde en modo TEA, reproducir con calibración acústica pausada
-      if (reply && mode === "tea") {
-        audio.speakText(reply, undefined, "tea");
-      }
     },
-    [chat, device.userName, device.location, mode, audio]
+    [chat, device.userName, device.location, audio]
   );
+
+  // Auto-TTS Reactivo para Accesibilidad (a11y) Universal (Lazarillo, TEA, y General):
+  // Escucha cuando el asistente termina de generar su mensaje (isLoading pasa a false) y lo reproduce en voz alta automáticamente.
+  const lastSpokenMsgIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Si aún está generando o en streaming, esperar a que complete
+    if (chat.isLoading || chat.isStreaming) return;
+
+    if (chat.messages.length === 0) return;
+
+    const lastMessage = chat.messages[chat.messages.length - 1];
+
+    // Solo reproducir si es del asistente y no ha sido reproducido ya
+    if (
+      lastMessage &&
+      lastMessage.role === "assistant" &&
+      lastMessage.content &&
+      lastMessage.id !== lastSpokenMsgIdRef.current
+    ) {
+      lastSpokenMsgIdRef.current = lastMessage.id;
+
+      // Interrupción suave (Barge-in): cancelar cualquier audio previo para evitar superposición
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+
+      // Reproducir mediante speakText (el cual aplica automáticamente sanitizeForTTS y calibración adaptativa por modo)
+      audio.speakText(lastMessage.content, undefined, mode);
+    }
+  }, [chat.isLoading, chat.isStreaming, chat.messages, mode, audio]);
 
   // Manejo de grabación por voz (transcripción automática al input)
   const handleToggleRecording = useCallback(async () => {
