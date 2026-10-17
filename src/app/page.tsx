@@ -6,6 +6,7 @@ import { useNoraAudio } from "@/hooks/useNoraAudio";
 import { useNoraChat } from "@/hooks/useNoraChat";
 import { useNoraDeviceCapabilities } from "@/hooks/useNoraDeviceCapabilities";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
+import { useNoraGestures } from "@/hooks/useNoraGestures";
 import { NoraMode } from "@/lib/prompts/types";
 import { NoraHeader } from "@/components/NoraHeader";
 import { NoraVisionViewport } from "@/components/NoraVisionViewport";
@@ -14,6 +15,7 @@ import { NoraControlFooter } from "@/components/NoraControlFooter";
 import NoraRealtimeCallModal from "@/components/NoraRealtimeCallModal";
 import NoraShareModal from "@/components/NoraShareModal";
 import NoraInstallBanner from "@/components/NoraInstallBanner";
+import NoraTEABoard from "@/components/NoraTEABoard";
 
 /**
  * NoraPage: Orquestador visual declarativo (< 250 líneas).
@@ -218,7 +220,6 @@ export default function NoraPage() {
         }
       }, 2000);
     } else {
-      lastSpokenTelemetryRef.current = "";
     }
 
     return () => {
@@ -226,11 +227,31 @@ export default function NoraPage() {
     };
   }, [mode, vision.isCameraActive, vision, chat.isStreaming, chat.isLoading, audio]);
 
+  // Hook de Gestos Físicos de Accesibilidad (Shake to Wake 3x o Long Press de 3 segundos):
+  // Activa el perfil Lazarillo y enciende el hardware óptico sin requerir interacción visual
+  useNoraGestures({
+    onTriggerLazarillo: useCallback(() => {
+      handleModeChange("lazarillo");
+    }, [handleModeChange]),
+    enabled: true,
+  });
+
   return (
     <main
       className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative"
       style={{ height: "100dvh", maxHeight: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}
     >
+      {/* 0. Primer elemento enfocable para TalkBack / VoiceOver (Accesibilidad Universal para Ciegos) */}
+      <button
+        type="button"
+        tabIndex={0}
+        onClick={() => handleModeChange("lazarillo")}
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:p-4 focus:bg-emerald-600 focus:text-white focus:font-bold focus:rounded-xl focus:shadow-2xl focus:outline-none focus:ring-4 focus:ring-emerald-300"
+        aria-label="Bienvenido a Nora. Toca dos veces en cualquier parte para activar el asistente visual para ciegos"
+      >
+        Bienvenido a Nora. Toca dos veces en cualquier parte para activar el asistente visual para ciegos
+      </button>
+
       {/* 1. Header Modular con selector de modos y exportaciones */}
       <NoraHeader
         currentMode={mode}
@@ -253,33 +274,63 @@ export default function NoraPage() {
         isProcessing={vision.isProcessing}
       />
 
-      {/* 3. Feed de Chat y Pictogramas TEA (Desplazable en el centro) */}
+      {/* 3. Área Central: Tablero Pictográfico Aumentativo (Modo TEA) o Feed de Chat Tradicional */}
       <div className="flex-1 overflow-y-auto w-full min-h-0" style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
-        <NoraChatFeed
-          messages={chat.messages}
-          currentResponseStream={chat.currentResponseStream}
-          isStreaming={chat.isStreaming}
-          mode={mode}
-          userName={device.userName}
-          onSpeakText={(text) => audio.speakText(text)}
-          onSelectPictogram={handleSelectPictogram}
-          chatBottomRef={chatBottomRef}
-        />
+        {mode === "tea" ? (
+          <div className="flex flex-col h-full">
+            {/* Si hay mensajes generados recientemente en modo TEA, mostrar la última respuesta de Nora arriba de forma destacada */}
+            {chat.messages.length > 0 && (
+              <div className="p-4 bg-sky-950/40 border-b border-sky-500/20 shrink-0">
+                <div className="max-w-2xl mx-auto bg-slate-900 border border-sky-400/30 rounded-2xl p-4 shadow-xl">
+                  <div className="text-xs font-bold text-sky-400 mb-1 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                    <span>Nora dice:</span>
+                  </div>
+                  <div className="text-sm sm:text-base font-medium text-slate-100 leading-relaxed">
+                    {chat.isStreaming && chat.currentResponseStream
+                      ? chat.currentResponseStream
+                      : chat.messages[chat.messages.length - 1].content}
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Tablero de Comunicación Aumentativa con Pictogramas Grandes */}
+            <div className="flex-1 overflow-y-auto">
+              <NoraTEABoard
+                onSelectPictogram={(prompt, label) => handleSelectPictogram(label, prompt)}
+                isLoading={chat.isLoading || chat.isStreaming}
+              />
+            </div>
+          </div>
+        ) : (
+          <NoraChatFeed
+            messages={chat.messages}
+            currentResponseStream={chat.currentResponseStream}
+            isStreaming={chat.isStreaming}
+            mode={mode}
+            userName={device.userName}
+            onSpeakText={(text) => audio.speakText(text)}
+            onSelectPictogram={handleSelectPictogram}
+            chatBottomRef={chatBottomRef}
+          />
+        )}
       </div>
 
-      {/* 4. Footer de Control Único Limpio (Siempre anclado al fondo) */}
-      <NoraControlFooter
-        inputText={inputText}
-        onInputChange={setInputText}
-        onSendMessage={handleSendMessage}
-        isRecording={audio.isRecording}
-        onToggleRecording={handleToggleRecording}
-        isCameraActive={vision.isCameraActive}
-        onToggleCamera={handleToggleCamera}
-        isLoading={chat.isLoading}
-        selectedImageBase64={selectedImageBase64}
-        onSelectImage={setSelectedImageBase64}
-      />
+      {/* 4. Footer de Control Único (Oculto en modo TEA para evitar sobrecarga cognitiva, o visible en otros modos) */}
+      {mode !== "tea" && (
+        <NoraControlFooter
+          inputText={inputText}
+          onInputChange={setInputText}
+          onSendMessage={handleSendMessage}
+          isRecording={audio.isRecording}
+          onToggleRecording={handleToggleRecording}
+          isCameraActive={vision.isCameraActive}
+          onToggleCamera={handleToggleCamera}
+          isLoading={chat.isLoading}
+          selectedImageBase64={selectedImageBase64}
+          onSelectImage={setSelectedImageBase64}
+        />
+      )}
 
       {/* Banner Flotante de Instalación PWA Nativa */}
       <NoraInstallBanner

@@ -90,14 +90,26 @@ export function NoraHeader({
         </div>
 
         {/* SELECTOR DE PERFIL COGNITIVO */}
-        <div className="flex items-center bg-slate-950/70 p-1 rounded-lg border border-white/5 gap-1">
+        <div className="flex items-center bg-slate-950/70 p-1 rounded-lg border border-white/5 gap-1" role="group" aria-label="Selección de perfil y asistencia de Nora">
           {(["executive", "lazarillo", "tea"] as const).map((m) => {
             const isSelected = currentMode === m;
             const cfg = MODE_CONFIGS[m];
+            
+            // Textos ARIA descriptivos optimizados para TalkBack y VoiceOver
+            const ariaDescriptions: Record<NoraMode, string> = {
+              lazarillo: "Activar Modo Lazarillo. Toca dos veces para encender la cámara y la audiodescripción",
+              tea: "Activar Modo Inclusión TEA. Toca dos veces para soporte cognitivo estructurado y pictogramas",
+              executive: "Activar Modo Ejecutivo Corporativo. Toca dos veces para asistente institucional general",
+            };
+
             return (
               <button
                 key={m}
                 onClick={() => onModeChange(m)}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                aria-label={ariaDescriptions[m]}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
                   isSelected
                     ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 shadow-xs"
