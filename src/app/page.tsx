@@ -261,10 +261,10 @@ export default function NoraPage() {
 
   return (
     <main
-      className="flex flex-col h-full w-full bg-slate-950 text-slate-100 relative"
+      className="flex flex-col h-[100dvh] w-full overflow-hidden bg-slate-950 text-slate-100 relative"
       style={{
-        height: "100%",
-        maxHeight: "100%",
+        height: "100dvh",
+        maxHeight: "100dvh",
         width: "100%",
         display: "flex",
         flexDirection: "column",

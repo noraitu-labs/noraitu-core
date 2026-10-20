@@ -41,7 +41,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#09090b" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <script src="https://cdn.tailwindcss.com"></script>
-        {/* Estructura para móviles, PWAs y navegadores de escritorio con soporte de pull-to-refresh */}
+        {/* Estructura para móviles, PWAs y navegadores de escritorio */}
         <style dangerouslySetInnerHTML={{__html: `
           html, body {
             height: 100% !important;
@@ -53,7 +53,7 @@ export default function RootLayout({
             overflow: hidden;
             overscroll-behavior: none !important;
             overscroll-behavior-y: none !important;
-            -webkit-overscroll-behavior: none !important;
+            -webkit-overscroll-behavior-y: none !important;
             -webkit-user-select: none;
             user-select: none;
           }
@@ -67,7 +67,7 @@ export default function RootLayout({
           }
         `}} />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100dvh", minHeight: "-webkit-fill-available", overflow: "hidden", overscrollBehavior: "none", display: "flex", flexDirection: "column" }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100dvh", minHeight: "-webkit-fill-available", overflow: "hidden", overscrollBehavior: "none", overscrollBehaviorY: "none", display: "flex", flexDirection: "column" }}>
         <NoraSecurityProvider>
           {children}
         </NoraSecurityProvider>

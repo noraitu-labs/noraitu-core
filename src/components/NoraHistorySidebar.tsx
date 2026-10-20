@@ -37,11 +37,24 @@ export function NoraHistorySidebar({
   onSelectSession,
   onNewChat,
 }: NoraHistorySidebarProps) {
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("nora_sessions_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch (e) {
+        console.warn("[NoraHistorySidebar] Error leyendo nora_sessions_cache:", e);
+      }
+    }
+    return [];
+  });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Cargar lista de sesiones desde la API
+  // Cargar lista de sesiones desde la API y guardar en localStorage
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -50,6 +63,13 @@ export function NoraHistorySidebar({
         const data = await res.json();
         if (data.sessions && Array.isArray(data.sessions)) {
           setSessions(data.sessions);
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("nora_sessions_cache", JSON.stringify(data.sessions));
+            } catch (e) {
+              console.warn("[NoraHistorySidebar] Error guardando nora_sessions_cache:", e);
+            }
+          }
         }
       }
     } catch (err) {
@@ -58,6 +78,11 @@ export function NoraHistorySidebar({
       setIsLoading(false);
     }
   }, []);
+
+  // Cargar sesiones al montar el componente (incluso antes de abrir la solapa) y al abrirla
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   useEffect(() => {
     if (isOpen) {

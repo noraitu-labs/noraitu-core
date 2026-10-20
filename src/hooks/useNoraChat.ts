@@ -51,16 +51,43 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
   const initialMode = options.initialMode || "general";
   const agentId = options.agentId || "nora-itu";
 
-  const [state, setState] = useState<NoraChatState>({
-    messages: [],
-    isLoading: false,
-    isStreaming: false,
-    activeMode: initialMode,
-    error: null,
-    currentResponseStream: "",
+  const [state, setState] = useState<NoraChatState>(() => {
+    let initialMessages: ChatMessage[] = [];
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("nora_history_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            initialMessages = parsed;
+          }
+        }
+      } catch (e) {
+        console.warn("[useNoraChat] Error leyendo nora_history_cache:", e);
+      }
+    }
+    return {
+      messages: initialMessages,
+      isLoading: false,
+      isStreaming: false,
+      activeMode: initialMode,
+      error: null,
+      currentResponseStream: "",
+    };
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Sincronizar siempre los mensajes con localStorage para que al recargar la PWA no se pierdan
+  useEffect(() => {
+    if (typeof window !== "undefined" && state.messages.length > 0) {
+      try {
+        localStorage.setItem("nora_history_cache", JSON.stringify(state.messages));
+      } catch (e) {
+        console.warn("[useNoraChat] Error guardando nora_history_cache:", e);
+      }
+    }
+  }, [state.messages]);
 
   // Cargar historial de MongoDB cuando cambia currentSessionId
   const loadMemoryForSession = useCallback(async (sid: string) => {
@@ -68,7 +95,7 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       const res = await fetch(`/api/nora-memory?sessionId=${encodeURIComponent(sid)}&limit=30&agentId=${agentId}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (data.messages && Array.isArray(data.messages)) {
+      if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
         const loaded: ChatMessage[] = data.messages.map((m: any, idx: number) => ({
           id: m._id || `mem-${idx}-${Date.now()}`,
           role: m.role,
@@ -77,6 +104,9 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
           mode: m.mode || "general",
         }));
         setState((prev) => ({ ...prev, messages: loaded, currentResponseStream: "" }));
+        if (typeof window !== "undefined") {
+          localStorage.setItem("nora_history_cache", JSON.stringify(loaded));
+        }
       }
     } catch (err) {
       console.warn("[useNoraChat] No se pudo cargar memoria:", err);
