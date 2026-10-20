@@ -263,6 +263,62 @@ export async function getRecentMessages(
   }
 }
 
+export async function getConversationSessions(
+  agentId: string = "nora-itu",
+  limit: number = 25
+): Promise<Array<{ sessionId: string; updatedAt: Date; lastMessageSnippet: string; messageCount: number }>> {
+  if (isCircuitOpen()) return [];
+
+  try {
+    const op = (async () => {
+      const col = await getConversationsCollection();
+      if (!col) return [];
+      const docs = await col
+        .find({ agentId })
+        .sort({ updatedAt: -1 })
+        .limit(limit)
+        .project({ sessionId: 1, updatedAt: 1, messages: { $slice: -1 } })
+        .toArray();
+
+      return docs.map((d: any) => {
+        const lastMsg = d.messages && d.messages.length > 0 ? d.messages[0] : null;
+        let snippet = lastMsg ? (lastMsg.role === "user" ? "Tú: " : "Nora: ") + (lastMsg.content || "") : "Conversación iniciada";
+        if (snippet.length > 60) snippet = snippet.slice(0, 57) + "...";
+        return {
+          sessionId: d.sessionId,
+          updatedAt: d.updatedAt || new Date(),
+          lastMessageSnippet: snippet,
+          messageCount: d.messages ? d.messages.length : 0,
+        };
+      });
+    })();
+
+    return await withTimeout(op, 1500, []);
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteConversationSession(
+  sessionId: string,
+  agentId: string = "nora-itu"
+): Promise<boolean> {
+  if (isCircuitOpen()) return false;
+
+  try {
+    const op = (async () => {
+      const col = await getConversationsCollection();
+      if (!col) return false;
+      await col.deleteOne({ sessionId, agentId });
+      return true;
+    })();
+
+    return await withTimeout(op, 1500, false);
+  } catch {
+    return false;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 //  MEMORIA COGNITIVA PROGRESIVA — APRENDIZAJE ACUMULATIVO DÍA A DÍA
 // ══════════════════════════════════════════════════════════════
@@ -289,8 +345,8 @@ let cachedGlobalSummary: { text: string; timestamp: number } | null = null;
 const DEFAULT_GLOBAL_LEARNING_SUMMARY =
   "- Preferencias aprendidas: Hablar siempre en español neutro profesional, sin modismos ni 'che'.\n" +
   "- Localización núcleo: Ituzaingó, Corrientes, Argentina (cerca de Represa Yacyretá, Río Paraná).\n" +
-  "- Entorno académico: Conexión formativa con UTN (Universidad Tecnológica Nacional) y UNAHUR.\n" +
-  "- Identidad del creador: Nexora One, soporte noraitudev@gmail.com, WhatsApp +54 9 3786 41-4533.";
+  "- Entorno y versatilidad: Asistencia universal inclusiva, profesional, corporativa y académica.\n" +
+  "- Identidad y autor: Desarrollado por Nexora One, Tel/WhatsApp: +54 9 3786 41-4533, Correo oficial: mjnexora.visual@gmail.com.";
 
 export async function getGlobalLearningCollection(): Promise<Collection<NoraGlobalLearningDoc> | null> {
   try {

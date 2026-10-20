@@ -172,6 +172,33 @@ export function NoraControlFooter({
           )}
         </button>
       </div>
+
+      {/* FIRMA DE AUTOR PROFESIONAL: NEXORA ONE */}
+      <div className="mt-1.5 flex items-center justify-between px-1 text-[10px] text-slate-500 tracking-wide select-none">
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 inline-block shrink-0" />
+          <span className="font-semibold text-slate-400">Nexora One</span>
+          <span className="text-slate-600 hidden xs:inline">•</span>
+          <a
+            href="tel:3786414533"
+            className="text-slate-500 hover:text-emerald-400 transition-colors hidden sm:inline font-mono"
+            title="Teléfono de autoría"
+          >
+            3786414533
+          </a>
+          <span className="text-slate-600 hidden md:inline">•</span>
+          <a
+            href="mailto:mjnexora.visual@gmail.com"
+            className="text-slate-500 hover:text-indigo-400 transition-colors hidden md:inline font-mono truncate"
+            title="Correo oficial de autoría"
+          >
+            mjnexora.visual@gmail.com
+          </a>
+        </div>
+        <div className="text-[9px] text-slate-600 shrink-0 uppercase tracking-widest pl-2">
+          IA Multimodal Edge
+        </div>
+      </div>
     </footer>
   );
 }

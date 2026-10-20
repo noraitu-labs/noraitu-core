@@ -16,6 +16,7 @@ import NoraRealtimeCallModal from "@/components/NoraRealtimeCallModal";
 import NoraShareModal from "@/components/NoraShareModal";
 import NoraInstallBanner from "@/components/NoraInstallBanner";
 import NoraTEABoard from "@/components/NoraTEABoard";
+import NoraHistorySidebar from "@/components/NoraHistorySidebar";
 
 /**
  * NoraPage: Orquestador visual declarativo (< 250 líneas).
@@ -26,6 +27,7 @@ export default function NoraPage() {
   const [mode, setMode] = useState<NoraMode>("executive");
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null);
 
@@ -258,9 +260,25 @@ export default function NoraPage() {
         onModeChange={handleModeChange}
         onOpenCallModal={() => setIsCallModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
+        onToggleHistory={() => setIsHistoryOpen((prev) => !prev)}
         messages={chat.messages}
         isStreaming={chat.isStreaming}
         audioEngine={audio.activeEngine}
+      />
+
+      {/* Solapa Lateral Solapada a la Izquierda con Historial y Firma de Autor (Estilo Top Mundial) */}
+      <NoraHistorySidebar
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        currentSessionId={chat.sessionId}
+        onSelectSession={(sid) => {
+          chat.switchSession(sid);
+          setIsHistoryOpen(false);
+        }}
+        onNewChat={() => {
+          chat.startNewChat();
+          setIsHistoryOpen(false);
+        }}
       />
 
       {/* 2. HUD y Viewport Óptico Flotante */}

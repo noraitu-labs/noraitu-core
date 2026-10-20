@@ -1,19 +1,35 @@
 import { NextResponse } from "next/server";
-import { appendMessages, getRecentMessages, NoraMessage } from "@/lib/mongodb";
+import {
+  appendMessages,
+  getRecentMessages,
+  getConversationSessions,
+  deleteConversationSession,
+  NoraMessage,
+} from "@/lib/mongodb";
+import { validateOrigin } from "@/lib/security";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
 // ══════════════════════════════════════════════════════════════
 //  GET /api/nora-memory
-//  Recupera historial de forma tolerante a fallos
+//  Recupera historial o lista de sesiones de forma tolerante a fallos
 // ══════════════════════════════════════════════════════════════
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const sessionId = searchParams.get("sessionId") || "";
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const mode = searchParams.get("mode") || "";
     const agentId = searchParams.get("agentId") || "nora-itu";
+
+    // Si pide listado de sesiones para el panel lateral de historial
+    if (mode === "sessions") {
+      const limit = parseInt(searchParams.get("limit") || "30", 10);
+      const sessions = await getConversationSessions(agentId, limit);
+      return NextResponse.json({ agentId, sessions });
+    }
+
+    const sessionId = searchParams.get("sessionId") || "";
+    const limit = parseInt(searchParams.get("limit") || "40", 10);
 
     if (!sessionId) {
       return NextResponse.json({ sessionId: "", agentId, messages: [] });
@@ -23,7 +39,31 @@ export async function GET(req: Request) {
     return NextResponse.json({ sessionId, agentId, messages });
   } catch (err: any) {
     console.warn("[nora-memory GET Fail-Safe]:", err?.message || err);
-    return NextResponse.json({ sessionId: "", agentId: "nora-itu", messages: [] });
+    return NextResponse.json({ sessionId: "", agentId: "nora-itu", messages: [], sessions: [] });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DELETE /api/nora-memory
+//  Eliminar una sesión específica
+// ══════════════════════════════════════════════════════════════
+export async function DELETE(req: Request) {
+  const originBlock = validateOrigin(req);
+  if (originBlock) return originBlock;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get("sessionId");
+    const agentId = searchParams.get("agentId") || "nora-itu";
+
+    if (!sessionId) {
+      return NextResponse.json({ ok: false, error: "sessionId requerido" }, { status: 400 });
+    }
+
+    const success = await deleteConversationSession(sessionId, agentId);
+    return NextResponse.json({ ok: success, sessionId });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message }, { status: 500 });
   }
 }
 
@@ -31,8 +71,6 @@ export async function GET(req: Request) {
 //  POST /api/nora-memory
 //  Persistencia fire-and-forget: Responde 200 INMEDIATO sin bloquear
 // ══════════════════════════════════════════════════════════════
-import { validateOrigin } from "@/lib/security";
-
 export async function POST(req: Request) {
   const originBlock = validateOrigin(req);
   if (originBlock) return originBlock;

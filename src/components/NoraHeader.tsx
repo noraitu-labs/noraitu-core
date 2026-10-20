@@ -21,6 +21,7 @@ interface NoraHeaderProps {
   onModeChange: (mode: NoraMode) => void;
   onOpenCallModal: () => void;
   onOpenShareModal?: () => void;
+  onToggleHistory?: () => void;
   messages: ChatMessage[];
   isStreaming?: boolean;
   audioEngine?: "cloud-whisper" | "native-edge";
@@ -49,6 +50,7 @@ export function NoraHeader({
   onModeChange,
   onOpenCallModal,
   onOpenShareModal,
+  onToggleHistory,
   messages,
   isStreaming = false,
   audioEngine = "cloud-whisper",
@@ -73,9 +75,22 @@ export function NoraHeader({
   const activeConfig = MODE_CONFIGS[currentMode] || MODE_CONFIGS.executive;
 
   return (
-    <header className="h-14 border-b border-white/10 bg-slate-900/90 backdrop-blur-md px-4 flex items-center justify-between z-30 shrink-0">
+    <header className="h-14 border-b border-white/10 bg-slate-900/90 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between z-30 shrink-0">
       {/* IDENTIDAD & SELECTOR DE MODO */}
-      <div className="flex items-center gap-3 shrink-0" style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0" style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+        {/* BOTÓN SOLAPA DE HISTORIAL (ESTILO TOP MUNDIAL) */}
+        {onToggleHistory && (
+          <button
+            type="button"
+            onClick={onToggleHistory}
+            className="p-2 -ml-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer shadow-xs active:scale-95"
+            title="Abrir historial de conversaciones"
+            aria-label="Abrir historial de conversaciones"
+          >
+            <Menu size={18} />
+          </button>
+        )}
+
         <div className="flex items-center gap-2 shrink-0" style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <img
             src="/avatar-nora.png"

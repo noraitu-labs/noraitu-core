@@ -35,11 +35,21 @@ export interface NoraChatState {
  * y la persistencia asíncrona fire-and-forget (MongoDB + Neon) sin bloquear la UI.
  */
 export function useNoraChat(options: UseNoraChatOptions = {}) {
-  const {
-    sessionId = typeof window !== "undefined" ? localStorage.getItem("nora_session_id") || "anonymous" : "anonymous",
-    initialMode = "general",
-    agentId = "nora-itu",
-  } = options;
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
+    if (options.sessionId) return options.sessionId;
+    if (typeof window !== "undefined") {
+      let saved = localStorage.getItem("nora_session_id");
+      if (!saved) {
+        saved = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        localStorage.setItem("nora_session_id", saved);
+      }
+      return saved;
+    }
+    return "anonymous";
+  });
+
+  const initialMode = options.initialMode || "general";
+  const agentId = options.agentId || "nora-itu";
 
   const [state, setState] = useState<NoraChatState>({
     messages: [],
@@ -52,33 +62,30 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Cargar historial previo de MongoDB de manera no bloqueante
-  useEffect(() => {
-    let isMounted = true;
-    async function loadMemory() {
-      try {
-        const res = await fetch(`/api/nora-memory?sessionId=${encodeURIComponent(sessionId)}&limit=15&agentId=${agentId}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (isMounted && data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
-          const loaded: ChatMessage[] = data.messages.map((m: any, idx: number) => ({
-            id: m._id || `mem-${idx}-${Date.now()}`,
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp || new Date().toISOString(),
-            mode: m.mode || "general",
-          }));
-          setState((prev) => (prev.messages.length === 0 ? { ...prev, messages: loaded } : prev));
-        }
-      } catch (err) {
-        console.warn("[useNoraChat] No se pudo precargar memoria:", err);
+  // Cargar historial de MongoDB cuando cambia currentSessionId
+  const loadMemoryForSession = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/nora-memory?sessionId=${encodeURIComponent(sid)}&limit=30&agentId=${agentId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.messages && Array.isArray(data.messages)) {
+        const loaded: ChatMessage[] = data.messages.map((m: any, idx: number) => ({
+          id: m._id || `mem-${idx}-${Date.now()}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp || new Date().toISOString(),
+          mode: m.mode || "general",
+        }));
+        setState((prev) => ({ ...prev, messages: loaded, currentResponseStream: "" }));
       }
+    } catch (err) {
+      console.warn("[useNoraChat] No se pudo cargar memoria:", err);
     }
-    loadMemory();
-    return () => {
-      isMounted = false;
-    };
-  }, [sessionId, agentId]);
+  }, [agentId]);
+
+  useEffect(() => {
+    loadMemoryForSession(currentSessionId);
+  }, [currentSessionId, loadMemoryForSession]);
 
   const messagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => {
@@ -140,7 +147,7 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
         }));
 
         const payload = {
-          sessionId,
+          sessionId: currentSessionId,
           userText: text,
           userName,
           imageBase64,
@@ -214,7 +221,7 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sessionId,
+            sessionId: currentSessionId,
             userMessage: text,
             assistantResponse: cleanAssistantText,
             hasImage: Boolean(imageBase64),
@@ -225,7 +232,7 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            sessionId,
+            sessionId: currentSessionId,
             agentId,
             userMessage: text,
             assistantResponse: cleanAssistantText,
@@ -252,8 +259,47 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
         return null;
       }
     },
-    [sessionId, agentId, state.activeMode]
+    [currentSessionId, agentId, state.activeMode]
   );
+
+  // Iniciar un nuevo chat vacío
+  const startNewChat = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const newSid = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nora_session_id", newSid);
+    }
+    setCurrentSessionId(newSid);
+    setState((prev) => ({
+      ...prev,
+      messages: [],
+      currentResponseStream: "",
+      error: null,
+      isLoading: false,
+      isStreaming: false,
+    }));
+  }, []);
+
+  // Cambiar a una conversación anterior
+  const switchSession = useCallback((targetSessionId: string) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nora_session_id", targetSessionId);
+    }
+    setCurrentSessionId(targetSessionId);
+    setState((prev) => ({
+      ...prev,
+      messages: [],
+      currentResponseStream: "",
+      error: null,
+      isLoading: false,
+      isStreaming: false,
+    }));
+  }, []);
 
   // Limpiar conversación actual
   const clearChat = useCallback(() => {
@@ -267,8 +313,11 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
 
   return {
     ...state,
+    sessionId: currentSessionId,
     setMode,
     sendMessage,
     clearChat,
+    startNewChat,
+    switchSession,
   };
 }
