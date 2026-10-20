@@ -35,38 +35,61 @@ export function NoraChatFeed({
   const touchStartYRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (containerRef.current && containerRef.current.scrollTop === 0) {
-      touchStartYRef.current = e.touches[0].clientY;
-    } else {
-      touchStartYRef.current = 0;
-    }
-  };
+  // Manejo de touch nativo con passive: false para cancelar el rubber-band y arrastre del webview
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartYRef.current === 0 || isRefreshing) return;
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - touchStartYRef.current;
-    if (diff > 0 && containerRef.current?.scrollTop === 0) {
-      // Resistencia elástica tipo iOS/Android
-      const distance = Math.min(diff * 0.45, 80);
-      setPullDistance(distance);
-    }
-  };
+    const onTouchStart = (e: TouchEvent) => {
+      if (el.scrollTop <= 0) {
+        touchStartYRef.current = e.touches[0].clientY;
+      } else {
+        touchStartYRef.current = 0;
+      }
+    };
 
-  const handleTouchEnd = () => {
-    if (pullDistance > 55 && !isRefreshing) {
-      setIsRefreshing(true);
-      setPullDistance(50);
-      setTimeout(() => {
-        if (typeof window !== "undefined") {
-          window.location.reload();
+    const onTouchMove = (e: TouchEvent) => {
+      if (touchStartYRef.current === 0) return;
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - touchStartYRef.current;
+
+      if (diff > 0 && el.scrollTop <= 0) {
+        // Bloquear el rebote nativo del WebView PWA
+        if (e.cancelable) {
+          e.preventDefault();
         }
-      }, 400);
-    } else {
-      setPullDistance(0);
-    }
-  };
+        const distance = Math.min(diff * 0.45, 80);
+        setPullDistance(distance);
+      }
+    };
+
+    const onTouchEnd = () => {
+      touchStartYRef.current = 0;
+      setPullDistance((prev) => {
+        if (prev > 55) {
+          setIsRefreshing(true);
+          setTimeout(() => {
+            if (typeof window !== "undefined") {
+              window.scrollTo(0, 0);
+              window.location.reload();
+            }
+          }, 350);
+          return 50;
+        }
+        return 0;
+      });
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -77,12 +100,10 @@ export function NoraChatFeed({
   return (
     <div
       ref={containerRef}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative"
       style={{
         WebkitOverflowScrolling: "touch",
+        overscrollBehaviorY: "contain",
       }}
     >
       {/* INDICADOR VISUAL DE PULL-TO-REFRESH */}

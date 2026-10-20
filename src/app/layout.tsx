@@ -51,8 +51,16 @@ export default function RootLayout({
             padding: 0;
             background-color: #020617;
             overflow: hidden;
+            overscroll-behavior: none !important;
+            overscroll-behavior-y: none !important;
+            -webkit-overscroll-behavior: none !important;
             -webkit-user-select: none;
             user-select: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
           }
           input, textarea {
             -webkit-user-select: text;
@@ -64,7 +72,7 @@ export default function RootLayout({
           }
         `}} />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100vw", height: "100dvh", overflow: "hidden" }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100vw", height: "100dvh", overflow: "hidden", overscrollBehavior: "none", position: "fixed", inset: 0 }}>
         <NoraSecurityProvider>
           {children}
         </NoraSecurityProvider>

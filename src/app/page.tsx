@@ -79,6 +79,27 @@ export default function NoraPage() {
     [chat, audio, vision]
   );
 
+  // Desactivar scroll restoration nativo para evitar desfase en PWA standalone
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = "manual";
+      }
+      window.scrollTo(0, 0);
+
+      const resetScroll = () => {
+        window.scrollTo(0, 0);
+      };
+
+      window.addEventListener("scroll", resetScroll);
+      window.addEventListener("orientationchange", resetScroll);
+      return () => {
+        window.removeEventListener("scroll", resetScroll);
+        window.removeEventListener("orientationchange", resetScroll);
+      };
+    }
+  }, []);
+
   // Autoscroll del feed de chat
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
