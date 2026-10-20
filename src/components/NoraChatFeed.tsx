@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Bot, User, Volume2, Copy, Check, Sparkles } from "lucide-react";
+import React, { useState, useRef, useCallback } from "react";
+import { Bot, User, Volume2, Copy, Check, Sparkles, RefreshCw } from "lucide-react";
 import { ChatMessage } from "@/hooks/useNoraChat";
 import { NoraMode } from "@/lib/prompts/types";
 import { TeaPictograms } from "@/components/TeaPictograms";
@@ -29,6 +29,45 @@ export function NoraChatFeed({
 }: NoraChatFeedProps) {
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
+  // ── Pull-to-refresh nativo y visual para móviles ──
+  const [pullDistance, setPullDistance] = useState<number>(0);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const touchStartYRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (containerRef.current && containerRef.current.scrollTop === 0) {
+      touchStartYRef.current = e.touches[0].clientY;
+    } else {
+      touchStartYRef.current = 0;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === 0 || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartYRef.current;
+    if (diff > 0 && containerRef.current?.scrollTop === 0) {
+      // Resistencia elástica tipo iOS/Android
+      const distance = Math.min(diff * 0.45, 80);
+      setPullDistance(distance);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullDistance > 55 && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(50);
+      setTimeout(() => {
+        if (typeof window !== "undefined") {
+          window.location.reload();
+        }
+      }, 400);
+    } else {
+      setPullDistance(0);
+    }
+  };
+
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -36,7 +75,41 @@ export function NoraChatFeed({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+    <div
+      ref={containerRef}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative"
+      style={{
+        WebkitOverflowScrolling: "touch",
+      }}
+    >
+      {/* INDICADOR VISUAL DE PULL-TO-REFRESH */}
+      {pullDistance > 0 && (
+        <div
+          className="w-full flex items-center justify-center transition-all duration-150 overflow-hidden"
+          style={{ height: `${pullDistance}px` }}
+        >
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-indigo-500/30 text-indigo-300 text-xs shadow-lg backdrop-blur-md">
+            <RefreshCw
+              size={14}
+              className={`${isRefreshing ? "animate-spin text-emerald-400" : ""}`}
+              style={{
+                transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)`,
+              }}
+            />
+            <span className="font-medium text-[11px]">
+              {isRefreshing
+                ? "Actualizando Nora..."
+                : pullDistance > 55
+                ? "Suelta para actualizar"
+                : "Desliza para actualizar"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* MODO TEA: PICTOGRAMAS EDUCATIVOS INTEGRADOS */}
       {mode === "tea" && (
         <div className="p-3 bg-slate-900/60 border border-sky-500/20 rounded-xl mb-2">

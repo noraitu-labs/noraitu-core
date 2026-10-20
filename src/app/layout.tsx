@@ -41,7 +41,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#09090b" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <script src="https://cdn.tailwindcss.com"></script>
-        {/* Estructura estable para móviles, PWAs y navegadores de escritorio */}
+        {/* Estructura para móviles, PWAs y navegadores de escritorio con soporte de pull-to-refresh */}
         <style dangerouslySetInnerHTML={{__html: `
           html, body {
             height: 100% !important;
@@ -50,11 +50,9 @@ export default function RootLayout({
             margin: 0;
             padding: 0;
             background-color: #020617;
-            position: fixed;
             overflow: hidden;
             -webkit-user-select: none;
             user-select: none;
-            touch-action: manipulation;
           }
           input, textarea {
             -webkit-user-select: text;
