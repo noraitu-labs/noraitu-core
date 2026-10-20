@@ -291,7 +291,11 @@ export default function NoraPage() {
         onClose={() => setIsHistoryOpen(false)}
         currentSessionId={chat.sessionId}
         onSelectSession={(sid) => {
-          chat.switchSession(sid);
+          chat.loadSession(sid);
+          setIsHistoryOpen(false);
+        }}
+        loadSession={(sid) => {
+          chat.loadSession(sid);
           setIsHistoryOpen(false);
         }}
         onNewChat={() => {

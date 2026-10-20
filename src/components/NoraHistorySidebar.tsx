@@ -28,6 +28,7 @@ interface NoraHistorySidebarProps {
   currentSessionId: string;
   onSelectSession: (sessionId: string) => void;
   onNewChat: () => void;
+  loadSession?: (sessionId: string) => void;
 }
 
 export function NoraHistorySidebar({
@@ -36,6 +37,7 @@ export function NoraHistorySidebar({
   currentSessionId,
   onSelectSession,
   onNewChat,
+  loadSession,
 }: NoraHistorySidebarProps) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [isMounted, setIsMounted] = useState<boolean>(false);
@@ -243,7 +245,11 @@ export function NoraHistorySidebar({
                 <div
                   key={item.sessionId}
                   onClick={() => {
-                    onSelectSession(item.sessionId);
+                    if (loadSession) {
+                      loadSession(item.sessionId);
+                    } else {
+                      onSelectSession(item.sessionId);
+                    }
                     onClose();
                   }}
                   className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
@@ -299,25 +305,13 @@ export function NoraHistorySidebar({
               Ingeniería e Innovación en Asistencia Cognitiva Multimodal
             </p>
 
-            {/* DATOS DE CONTACTO PROFESIONALES (FÁCILMENTE EDITABLES) */}
-            <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-700/50 text-xs">
-              <a
-                href="tel:3786414533"
-                className="flex items-center gap-2 text-slate-300 hover:text-emerald-400 transition-colors py-0.5"
-                title="Llamar o contactar por WhatsApp"
-              >
-                <Phone size={13} className="text-emerald-400 shrink-0" />
-                <span className="font-mono text-[11px] tracking-wide">3786414533</span>
-              </a>
-
-              <a
-                href="mailto:mjnexora.visual@gmail.com"
-                className="flex items-center gap-2 text-slate-300 hover:text-indigo-400 transition-colors py-0.5 truncate"
-                title="Enviar correo electrónico"
-              >
-                <Mail size={13} className="text-indigo-400 shrink-0" />
-                <span className="font-mono text-[11px] truncate">mjnexora.visual@gmail.com</span>
-              </a>
+            <div className="mt-3 pt-3 border-t border-slate-700 flex flex-col gap-1 text-xs text-slate-300">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-400">Tel/WA:</span> +54 9 3786 414533
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-400">Email:</span> mjnexora.visual@gmail.com
+              </div>
             </div>
           </div>
         </div>

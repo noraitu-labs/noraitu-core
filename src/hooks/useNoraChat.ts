@@ -337,7 +337,11 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       }
     }
 
-    const newSid = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    // Generar un ID de sesión totalmente nuevo e inconexo
+    const newSid = typeof crypto !== "undefined" && crypto.randomUUID
+      ? `nora_${crypto.randomUUID()}`
+      : `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
     if (typeof window !== "undefined") {
       localStorage.setItem("nora_session_id", newSid);
       localStorage.removeItem("nora_history_cache");
@@ -354,8 +358,8 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
     }));
   }, [currentSessionId]);
 
-  // Cambiar a una conversación anterior
-  const switchSession = useCallback((targetSessionId: string) => {
+  // Cargar una conversación histórica específica (loadSession)
+  const loadSession = useCallback(async (targetSessionId: string) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -368,10 +372,50 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       messages: [],
       currentResponseStream: "",
       error: null,
-      isLoading: false,
+      isLoading: true,
       isStreaming: false,
     }));
-  }, []);
+
+    // Intentar cargar mensajes desde el backend
+    try {
+      const res = await fetch(`/api/nora-memory?sessionId=${encodeURIComponent(targetSessionId)}&limit=30&agentId=${agentId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+          const loaded: ChatMessage[] = data.messages.map((m: any, idx: number) => ({
+            id: m._id || `mem-${idx}-${Date.now()}`,
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp || new Date().toISOString(),
+            mode: m.mode || "general",
+          }));
+          setState((prev) => ({
+            ...prev,
+            messages: loaded,
+            currentResponseStream: "",
+            isLoading: false,
+          }));
+          if (typeof window !== "undefined") {
+            localStorage.setItem("nora_history_cache", JSON.stringify(loaded));
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[useNoraChat] Error cargando sesión del backend:", err);
+    }
+
+    // Fallback: Si no hay en backend, dejar listo el estado para interactuar
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+    }));
+  }, [agentId]);
+
+  // Cambiar a una conversación anterior (alias / switch)
+  const switchSession = useCallback((targetSessionId: string) => {
+    loadSession(targetSessionId);
+  }, [loadSession]);
 
   // Limpiar conversación actual
   const clearChat = useCallback(() => {
@@ -406,6 +450,16 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       }
     }
 
+    const newSid = typeof crypto !== "undefined" && crypto.randomUUID
+      ? `nora_${crypto.randomUUID()}`
+      : `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nora_session_id", newSid);
+      localStorage.removeItem("nora_history_cache");
+    }
+
+    setCurrentSessionId(newSid);
     setState((prev) => ({
       ...prev,
       messages: [],
@@ -422,5 +476,6 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
     clearChat,
     startNewChat,
     switchSession,
+    loadSession,
   };
 }
