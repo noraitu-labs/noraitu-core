@@ -17,7 +17,7 @@ export function usePWAInstall() {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // 1. Detectar si ya está en modo standalone / PWA instalada
+    // 1. Detectar si ya está en modo standalone / PWA instalada y registrar Service Worker explícitamente
     if (typeof window !== "undefined") {
       const isStandalone =
         window.matchMedia("(display-mode: standalone)").matches ||
@@ -26,6 +26,20 @@ export function usePWAInstall() {
 
       if (isStandalone) {
         setIsInstalled(true);
+      }
+
+      // Registro defensivo explícito del Service Worker
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/sw.js", { scope: "/" })
+            .then((reg) => {
+              console.log("[PWA] Service Worker registrado con éxito en scope:", reg.scope);
+            })
+            .catch((err) => {
+              console.warn("[PWA] Error al registrar Service Worker:", err);
+            });
+        });
       }
     }
 

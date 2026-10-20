@@ -8,6 +8,75 @@ const withPWA = withPWAInit({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
+  fallbacks: {
+    document: "/",
+  },
+  workboxOptions: {
+    disableDevLogs: true,
+    runtimeCaching: [
+      // 1. Ruta raíz y navegación de páginas: NetworkFirst con fallback a caché para garantizar apertura offline
+      {
+        urlPattern: ({ request, url }) => request.mode === "navigate" || url.pathname === "/",
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "nora-pages-cache",
+          expiration: {
+            maxEntries: 64,
+            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+          },
+          networkTimeoutSeconds: 4,
+        },
+      },
+      // 2. Recursos estáticos inmutables de Next.js (JS, CSS chunks)
+      {
+        urlPattern: /\/_next\/static\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "nora-static-chunks",
+          expiration: {
+            maxEntries: 128,
+            maxAgeSeconds: 60 * 24 * 60 * 60, // 60 días
+          },
+        },
+      },
+      // 3. Imágenes, íconos y avatar
+      {
+        urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "nora-media-cache",
+          expiration: {
+            maxEntries: 64,
+            maxAgeSeconds: 30 * 24 * 60 * 60,
+          },
+        },
+      },
+      // 4. Fuentes y estilos
+      {
+        urlPattern: /\.(?:woff|woff2|eot|ttf|otf|css)$/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "nora-fonts-styles",
+          expiration: {
+            maxEntries: 32,
+            maxAgeSeconds: 60 * 24 * 60 * 60,
+          },
+        },
+      },
+      // 5. Tailwind CDN script
+      {
+        urlPattern: /^https:\/\/cdn\.tailwindcss\.com/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "nora-tailwind-cdn",
+          expiration: {
+            maxEntries: 5,
+            maxAgeSeconds: 60 * 24 * 60 * 60,
+          },
+        },
+      },
+    ],
+  },
 });
 
 /** @type {import('next').NextConfig} */
