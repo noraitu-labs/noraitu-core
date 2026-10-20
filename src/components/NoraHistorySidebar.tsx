@@ -297,23 +297,24 @@ export function NoraHistorySidebar({
               Ingeniería e Innovación en Asistencia Cognitiva Multimodal
             </p>
 
-            <div className="space-y-1 pt-1.5 border-t border-white/5 text-[11px]">
+            {/* DATOS DE CONTACTO PROFESIONALES (FÁCILMENTE EDITABLES) */}
+            <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-slate-700/50 text-xs">
               <a
                 href="tel:3786414533"
-                className="flex items-center gap-2 text-slate-300 hover:text-emerald-400 transition-colors"
-                title="Llamar o escribir"
+                className="flex items-center gap-2 text-slate-300 hover:text-emerald-400 transition-colors py-0.5"
+                title="Llamar o contactar por WhatsApp"
               >
-                <Phone size={12} className="text-emerald-400 shrink-0" />
-                <span className="font-mono">3786414533</span>
+                <Phone size={13} className="text-emerald-400 shrink-0" />
+                <span className="font-mono text-[11px] tracking-wide">3786414533</span>
               </a>
 
               <a
                 href="mailto:mjnexora.visual@gmail.com"
-                className="flex items-center gap-2 text-slate-300 hover:text-indigo-400 transition-colors truncate"
-                title="Enviar correo"
+                className="flex items-center gap-2 text-slate-300 hover:text-indigo-400 transition-colors py-0.5 truncate"
+                title="Enviar correo electrónico"
               >
-                <Mail size={12} className="text-indigo-400 shrink-0" />
-                <span className="truncate font-mono">mjnexora.visual@gmail.com</span>
+                <Mail size={13} className="text-indigo-400 shrink-0" />
+                <span className="font-mono text-[11px] truncate">mjnexora.visual@gmail.com</span>
               </a>
             </div>
           </div>
