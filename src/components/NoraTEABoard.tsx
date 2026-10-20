@@ -142,7 +142,12 @@ export function NoraTEABoard({ onSelectPictogram, isLoading = false }: NoraTEABo
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="w-full shrink-0 border-t border-sky-500/20 bg-slate-900/95 backdrop-blur-md px-3 py-2 z-20">
+    <div
+      className="fixed left-0 right-0 w-full border-t border-sky-500/20 bg-slate-900/95 backdrop-blur-md px-3 py-2 z-40"
+      style={{
+        bottom: "calc(3.5rem + env(safe-area-inset-bottom))",
+      }}
+    >
       {/* HEADER COMPACTO CON CONTROL PARA EXPANDIR / COLAPSAR TIPO TECLADO */}
       <div className="flex items-center justify-between mb-1.5 px-1">
         <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">

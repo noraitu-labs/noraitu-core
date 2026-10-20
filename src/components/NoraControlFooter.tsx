@@ -63,13 +63,17 @@ export function NoraControlFooter({
 
   return (
     <footer
-      className="w-full max-w-full box-border overflow-hidden border-t border-white/10 bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 sm:px-6 z-30 shrink-0"
+      className="fixed bottom-0 left-0 right-0 w-full z-50 border-t border-white/10 bg-slate-950/95 backdrop-blur-md p-2.5 sm:p-3 sm:px-6 box-border"
       style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
         width: "100%",
         maxWidth: "100%",
         boxSizing: "border-box",
-        overflow: "hidden",
-        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+        zIndex: 50,
+        paddingBottom: "max(12px, env(safe-area-inset-bottom))",
       }}
     >
       {/* PREVIEW DE IMAGEN ADJUNTA SI EXISTE */}

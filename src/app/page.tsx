@@ -261,14 +261,16 @@ export default function NoraPage() {
 
   return (
     <main
-      className="flex flex-col h-[100dvh] w-full overflow-hidden bg-slate-950 text-slate-100 relative"
+      className="min-h-screen relative flex flex-col h-[100dvh] w-full overflow-hidden bg-slate-950 text-slate-100"
       style={{
+        minHeight: "100vh",
         height: "100dvh",
         maxHeight: "100dvh",
         width: "100%",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        position: "relative",
       }}
     >
       {/* 1. Header Modular con selector de modos y exportaciones */}
