@@ -65,25 +65,13 @@ export function NoraChatFeed({
             />
           </div>
           <h2 className="text-lg font-bold text-white mb-1">Hola {userName}, soy Nora</h2>
-          <p className="text-xs leading-relaxed text-slate-400 mb-3">
+          <p className="text-xs leading-relaxed text-slate-400">
             {mode === "lazarillo"
               ? "Asistente de orientación visual con coordenadas horarias y análisis seguro de superficie."
               : mode === "tea"
               ? "Interacción estructurada, lenguaje literal sin metáforas y soporte pedagógico predecible."
               : "Asistente cognitivo multimodal de alta inteligencia para tareas cotidianas, profesionales y análisis complejo. ¿Cómo puedo ayudarte hoy?"}
           </p>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 border border-white/10 text-[10px] text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-semibold text-slate-300">Nexora One</span>
-            <span className="text-slate-600">•</span>
-            <a href="tel:3786414533" className="hover:text-emerald-400 transition-colors font-mono">
-              3786414533
-            </a>
-            <span className="text-slate-600">•</span>
-            <a href="mailto:mjnexora.visual@gmail.com" className="hover:text-indigo-400 transition-colors font-mono">
-              mjnexora.visual@gmail.com
-            </a>
-          </div>
         </div>
       )}
 

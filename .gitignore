@@ -32,3 +32,5 @@ public/workbox-*.js
 public/workbox-*.js.map
 public/swe-worker-*.js
 
+.vercel
+.env*
