@@ -64,7 +64,13 @@ export function NoraControlFooter({
   return (
     <footer
       className="w-full max-w-full box-border overflow-hidden border-t border-white/10 bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 sm:px-6 z-30 shrink-0"
-      style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
+        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+      }}
     >
       {/* PREVIEW DE IMAGEN ADJUNTA SI EXISTE */}
       {selectedImageBase64 && (

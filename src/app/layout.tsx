@@ -21,6 +21,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 import { NoraSecurityProvider } from "@/components/NoraSecurityProvider";
@@ -40,15 +41,24 @@ export default function RootLayout({
         <meta name="theme-color" content="#09090b" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <script src="https://cdn.tailwindcss.com"></script>
-        {/* Fuerza scroll vertical y estructura en todo momento */}
+        {/* Estructura estable para móviles, PWAs y navegadores de escritorio */}
         <style dangerouslySetInnerHTML={{__html: `
           html, body {
-            overflow: hidden !important;
+            height: 100% !important;
             height: 100dvh !important;
             width: 100vw !important;
             margin: 0;
             padding: 0;
             background-color: #020617;
+            position: fixed;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+          }
+          input, textarea {
+            -webkit-user-select: text;
+            user-select: text;
           }
           img {
             max-width: 100%;
@@ -56,7 +66,7 @@ export default function RootLayout({
           }
         `}} />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#090d16", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch" as any }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100vw", height: "100dvh", overflow: "hidden" }}>
         <NoraSecurityProvider>
           {children}
         </NoraSecurityProvider>
