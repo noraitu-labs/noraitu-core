@@ -76,10 +76,10 @@ export function NoraHeader({
 
   return (
     <header
-      className="border-b border-white/10 bg-slate-900/90 backdrop-blur-md px-2 sm:px-4 flex items-center justify-between z-30 shrink-0 w-full max-w-full overflow-hidden box-border"
+      className="sticky top-0 left-0 right-0 border-b border-white/10 bg-slate-900/95 backdrop-blur-md px-2 sm:px-4 flex items-center justify-between z-40 shrink-0 w-full max-w-full overflow-hidden box-border"
       style={{
-        paddingTop: "max(6px, env(safe-area-inset-top))",
-        paddingBottom: "6px",
+        paddingTop: "max(8px, env(safe-area-inset-top))",
+        paddingBottom: "8px",
         minHeight: "56px",
       }}
     >
