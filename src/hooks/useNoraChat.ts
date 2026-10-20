@@ -292,15 +292,53 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
     [currentSessionId, agentId, state.activeMode]
   );
 
-  // Iniciar un nuevo chat vacío
+  // Iniciar un nuevo chat vacío guardando la sesión actual en nora_sessions_cache
   const startNewChat = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+
+    // 1. Verificar si hay mensajes útiles en la conversación activa antes de limpiar
+    const currentMessages = messagesRef.current;
+    const usefulMessages = currentMessages.filter((m) => m.content && m.content.trim().length > 0);
+
+    if (usefulMessages.length > 0 && typeof window !== "undefined") {
+      try {
+        const firstUserMsg = usefulMessages.find((m) => m.role === "user");
+        const snippet = firstUserMsg
+          ? firstUserMsg.content.slice(0, 48)
+          : usefulMessages[0].content.slice(0, 48);
+
+        const newSessionItem = {
+          sessionId: currentSessionId,
+          updatedAt: new Date().toISOString(),
+          lastMessageSnippet: snippet,
+          messageCount: usefulMessages.length,
+        };
+
+        const existingRaw = localStorage.getItem("nora_sessions_cache");
+        let sessionList: any[] = [];
+        if (existingRaw) {
+          try {
+            sessionList = JSON.parse(existingRaw);
+          } catch {}
+        }
+
+        // Evitar duplicados y colocar la sesión al principio
+        sessionList = [newSessionItem, ...sessionList.filter((s) => s.sessionId !== currentSessionId)];
+        localStorage.setItem("nora_sessions_cache", JSON.stringify(sessionList));
+        window.dispatchEvent(new Event("nora_sessions_updated"));
+      } catch (err) {
+        console.warn("[useNoraChat] Error al auto-guardar sesión previa:", err);
+      }
+    }
+
     const newSid = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     if (typeof window !== "undefined") {
       localStorage.setItem("nora_session_id", newSid);
+      localStorage.removeItem("nora_history_cache");
     }
+
     setCurrentSessionId(newSid);
     setState((prev) => ({
       ...prev,
@@ -310,7 +348,7 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       isLoading: false,
       isStreaming: false,
     }));
-  }, []);
+  }, [currentSessionId]);
 
   // Cambiar a una conversación anterior
   const switchSession = useCallback((targetSessionId: string) => {
@@ -333,13 +371,44 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
 
   // Limpiar conversación actual
   const clearChat = useCallback(() => {
+    const currentMessages = messagesRef.current;
+    if (currentMessages.length > 0 && typeof window !== "undefined") {
+      try {
+        const firstUserMsg = currentMessages.find((m) => m.role === "user");
+        const snippet = firstUserMsg
+          ? firstUserMsg.content.slice(0, 48)
+          : currentMessages[0].content.slice(0, 48);
+
+        const newSessionItem = {
+          sessionId: currentSessionId,
+          updatedAt: new Date().toISOString(),
+          lastMessageSnippet: snippet,
+          messageCount: currentMessages.length,
+        };
+
+        const existingRaw = localStorage.getItem("nora_sessions_cache");
+        let sessionList: any[] = [];
+        if (existingRaw) {
+          try {
+            sessionList = JSON.parse(existingRaw);
+          } catch {}
+        }
+        sessionList = [newSessionItem, ...sessionList.filter((s) => s.sessionId !== currentSessionId)];
+        localStorage.setItem("nora_sessions_cache", JSON.stringify(sessionList));
+        localStorage.removeItem("nora_history_cache");
+        window.dispatchEvent(new Event("nora_sessions_updated"));
+      } catch (err) {
+        console.warn("[useNoraChat] Error guardando sesión en clearChat:", err);
+      }
+    }
+
     setState((prev) => ({
       ...prev,
       messages: [],
       currentResponseStream: "",
       error: null,
     }));
-  }, []);
+  }, [currentSessionId]);
 
   return {
     ...state,

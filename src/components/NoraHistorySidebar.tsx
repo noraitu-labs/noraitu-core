@@ -79,16 +79,47 @@ export function NoraHistorySidebar({
     }
   }, []);
 
-  // Cargar sesiones al montar el componente (incluso antes de abrir la solapa) y al abrirla
+  // Recargar sesiones locales instantáneamente cuando se crea un nuevo chat
+  const reloadFromCache = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("nora_sessions_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setSessions(parsed);
+          }
+        }
+      } catch (e) {
+        console.warn("[NoraHistorySidebar] Error recargando cache local:", e);
+      }
+    }
+  }, []);
+
+  // Escuchar eventos de actualización local de sesiones y storage cross-tab
   useEffect(() => {
+    reloadFromCache();
     fetchSessions();
-  }, [fetchSessions]);
+
+    const handleLocalUpdate = () => {
+      reloadFromCache();
+    };
+
+    window.addEventListener("nora_sessions_updated", handleLocalUpdate);
+    window.addEventListener("storage", handleLocalUpdate);
+
+    return () => {
+      window.removeEventListener("nora_sessions_updated", handleLocalUpdate);
+      window.removeEventListener("storage", handleLocalUpdate);
+    };
+  }, [reloadFromCache, fetchSessions]);
 
   useEffect(() => {
     if (isOpen) {
+      reloadFromCache();
       fetchSessions();
     }
-  }, [isOpen, fetchSessions]);
+  }, [isOpen, reloadFromCache, fetchSessions]);
 
   // Eliminar una conversación
   const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
@@ -148,11 +179,12 @@ export function NoraHistorySidebar({
 
       {/* Panel lateral deslizante solapado a la izquierda (Estilo ChatGPT / Claude Pro) */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-slate-950/95 backdrop-blur-xl border-r border-white/10 shadow-2xl flex flex-col z-50 transition-transform duration-300 ease-out transform ${
+        className={`fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-slate-950/95 backdrop-blur-xl border-r border-white/10 shadow-2xl flex flex-col h-full z-50 transition-transform duration-300 ease-out transform ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{
-          height: "100dvh",
+          height: "100%",
+          maxHeight: "100dvh",
           display: "flex",
           flexDirection: "column",
         }}
@@ -258,8 +290,8 @@ export function NoraHistorySidebar({
           )}
         </div>
 
-        {/* PIE DE FIRMA DE AUTOR PROFESIONAL: NEXORA ONE */}
-        <div className="p-3 border-t border-white/10 bg-slate-900/70 shrink-0">
+        {/* PIE DE FIRMA DE AUTOR PROFESIONAL: NEXORA ONE (SIEMPRE ANCLADO ABAJO) */}
+        <div className="mt-auto flex-shrink-0 p-3.5 border-t border-slate-800 bg-slate-900/80">
           <div className="p-2.5 rounded-xl bg-slate-950/80 border border-white/5 shadow-inner">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
