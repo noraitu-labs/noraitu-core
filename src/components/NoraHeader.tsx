@@ -110,8 +110,8 @@ export function NoraHeader({
           </div>
         </div>
 
-        {/* SELECTOR DE PERFIL COGNITIVO */}
-        <div className="flex items-center bg-slate-950/70 p-0.5 sm:p-1 rounded-lg border border-white/5 gap-0.5 sm:gap-1 shrink-0" role="group" aria-label="Selección de perfil y asistencia de Nora">
+        {/* SELECTOR DE PERFIL COGNITIVO COMPACTO */}
+        <div className="flex items-center bg-slate-950/70 p-1 rounded-lg border border-white/5 gap-1 shrink-0" role="group" aria-label="Selección de perfil y asistencia de Nora">
           {(["executive", "lazarillo", "tea"] as const).map((m) => {
             const isSelected = currentMode === m;
             const cfg = MODE_CONFIGS[m];
@@ -131,14 +131,14 @@ export function NoraHeader({
                 aria-pressed={isSelected}
                 aria-label={ariaDescriptions[m]}
                 title={cfg.label}
-                className={`flex items-center gap-1 px-1.5 sm:px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1 rounded-md text-xs font-semibold transition-all ${
                   isSelected
                     ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 shadow-xs"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
                 {cfg.icon}
-                <span className="hidden lg:inline">{cfg.label}</span>
+                <span className="hidden xl:inline">{cfg.label}</span>
               </button>
             );
           })}

@@ -243,17 +243,6 @@ export default function NoraPage() {
       className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative"
       style={{ height: "100dvh", maxHeight: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}
     >
-      {/* 0. Primer elemento enfocable para TalkBack / VoiceOver (Accesibilidad Universal para Ciegos) */}
-      <button
-        type="button"
-        tabIndex={0}
-        onClick={() => handleModeChange("lazarillo")}
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:p-4 focus:bg-emerald-600 focus:text-white focus:font-bold focus:rounded-xl focus:shadow-2xl focus:outline-none focus:ring-4 focus:ring-emerald-300"
-        aria-label="Bienvenido a Nora. Toca dos veces en cualquier parte para activar el asistente visual para ciegos"
-      >
-        Bienvenido a Nora. Toca dos veces en cualquier parte para activar el asistente visual para ciegos
-      </button>
-
       {/* 1. Header Modular con selector de modos y exportaciones */}
       <NoraHeader
         currentMode={mode}
