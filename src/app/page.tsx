@@ -261,8 +261,15 @@ export default function NoraPage() {
 
   return (
     <main
-      className="flex flex-col h-dvh w-full overflow-hidden bg-slate-950 text-slate-100 relative"
-      style={{ height: "100dvh", maxHeight: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}
+      className="flex flex-col h-full w-full bg-slate-950 text-slate-100 relative"
+      style={{
+        height: "100%",
+        maxHeight: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
     >
       {/* 1. Header Modular con selector de modos y exportaciones */}
       <NoraHeader
@@ -302,19 +309,17 @@ export default function NoraPage() {
         isProcessing={vision.isProcessing}
       />
 
-      {/* 3. Área Central: Feed de Chat Continuo (Siempre presente para ver el historial y lo que dice Nora) */}
-      <div className="flex-1 overflow-y-auto w-full min-h-0" style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
-        <NoraChatFeed
-          messages={chat.messages}
-          currentResponseStream={chat.currentResponseStream}
-          isStreaming={chat.isStreaming}
-          mode={mode}
-          userName={device.userName}
-          onSpeakText={(text) => audio.speakText(text)}
-          onSelectPictogram={handleSelectPictogram}
-          chatBottomRef={chatBottomRef}
-        />
-      </div>
+      {/* 3. Área Central: Feed de Chat Continuo (flex-1 min-h-0 directo) */}
+      <NoraChatFeed
+        messages={chat.messages}
+        currentResponseStream={chat.currentResponseStream}
+        isStreaming={chat.isStreaming}
+        mode={mode}
+        userName={device.userName}
+        onSpeakText={(text) => audio.speakText(text)}
+        onSelectPictogram={handleSelectPictogram}
+        chatBottomRef={chatBottomRef}
+      />
 
       {/* 3.1. Tablero de Comunicación Aumentativa TEA (Justo por encima del input, tipo teclado de pictogramas) */}
       {mode === "tea" && (

@@ -100,8 +100,11 @@ export function NoraChatFeed({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative"
+      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative w-full min-h-0"
       style={{
+        flex: "1 1 0%",
+        minHeight: 0,
+        width: "100%",
         WebkitOverflowScrolling: "touch",
         overscrollBehaviorY: "contain",
       }}
