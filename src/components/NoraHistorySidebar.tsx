@@ -42,7 +42,7 @@ export function NoraHistorySidebar({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Cargar lista de sesiones desde la API y guardar en localStorage
+  // Cargar lista de sesiones desde la API (SOLO LECTURA, NUNCA sobreescribir la cache local con setItem)
   const fetchSessions = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -50,14 +50,16 @@ export function NoraHistorySidebar({
       if (res.ok) {
         const data = await res.json();
         if (data.sessions && Array.isArray(data.sessions)) {
-          setSessions(data.sessions);
-          if (typeof window !== "undefined") {
-            try {
-              localStorage.setItem("nora_sessions_cache", JSON.stringify(data.sessions));
-            } catch (e) {
-              console.warn("[NoraHistorySidebar] Error guardando nora_sessions_cache:", e);
+          // Fusionar sesiones del servidor con la cache local sin perder las recién creadas
+          setSessions((prev) => {
+            const merged = [...data.sessions];
+            for (const item of prev) {
+              if (!merged.some((m) => m.sessionId === item.sessionId)) {
+                merged.unshift(item);
+              }
             }
-          }
+            return merged;
+          });
         }
       }
     } catch (err) {
