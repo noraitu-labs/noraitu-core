@@ -245,6 +245,7 @@ export function NoraHistorySidebar({
                 <div
                   key={item.sessionId}
                   onClick={() => {
+                    console.log("Cargando sesión:", item.sessionId);
                     if (loadSession) {
                       loadSession(item.sessionId);
                     } else {
@@ -252,13 +253,13 @@ export function NoraHistorySidebar({
                     }
                     onClose();
                   }}
-                  className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                  className={`group relative z-50 flex items-center justify-between p-2.5 rounded-xl cursor-pointer pointer-events-auto transition-all border ${
                     isActive
                       ? "bg-indigo-600/15 border-indigo-500/40 text-white shadow-xs"
                       : "border-transparent hover:bg-slate-900/60 hover:border-white/5 text-slate-300"
                   } ${isDeleting ? "opacity-40 pointer-events-none" : ""}`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 pr-1">
+                  <div className="flex items-center gap-2.5 min-w-0 pr-1 pointer-events-none">
                     <MessageSquare
                       size={14}
                       className={isActive ? "text-indigo-400 shrink-0" : "text-slate-500 group-hover:text-slate-400 shrink-0"}
@@ -277,7 +278,7 @@ export function NoraHistorySidebar({
                   {/* Botón eliminar sesión */}
                   <button
                     onClick={(e) => handleDeleteSession(e, item.sessionId)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all shrink-0"
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all shrink-0 pointer-events-auto relative z-10"
                     title="Eliminar conversación"
                   >
                     <Trash2 size={13} />
@@ -294,7 +295,7 @@ export function NoraHistorySidebar({
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold text-white tracking-wide">Nexora One</span>
+                <span className="text-xs font-bold text-white tracking-wide">Nexora One - v2</span>
               </div>
               <span className="text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
                 Autor

@@ -405,7 +405,27 @@ export function useNoraChat(options: UseNoraChatOptions = {}) {
       console.warn("[useNoraChat] Error cargando sesión del backend:", err);
     }
 
-    // Fallback: Si no hay en backend, dejar listo el estado para interactuar
+    // Fallback: Si no hay en backend, verificar si tenemos cache local
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("nora_history_cache");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setState((prev) => ({
+              ...prev,
+              messages: parsed,
+              isLoading: false,
+            }));
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[useNoraChat] Error leyendo fallback local:", e);
+      }
+    }
+
+    // Fallback final: dejar listo el estado para interactuar
     setState((prev) => ({
       ...prev,
       isLoading: false,
