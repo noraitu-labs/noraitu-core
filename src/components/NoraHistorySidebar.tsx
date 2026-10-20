@@ -37,20 +37,8 @@ export function NoraHistorySidebar({
   onSelectSession,
   onNewChat,
 }: NoraHistorySidebarProps) {
-  const [sessions, setSessions] = useState<SessionItem[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem("nora_sessions_cache");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) return parsed;
-        }
-      } catch (e) {
-        console.warn("[NoraHistorySidebar] Error leyendo nora_sessions_cache:", e);
-      }
-    }
-    return [];
-  });
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -79,14 +67,14 @@ export function NoraHistorySidebar({
     }
   }, []);
 
-  // Recargar sesiones locales instantáneamente cuando se crea un nuevo chat
+  // Recargar sesiones locales de forma segura tras montaje
   const reloadFromCache = useCallback(() => {
     if (typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem("nora_sessions_cache");
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             setSessions(parsed);
           }
         }
@@ -96,8 +84,9 @@ export function NoraHistorySidebar({
     }
   }, []);
 
-  // Escuchar eventos de actualización local de sesiones y storage cross-tab
+  // 1. Una vez montado en el cliente (evita hydration mismatch), leer caché local y sincronizar
   useEffect(() => {
+    setIsMounted(true);
     reloadFromCache();
     fetchSessions();
 
@@ -114,12 +103,13 @@ export function NoraHistorySidebar({
     };
   }, [reloadFromCache, fetchSessions]);
 
+  // 2. Al abrir la solapa, refrescar desde la caché y revalidar con la nube
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isMounted) {
       reloadFromCache();
       fetchSessions();
     }
-  }, [isOpen, reloadFromCache, fetchSessions]);
+  }, [isOpen, isMounted, reloadFromCache, fetchSessions]);
 
   // Eliminar una conversación
   const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
