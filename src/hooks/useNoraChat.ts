@@ -35,48 +35,52 @@ export interface NoraChatState {
  * y la persistencia asíncrona fire-and-forget (MongoDB + Neon) sin bloquear la UI.
  */
 export function useNoraChat(options: UseNoraChatOptions = {}) {
-  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
-    if (options.sessionId) return options.sessionId;
-    if (typeof window !== "undefined") {
-      let saved = localStorage.getItem("nora_session_id");
-      if (!saved) {
-        saved = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        localStorage.setItem("nora_session_id", saved);
-      }
-      return saved;
-    }
-    return "anonymous";
-  });
-
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => options.sessionId || "");
   const initialMode = options.initialMode || "general";
   const agentId = options.agentId || "nora-itu";
 
-  const [state, setState] = useState<NoraChatState>(() => {
-    let initialMessages: ChatMessage[] = [];
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem("nora_history_cache");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
-            initialMessages = parsed;
-          }
-        }
-      } catch (e) {
-        console.warn("[useNoraChat] Error leyendo nora_history_cache:", e);
-      }
-    }
-    return {
-      messages: initialMessages,
-      isLoading: false,
-      isStreaming: false,
-      activeMode: initialMode,
-      error: null,
-      currentResponseStream: "",
-    };
+  const [state, setState] = useState<NoraChatState>({
+    messages: [],
+    isLoading: false,
+    isStreaming: false,
+    activeMode: initialMode,
+    error: null,
+    currentResponseStream: "",
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 1. Blindaje contra Hydration Mismatch: Cargar sessionId y mensajes de localStorage SOLO tras el montaje
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // A. Restaurar o generar Session ID
+    let activeSid = options.sessionId;
+    if (!activeSid) {
+      activeSid = localStorage.getItem("nora_session_id") || "";
+      if (!activeSid) {
+        activeSid = `nora_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        localStorage.setItem("nora_session_id", activeSid);
+      }
+    }
+    setCurrentSessionId(activeSid);
+
+    // B. Restaurar caché local de mensajes de forma segura
+    try {
+      const cached = localStorage.getItem("nora_history_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setState((prev) => ({
+            ...prev,
+            messages: parsed,
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn("[useNoraChat] Error leyendo nora_history_cache:", e);
+    }
+  }, [options.sessionId]);
 
   // Sincronizar siempre los mensajes con localStorage para que al recargar la PWA no se pierdan
   useEffect(() => {

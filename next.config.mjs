@@ -13,18 +13,20 @@ const withPWA = withPWAInit({
   },
   workboxOptions: {
     disableDevLogs: true,
+    clientsClaim: true,
+    skipWaiting: true,
     runtimeCaching: [
-      // 1. Ruta raíz y navegación de páginas: NetworkFirst con fallback a caché para garantizar apertura offline
+      // 1. Ruta raíz y navegación de páginas: NetworkFirst inmediato para descargar la última versión de Vercel
       {
         urlPattern: ({ request, url }) => request.mode === "navigate" || url.pathname === "/",
         handler: "NetworkFirst",
         options: {
           cacheName: "nora-pages-cache",
           expiration: {
-            maxEntries: 64,
-            maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+            maxEntries: 16,
+            maxAgeSeconds: 24 * 60 * 60, // 24 horas máximo para invalidar rápido versiones viejas
           },
-          networkTimeoutSeconds: 4,
+          networkTimeoutSeconds: 2,
         },
       },
       // 2. Recursos estáticos inmutables de Next.js (JS, CSS chunks)
