@@ -84,7 +84,7 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Blindaje Antirrobo y Seguridad en Producción
-  output: "standalone",
+  output: process.env.DOCKER_BUILD === "1" ? "standalone" : undefined,
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   typescript: {
@@ -137,3 +137,4 @@ const nextConfig = {
 };
 
 export default withPWA(nextConfig);
+
