@@ -110,14 +110,6 @@ const nextConfig = {
     }
     return config;
   },
-  async rewrites() {
-    return [
-      {
-        source: "/",
-        destination: "/nexora",
-      },
-    ];
-  },
   async headers() {
     return [
       {
