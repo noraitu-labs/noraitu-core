@@ -84,6 +84,7 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Blindaje Antirrobo y Seguridad en Producción
+  output: "standalone",
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   typescript: {
@@ -91,6 +92,23 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  // Optimización de Memoria RAM Local en Desarrollo y Servidor
+  onDemandEntries: {
+    // Período máximo de inactividad antes de liberar páginas no visitadas de memoria (ms)
+    maxInactiveAge: 15 * 1000,
+    // Número máximo de páginas mantenidas en el buffer de compilación
+    pagesBufferLength: 2,
+  },
+  webpack: (config, { dev, isServer }) => {
+    if (dev) {
+      // Evita retención excesiva de memoria en cache de Webpack en desarrollo local
+      config.cache = {
+        type: "memory",
+        maxGenerations: 1,
+      };
+    }
+    return config;
   },
   async headers() {
     return [

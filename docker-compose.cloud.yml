@@ -1,0 +1,64 @@
+# ==============================================================================
+# NEXORA ONE ENGINE // NORA ITU - CLOUD PRODUCTION STACK
+# Engine: Nexora One Engine
+# Signature: By Nora
+# Ready for Railway, Coolify, Portainer, or Ubuntu VPS
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  nora-broadcast-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexora/nora-broadcast-app:latest
+    container_name: nora_broadcast_app
+    restart: always
+    ports:
+      - "${PORT:-3005}:3005"
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-https://radio.nexora.one}
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=${REDIS_URL:-redis://nora-redis:6379}
+    depends_on:
+      nora-redis:
+        condition: service_healthy
+    networks:
+      - nora_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3005/api/nexora/radio-chat || exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  nora-redis:
+    image: redis:7-alpine
+    container_name: nora_redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - nora_redis_data:/data
+    networks:
+      - nora_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  nora_network:
+    driver: bridge
+
+volumes:
+  nora_redis_data:
+    driver: local
+
