@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     const {
       sessionId = "nora-session",
       userText = "",
-      userName = "Javier",
+      userName = "",
       imageBase64 = null,
       history = [],
       mode = "general",

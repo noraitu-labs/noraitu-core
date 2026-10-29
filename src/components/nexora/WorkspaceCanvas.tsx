@@ -239,7 +239,7 @@ export function WorkspaceCanvas({
   const [stationConfig, setStationConfig] = useState<BroadcastStationConfig>({
     stationDial: "FM del Este 98.7",
     programName: "Panorama Central",
-    hostNames: "Javier y equipo",
+    hostNames: "Equipo del estudio",
     tableStyle: "Debate Picante",
   });
   const [showStationConfig, setShowStationConfig] = useState<boolean>(false);
@@ -254,7 +254,7 @@ export function WorkspaceCanvas({
       id: "turn-init-1",
       speaker: "NORA_CO_HOST",
       speakerLabel: "Nora (Co-Host • Panorama Central)",
-      text: "¡Hola Javier y equipo! Micrófonos listos en la mesa de Panorama Central por FM del Este 98.7. Activá el Modo Cabina Abierta y nombrame ('Che Nora', 'A ver Nora') cuando quieras que tome el aire, o tocá 'Dar Pase a Nora'.",
+      text: "¡Hola a todo el equipo! Micrófonos listos en la mesa de Panorama Central por FM del Este 98.7. Activá el Modo Cabina Abierta y nombrame ('Che Nora', 'A ver Nora') cuando quieras que tome el aire, o tocá 'Dar Pase a Nora'.",
       timestamp: "EN VIVO",
       modelBadge: "Groq LPU • llama-3.3-70b-versatile",
     },
@@ -1544,8 +1544,8 @@ export function WorkspaceCanvas({
       }
 
       const firstHost =
-        (activeCfg.hostNames || "Javier").split(/\s+y\s+|,/)[0].trim() ||
-        "Javier";
+        (activeCfg.hostNames || "Equipo").split(/\s+y\s+|,/)[0].trim() ||
+        "Equipo";
       const isDegraded = Boolean(data.degraded) || !res.ok || !data.reply;
       const noraReply =
         data.reply ||
@@ -1602,8 +1602,8 @@ export function WorkspaceCanvas({
       }
     } catch {
       const firstHost =
-        (activeCfg.hostNames || "Javier").split(/\s+y\s+|,/)[0].trim() ||
-        "Javier";
+        (activeCfg.hostNames || "Equipo").split(/\s+y\s+|,/)[0].trim() ||
+        "Equipo";
       const fallbackReply = `Perdón ${firstHost}, se nos cortó un segundo la línea con cabina. ¿Me repetís la pregunta?`;
       onAppendLog(
         "LLM_INFERENCE_ERROR",
@@ -1918,7 +1918,7 @@ export function WorkspaceCanvas({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 w-full">
                 <button
                   type="button"
                   onClick={handleToggleOpenMicDuplex}
@@ -2299,7 +2299,7 @@ export function WorkspaceCanvas({
                       hostNames: e.target.value,
                     }))
                   }
-                  placeholder="Ej: Javier y equipo"
+                  placeholder="Ej: Equipo del estudio o conductores"
                   className="w-full rounded-lg bg-slate-950 border border-slate-700 focus:border-cyan-400 px-2.5 py-1.5 text-xs text-white focus:outline-none"
                 />
               </div>

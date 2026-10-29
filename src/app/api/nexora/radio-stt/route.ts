@@ -13,6 +13,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NEXORA_ENGINE_NAME, NEXORA_SIGNATURE } from "@/lib/nexora/types";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
 const OFFICIAL_HEADERS = {
   "X-Engine": NEXORA_ENGINE_NAME,
   "X-Signature": NEXORA_SIGNATURE,
@@ -74,17 +78,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Try local SenseVoice STT microservice if available
+    // Try local SenseVoice STT microservice only if explicitly configured or enabled in local dev
     try {
       const localForm = new FormData();
       localForm.append("file", audioFile, "studio_mic.webm");
       localForm.append("language", "es");
 
       const localRes = await fetch(
-        "http://127.0.0.1:8004/v1/audio/transcriptions",
+        (process.env.SENSEVOICE_URL || (process.env.NODE_ENV === "development" && process.env.ENABLE_LOCAL_STT === "true" ? "http://127.0.0.1:8004/v1/audio/transcriptions" : "http://0.0.0.0")),
         {
           method: "POST",
           body: localForm,
+          signal: AbortSignal.timeout(2000),
         }
       );
       if (localRes.ok) {

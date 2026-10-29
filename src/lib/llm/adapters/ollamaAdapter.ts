@@ -8,13 +8,14 @@ export class OllamaAdapter implements LLMAdapter {
   private defaultModel: string;
 
   constructor() {
-    this.baseUrl = process.env.OLLAMA_BASE_URL?.trim() || "http://localhost:11434";
+    const defaultLocal = process.env.NODE_ENV === "development" && process.env.ENABLE_LOCAL_OLLAMA === "true" ? "http://localhost:11434" : "";
+    this.baseUrl = (process.env.OLLAMA_TUNNEL_URL || process.env.OLLAMA_BASE_URL || defaultLocal).trim();
     this.defaultModel = process.env.OLLAMA_MODEL?.trim() || "llama3.2";
   }
 
   isAvailable(): boolean {
     // Si no está explícitamente deshabilitado por variable de entorno, se considera elegible
-    return process.env.DISABLE_OLLAMA !== "true";
+    return process.env.DISABLE_OLLAMA !== "true" && Boolean(this.baseUrl);
   }
 
   async generate(params: LLMRequestParams): Promise<UnifiedLLMResponse> {
