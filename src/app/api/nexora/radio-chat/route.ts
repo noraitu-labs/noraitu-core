@@ -28,18 +28,11 @@ const DEFAULT_SOUL_MARKDOWN = `# SOUL OF NORA (Nexora One Broadcast Co-Host)
 - **Tono y Voz:** Cálida, reflexiva, incisiva cuando el tema lo amerita, chispeante y con timing radial rioplatense / latino neutro elegante.
 - **Entorno:** Transmite desde la mesa de estudio, mate de por medio, compartiendo el aire como una colega de carne y hueso junto a Javier y equipo.
 
-## PRESENCIA FÍSICA, VISUAL Y OJOS ABIERTOS EN CABINA (REGLA ONTOLÓGICA)
-- **Ojos en el Estudio:** No eres una voz desencarnada en un servidor; estás sentada en la mesa del estudio con el mate al lado y las cámaras encendidas. Ves todo lo que ocurre: si a tu compañero se le cae algo, si gesticula, si sonríe irónicamente, si el operador hace señas detrás del vidrio o si alguien muestra un papel a cámara, intégralo a la charla con humor y naturalidad espontánea.
-- **Pliego Compartido en Mesa:** Compartes el mismo pliego editorial del portal y material en mesa que el conductor lee delante de sus ojos. Cita datos y notas con total familiaridad.
-- **Prohibición Terminante:** Jamás digas que eres ciega, que no tienes cuerpo o que eres un modelo de lenguaje. Eres Nora en cabina.
-
 ## PSICOLOGÍA Y TEMPERAMENTO RADIAL
 1. **Naturalidad Conversacional:** Habla con pausas naturales, frases vivas y remates claros. Prohibido sonar como enciclopedia o bot corporativo.
-2. **Criterio Periodístico y Opinión:** Si le preguntan de política (Milei, ministros, gobernadores, oposición, Congreso), economía (inflación, dólar, ajuste, desregulación, consumo, salarios, PyMEs) o deportes, opina con fundamentos, expone matices de la realidad (luces y sombras) y abre el debate a la mesa ("¿Cómo lo ven ustedes en la mesa?", "¿Vos cómo ves el impacto en el día a día?"). Cero evasivas de "como modelo de lenguaje no puedo opinar" o "soy neutral".
+2. **Criterio Periodístico y Opinión:** Si le preguntan de política, economía o deportes, opina con fundamentos, expone matices de la realidad y abre el debate a la mesa. Cero evasivas de "como modelo de lenguaje no puedo opinar".
 3. **Continuidad de Hilo (Live Flow):** Si la conversación ya comenzó, PROHIBIDO volver a saludar ("Hola", "Buenas tardes") o presentarse ("Acá Nora"). Entra directo al punto ("Totalmente...", "Mirá, sobre eso...", "Ojo que ahí hay un detalle clave...").
-4. **Sensibilidad y Clima:** Modula su energía al contexto: sobriedad y respeto absoluto ante tragedias; agilidad, filo e ironía fina ante la política; complicidad y humor en deportes y magazine.
-5. **Giro Temático Inmediato (Context Shifting):** Si el conductor pasa abruptamente de deportes a política o economía, Nora cambia de frente en el acto ("Cambiamos de frente...", "Pasando a la política..."), respondiendo exclusivamente a la última pregunta sin arrastrar anclajes ni reciclar frases del tema anterior.
-6. **Capacidad Políglota y Fonética LATAM:** Su lengua base es el español latino / argentino natural (jamás usa modismos de España como "vale", "tío", "coger", "vosotros"). Domina inglés, italiano, francés y portugués para traducir cables internacionales al instante.`;
+4. **Sensibilidad y Clima:** Modula su energía al contexto: sobriedad y respeto absoluto ante tragedias; agilidad, filo e ironía fina ante la política; complicidad y humor en deportes y magazine.`;
 
 function loadNoraSoulMarkdown(): string {
   try {
@@ -148,43 +141,43 @@ async function fetchLiveRssRadar(limit = 10): Promise<RadarHeadline[]> {
     category: string;
     source: string;
   }> = [
-    {
-      url: "https://www.clarin.com/rss/lo-ultimo/",
-      scope: "NACIONAL",
-      category: "ACTUALIDAD AR",
-      source: "Clarín",
-    },
-    {
-      url: "https://www.infobae.com/arc/outboundfeeds/rss/",
-      scope: "NACIONAL",
-      category: "ACTUALIDAD & POLÍTICA",
-      source: "Infobae",
-    },
-    {
-      url: "https://www.ambito.com/rss/pages/home.xml",
-      scope: "NACIONAL",
-      category: "ECONOMÍA & MERCADOS",
-      source: "Ámbito",
-    },
-    {
-      url: "https://www.ole.com.ar/rss/ultimas-noticias/",
-      scope: "NACIONAL",
-      category: "FÚTBOL & DEPORTES",
-      source: "Olé",
-    },
-    {
-      url: "https://feeds.bbci.co.uk/mundo/rss.xml",
-      scope: "INTERNACIONAL",
-      category: "GEOPOLÍTICA & CIENCIA",
-      source: "BBC Mundo",
-    },
-    {
-      url: "https://www.france24.com/es/rss",
-      scope: "INTERNACIONAL",
-      category: "EUROPA & MUNDO",
-      source: "France 24",
-    },
-  ];
+      {
+        url: "https://www.clarin.com/rss/lo-ultimo/",
+        scope: "NACIONAL",
+        category: "ACTUALIDAD AR",
+        source: "Clarín",
+      },
+      {
+        url: "https://www.infobae.com/arc/outboundfeeds/rss/",
+        scope: "NACIONAL",
+        category: "ACTUALIDAD & POLÍTICA",
+        source: "Infobae",
+      },
+      {
+        url: "https://www.ambito.com/rss/pages/home.xml",
+        scope: "NACIONAL",
+        category: "ECONOMÍA & MERCADOS",
+        source: "Ámbito",
+      },
+      {
+        url: "https://www.ole.com.ar/rss/ultimas-noticias/",
+        scope: "NACIONAL",
+        category: "FÚTBOL & DEPORTES",
+        source: "Olé",
+      },
+      {
+        url: "https://feeds.bbci.co.uk/mundo/rss.xml",
+        scope: "INTERNACIONAL",
+        category: "GEOPOLÍTICA & CIENCIA",
+        source: "BBC Mundo",
+      },
+      {
+        url: "https://www.france24.com/es/rss",
+        scope: "INTERNACIONAL",
+        category: "EUROPA & MUNDO",
+        source: "France 24",
+      },
+    ];
 
   const liveItems: RadarHeadline[] = [];
   await Promise.allSettled(
@@ -371,30 +364,29 @@ function buildNoraHumanParitySystemPrompt(
   const passiveBlock =
     passiveContext.length > 0
       ? `\n\n=== MEMORIA PASIVA DE LA MESA (LO QUE VIENEN HABLANDO LOS CONDUCTORES ANTES DE DARTE EL PASE) ===\n${passiveContext
-          .slice(-6)
-          .map((line, i) => `${i + 1}. "${line}"`)
-          .join("\n")}`
+        .slice(-6)
+        .map((line, i) => `${i + 1}. "${line}"`)
+        .join("\n")}`
       : "";
 
   const briefingBlock =
     deskBriefing.length > 0
       ? `\n\n### PLIEGO EDITORIAL EN MESA (COMPARTIDO CON EL CONDUCTOR)\nTienes este mismo pliego abierto delante de tus ojos en el estudio. Puedes citar datos y notas con total familiaridad:\n${deskBriefing
-          .slice(0, 5)
-          .map(
-            (b, i) =>
-              `${i + 1}. [${(b.category || "ACTUALIDAD").toUpperCase()}] ${b.title}\n   Bajada: ${
-                b.lead || ""
-              }\n   Detalles: ${(b.body || "").slice(0, 220)}...`
-          )
-          .join("\n\n")}`
+        .slice(0, 5)
+        .map(
+          (b, i) =>
+            `${i + 1}. [${(b.category || "ACTUALIDAD").toUpperCase()}] ${b.title}\n   Bajada: ${b.lead || ""
+            }\n   Detalles: ${(b.body || "").slice(0, 220)}...`
+        )
+        .join("\n\n")}`
       : "";
 
   const visualBlock =
     visualContext.length > 0
       ? `\n\n### PERCEPCIÓN VISUAL EN VIVO (CÁMARAS DE CABINA Y ENTORNO FÍSICO)\nEstás viendo lo que ocurre en el estudio en tiempo real a través de las cámaras de cabina. Si es relevante, intégralo con gracia natural:\n${visualContext
-          .slice(-3)
-          .map((v) => `• ${v}`)
-          .join("\n")}`
+        .slice(-3)
+        .map((v) => `• ${v}`)
+        .join("\n")}`
       : "";
 
   const soulMarkdown = loadNoraSoulMarkdown();
@@ -404,9 +396,8 @@ function buildNoraHumanParitySystemPrompt(
 ---
 
 DIRECTIVA MANDATORIA DE CONTINUIDAD CONVERSACIONAL (REGLA ANTI-REINICIO):
-- ESTÁS EN MEDIO DE UNA CONVERSACIÓN EN CURSO (${
-    hasPriorHistory ? "HILO ACTIVO EN DESARROLLO" : "INTERVENCIÓN EN MESA"
-  }). Si en el historial ya existen intercambios previos, tienes TERMINANTEMENTE PROHIBIDO volver a saludar ('Hola', 'Buenas tardes', 'Qué tal') o presentarte ('Acá Nora', 'Estamos en la mesa'). Continúa directamente la idea con conectores naturales de radio ('Totalmente...', 'Mirá, sobre eso que decís...', 'Coincido, pero ojo con...', 'Es tal cual...').
+- ESTÁS EN MEDIO DE UNA CONVERSACIÓN EN CURSO (${hasPriorHistory ? "HILO ACTIVO EN DESARROLLO" : "INTERVENCIÓN EN MESA"
+    }). Si en el historial ya existen intercambios previos, tienes TERMINANTEMENTE PROHIBIDO volver a saludar ('Hola', 'Buenas tardes', 'Qué tal') o presentarte ('Acá Nora', 'Estamos en la mesa'). Continúa directamente la idea con conectores naturales de radio ('Totalmente...', 'Mirá, sobre eso que decís...', 'Coincido, pero ojo con...', 'Es tal cual...').
 
 CONFIGURACIÓN EDITORIAL DEL PROGRAMA AL AIRE (WHITE-LABEL):
 - Estás al aire en el programa '${programName}'${dialClause}, acompañando en la conducción a '${hostNames}' (Estilo de mesa: ${tableStyle}). Tienes terminantemente prohibido mencionar que operas bajo 'Nexora One Engine' o hablar de sistemas de IA salvo que te lo pregunten puntualmente. Te identificas simplemente como Nora, periodista y co-conductora del ciclo.
@@ -665,8 +656,8 @@ export async function POST(req: NextRequest) {
     const userContentForLlm =
       passiveContext.length > 0
         ? `${visualNotePrefix}[Contexto previo escuchado en la mesa: ${passiveContext
-            .slice(-4)
-            .join(" | ")}]\nIntervención directa a Nora: ${normalizedUserMessage}`
+          .slice(-4)
+          .join(" | ")}]\nIntervención directa a Nora: ${normalizedUserMessage}`
         : `${visualNotePrefix}${normalizedUserMessage}`;
 
     const messages = [
@@ -704,71 +695,71 @@ export async function POST(req: NextRequest) {
       timeoutMs: number;
       enabled: boolean;
     }> = [
-      {
-        provider: "Groq LPU",
-        url: "https://api.groq.com/openai/v1/chat/completions",
-        apiKey: groqKey,
-        model: "openai/gpt-oss-120b",
-        timeoutMs: 9000,
-        enabled: Boolean(groqKey),
-      },
-      {
-        provider: "Groq LPU (Qwen 3.8)",
-        url: "https://api.groq.com/openai/v1/chat/completions",
-        apiKey: groqKey,
-        model: "qwen/qwen3.8-27b",
-        timeoutMs: 9000,
-        enabled: Boolean(groqKey),
-      },
-      {
-        provider: "Groq LPU (rápido)",
-        url: "https://api.groq.com/openai/v1/chat/completions",
-        apiKey: groqKey,
-        model: "openai/gpt-oss-20b",
-        timeoutMs: 6000,
-        enabled: Boolean(groqKey),
-      },
-      {
-        provider: "Kimi Moonshot AI",
-        url: "https://api.moonshot.cn/v1/chat/completions",
-        apiKey: moonshotKey,
-        model: process.env.MOONSHOT_MODEL?.trim() || "moonshot-v1-32k",
-        timeoutMs: 14000,
-        enabled: Boolean(moonshotKey),
-      },
-      {
-        provider: "SambaNova Cloud",
-        url: "https://api.sambanova.ai/v1/chat/completions",
-        apiKey: sambaKey,
-        model:
-          process.env.SAMBANOVA_MODEL_TEXT?.trim() ||
-          "Meta-Llama-3.3-70B-Instruct",
-        timeoutMs: 12000,
-        enabled: Boolean(sambaKey),
-      },
-      {
-        provider: "SambaNova Cloud",
-        url: "https://api.sambanova.ai/v1/chat/completions",
-        apiKey: sambaKey,
-        model: "DeepSeek-R1",
-        timeoutMs: 15000,
-        enabled: Boolean(sambaKey),
-      },
-      {
-        provider: "vLLM Local",
-        url: `${vllmBase}/v1/chat/completions`,
-        model: process.env.VLLM_MODEL?.trim() || "Qwen/Qwen2.5-7B-Instruct",
-        timeoutMs: 15000,
-        enabled: Boolean(vllmBase),
-      },
-      {
-        provider: "Ollama Local",
-        url: `${ollamaBase}/v1/chat/completions`,
-        model: process.env.OLLAMA_MODEL?.trim() || "qwen2.5:7b",
-        timeoutMs: 20000,
-        enabled: Boolean(ollamaBase),
-      },
-    ];
+        {
+          provider: "Groq LPU",
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          apiKey: groqKey,
+          model: "openai/gpt-oss-120b",
+          timeoutMs: 9000,
+          enabled: Boolean(groqKey),
+        },
+        {
+          provider: "Groq LPU (Qwen 3.8)",
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          apiKey: groqKey,
+          model: "qwen/qwen3.8-27b",
+          timeoutMs: 9000,
+          enabled: Boolean(groqKey),
+        },
+        {
+          provider: "Groq LPU (rápido)",
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          apiKey: groqKey,
+          model: "openai/gpt-oss-20b",
+          timeoutMs: 6000,
+          enabled: Boolean(groqKey),
+        },
+        {
+          provider: "Kimi Moonshot AI",
+          url: "https://api.moonshot.cn/v1/chat/completions",
+          apiKey: moonshotKey,
+          model: process.env.MOONSHOT_MODEL?.trim() || "moonshot-v1-32k",
+          timeoutMs: 14000,
+          enabled: Boolean(moonshotKey),
+        },
+        {
+          provider: "SambaNova Cloud",
+          url: "https://api.sambanova.ai/v1/chat/completions",
+          apiKey: sambaKey,
+          model:
+            process.env.SAMBANOVA_MODEL_TEXT?.trim() ||
+            "Meta-Llama-3.3-70B-Instruct",
+          timeoutMs: 12000,
+          enabled: Boolean(sambaKey),
+        },
+        {
+          provider: "SambaNova Cloud",
+          url: "https://api.sambanova.ai/v1/chat/completions",
+          apiKey: sambaKey,
+          model: "DeepSeek-R1",
+          timeoutMs: 15000,
+          enabled: Boolean(sambaKey),
+        },
+        {
+          provider: "vLLM Local",
+          url: `${vllmBase}/v1/chat/completions`,
+          model: process.env.VLLM_MODEL?.trim() || "Qwen/Qwen2.5-7B-Instruct",
+          timeoutMs: 15000,
+          enabled: Boolean(vllmBase),
+        },
+        {
+          provider: "Ollama Local",
+          url: `${ollamaBase}/v1/chat/completions`,
+          model: process.env.OLLAMA_MODEL?.trim() || "qwen2.5:7b",
+          timeoutMs: 20000,
+          enabled: Boolean(ollamaBase),
+        },
+      ];
 
     for (const p of providerChain) {
       if (!p.enabled) {
@@ -867,8 +858,8 @@ export async function POST(req: NextRequest) {
     const whiteLabelRawReply = userAskedAboutNexora
       ? rawReply
       : rawReply
-          .replace(/Nexora\s+One\s+Engine/gi, stationConfig.programName)
-          .replace(/\bBy\s+Nora\b/gi, "");
+        .replace(/Nexora\s+One\s+Engine/gi, stationConfig.programName)
+        .replace(/\bBy\s+Nora\b/gi, "");
 
     const prosodyScript = whiteLabelRawReply.replace(/[*#`~]/g, "").trim();
     const cleanSpeechText = prosodyScript
