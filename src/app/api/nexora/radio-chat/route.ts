@@ -14,6 +14,8 @@ import fs from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { NEXORA_ENGINE_NAME, NEXORA_SIGNATURE } from "@/lib/nexora/types";
+import { recordNeonAuditEvent } from "@/lib/db/neon";
+import { saveRadioTranscript } from "@/lib/db/mongo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -819,6 +821,7 @@ export async function POST(req: NextRequest) {
       user_message?: string;
       text?: string;
       stream?: boolean;
+      session_id?: string;
       history?: Array<{ role: "user" | "assistant"; content: string }>;
       station_config?: Partial<BroadcastStationConfig>;
       passive_context?: string[];
@@ -843,6 +846,8 @@ export async function POST(req: NextRequest) {
         { status: 400, headers: OFFICIAL_HEADERS }
       );
     }
+
+    const sessionId = (body?.session_id || "nexora_live_studio").trim();
 
     const stationConfig: BroadcastStationConfig = {
       stationDial:
@@ -1162,13 +1167,44 @@ export async function POST(req: NextRequest) {
             }
 
             // 3. Done event
+            const latencyMs = Date.now() - t0;
             const donePayload = {
               type: "done",
               full_reply: fullStreamedText,
               model_used: usedModelName,
-              latency_ms: Date.now() - t0,
+              latency_ms: latencyMs,
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(donePayload)}\n\n`));
+
+            // 4. Asynchronous persistence (Neon DB & Mongo Atlas) - non-blocking
+            if (fullStreamedText) {
+              Promise.allSettled([
+                saveRadioTranscript({
+                  sessionId,
+                  userMessage,
+                  assistantReply: fullStreamedText,
+                  modelUsed: usedModelName,
+                  latencyMs,
+                  hasImage: Boolean(formattedImageUrl),
+                  metadata: {
+                    stream: true,
+                    station: stationConfig.programName,
+                    emotion: climate.emotion_state,
+                  },
+                }),
+                recordNeonAuditEvent({
+                  sessionId,
+                  eventType: "RADIO_CHAT_STREAM_COMPLETED",
+                  metadata: {
+                    user_chars: userMessage.length,
+                    reply_chars: fullStreamedText.length,
+                    model_used: usedModelName,
+                    latency_ms: latencyMs,
+                    has_image: Boolean(formattedImageUrl),
+                  },
+                }),
+              ]).catch(() => {});
+            }
           } catch (streamErr) {
             console.error("[radio-chat] Streaming controller error:", streamErr);
           } finally {
@@ -1323,6 +1359,37 @@ export async function POST(req: NextRequest) {
       .trim();
 
     const spokenLanguage = detectSpokenLanguageCode(userMessage, cleanSpeechText);
+    const totalLatencyMs = Date.now() - t0;
+
+    // Asynchronous non-blocking persistence (Neon & Mongo)
+    if (cleanSpeechText) {
+      Promise.allSettled([
+        saveRadioTranscript({
+          sessionId,
+          userMessage,
+          assistantReply: cleanSpeechText,
+          modelUsed,
+          latencyMs: totalLatencyMs,
+          hasImage: Boolean(formattedImageUrl),
+          metadata: {
+            stream: false,
+            station: stationConfig.programName,
+            emotion: climate.emotion_state,
+          },
+        }),
+        recordNeonAuditEvent({
+          sessionId,
+          eventType: "RADIO_CHAT_INTERVENTION",
+          metadata: {
+            user_chars: userMessage.length,
+            reply_chars: cleanSpeechText.length,
+            model_used: modelUsed,
+            latency_ms: totalLatencyMs,
+            has_image: Boolean(formattedImageUrl),
+          },
+        }),
+      ]).catch(() => {});
+    }
 
     return NextResponse.json(
       {
@@ -1339,7 +1406,7 @@ export async function POST(req: NextRequest) {
         model_used: modelUsed,
         provider_attempts: providerAttempts,
         triggered_tools: triggeredTools,
-        latency_ms: Date.now() - t0,
+        latency_ms: totalLatencyMs,
         hot_topics_count: radarItems.length,
         hot_topics_preview: radarItems.slice(0, 4),
         timestamp: new Date().toISOString(),

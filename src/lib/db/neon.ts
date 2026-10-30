@@ -1,0 +1,160 @@
+import { neon, Pool, NeonQueryFunction } from "@neondatabase/serverless";
+
+// ══════════════════════════════════════════════════════════════
+//  NEXORA ONE — Neon PostgreSQL Database Client (Serverless)
+//  Pooling & Direct SQL execution with auto-migration
+// ══════════════════════════════════════════════════════════════
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __neonPool: Pool | undefined;
+}
+
+let cachedSql: NeonQueryFunction<false, false> | null = null;
+let lastDatabaseUrl = "";
+
+/**
+ * Returns a tagged template SQL client for serverless queries.
+ */
+export function getNeonSql() {
+  const databaseUrl = (process.env.DATABASE_URL || "").trim();
+  if (!databaseUrl) {
+    return null;
+  }
+  if (cachedSql && databaseUrl === lastDatabaseUrl) {
+    return cachedSql;
+  }
+  cachedSql = neon(databaseUrl);
+  lastDatabaseUrl = databaseUrl;
+  return cachedSql;
+}
+
+/**
+ * Returns a connection Pool instance for transactional workloads.
+ */
+export function getNeonPool(): Pool | null {
+  const databaseUrl = (process.env.DATABASE_URL || "").trim();
+  if (!databaseUrl) {
+    return null;
+  }
+  if (!global.__neonPool) {
+    global.__neonPool = new Pool({ connectionString: databaseUrl, max: 10 });
+  }
+  return global.__neonPool;
+}
+
+/**
+ * Generic query executor for Neon PostgreSQL.
+ */
+export async function query<T = any>(
+  queryText: string,
+  params: any[] = []
+): Promise<T[]> {
+  const sql = getNeonSql();
+  if (!sql) {
+    return [];
+  }
+  try {
+    const result = await (sql as any)(queryText, params);
+    return result as T[];
+  } catch (error) {
+    console.error("[Neon DB Query Error]:", error);
+    return [];
+  }
+}
+
+let tablesChecked = false;
+let migrationPromise: Promise<void> | null = null;
+
+/**
+ * Ensures required Nexora control room & telemetry tables exist.
+ * - nexora_sessions: Tracks live on-air broadcasting sessions.
+ * - nexora_audit_logs: Tracks individual intervention events and telemetry.
+ */
+export async function ensureNeonTablesExist(): Promise<void> {
+  if (tablesChecked) return;
+  if (migrationPromise) return migrationPromise;
+
+  const sql = getNeonSql();
+  if (!sql) return;
+
+  migrationPromise = (async () => {
+    try {
+      // 1. Sessions table
+      await sql`
+        CREATE TABLE IF NOT EXISTS nexora_sessions (
+          id VARCHAR(64) PRIMARY KEY,
+          started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          ended_at TIMESTAMP WITH TIME ZONE,
+          status VARCHAR(32) DEFAULT 'ACTIVE',
+          total_interventions INTEGER DEFAULT 0,
+          metadata JSONB DEFAULT '{}'::jsonb
+        );
+      `;
+
+      // 2. Audit logs table
+      await sql`
+        CREATE TABLE IF NOT EXISTS nexora_audit_logs (
+          id SERIAL PRIMARY KEY,
+          session_id VARCHAR(64) NOT NULL,
+          event_type VARCHAR(64) NOT NULL,
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 3. Performance indices
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_nexora_audit_session ON nexora_audit_logs(session_id);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_nexora_sessions_status ON nexora_sessions(status);
+      `;
+
+      tablesChecked = true;
+    } catch (err) {
+      console.warn("[Neon DB Schema Init Warning]:", err);
+    } finally {
+      migrationPromise = null;
+    }
+  })();
+
+  return migrationPromise;
+}
+
+/**
+ * Logs an intervention or system event into Neon DB.
+ */
+export async function recordNeonAuditEvent(params: {
+  sessionId: string;
+  eventType: string;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  try {
+    const sql = getNeonSql();
+    if (!sql) return;
+
+    await ensureNeonTablesExist();
+
+    // Upsert session
+    await sql`
+      INSERT INTO nexora_sessions (id, started_at, status, total_interventions)
+      VALUES (${params.sessionId}, NOW(), 'ACTIVE', 1)
+      ON CONFLICT (id) DO UPDATE SET
+        total_interventions = nexora_sessions.total_interventions + 1;
+    `;
+
+    // Insert audit log
+    await sql`
+      INSERT INTO nexora_audit_logs (session_id, event_type, metadata)
+      VALUES (
+        ${params.sessionId},
+        ${params.eventType},
+        ${JSON.stringify(params.metadata || {})}::jsonb
+      );
+    `;
+  } catch (err) {
+    console.warn("[Neon recordAuditEvent Warning]:", err);
+  }
+}
+

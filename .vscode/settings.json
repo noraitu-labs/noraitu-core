@@ -1,0 +1,21 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.next/**": true,
+    "**/.rclone_vfs_cache/**": true,
+    "**/mnt_nexora_storage/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.venv/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.rclone_vfs_cache": true,
+    "**/mnt_nexora_storage": true
+  },
+  "typescript.tsserver.maxTsServerMemory": 2048
+}
+
