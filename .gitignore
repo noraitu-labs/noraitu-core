@@ -34,3 +34,6 @@ public/swe-worker-*.js
 
 .vercel
 .env*
+
+google-service-account.json
+*.json.key
