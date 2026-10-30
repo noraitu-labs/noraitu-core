@@ -1,55 +1,93 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { custodyCheck } from "@/lib/security/network_police";
 
 // ══════════════════════════════════════════════════════════════
-//  NEXORA ONE — RBAC MASTER SECRET KEY MIDDLEWARE GUARD
-//  Protects all `/api/nexora/:path*` endpoints from unauthorized access
+//  NEXORA ONE — CENTINELA ZERO-TRUST (NEURONAS DE POLICÍA)
+//  Custodia estricta de /api/media/*, /api/agents/*, /api/storage/* y /api/nexora/*
+//  DLP (50MB), Rate-limiting y Bloqueo de IPs no autorizadas
 // ══════════════════════════════════════════════════════════════
 
-export function middleware(request: NextRequest) {
-  const masterKey = (process.env.NEXORA_MASTER_SECRET_KEY || "").trim();
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
 
-  // If no master key is configured, allow requests in degraded mode
-  if (!masterKey) {
-    return NextResponse.next();
-  }
+  // 1. Custodia Zero-Trust en endpoints sensibles
+  const isSensitiveEndpoint =
+    pathname.startsWith("/api/media") ||
+    pathname.startsWith("/api/agents") ||
+    pathname.startsWith("/api/storage") ||
+    pathname.startsWith("/api/nexora");
 
-  // 1. Check custom header x-nexora-key
-  const headerKey = request.headers.get("x-nexora-key")?.trim();
+  if (isSensitiveEndpoint) {
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+    const check = await custodyCheck({
+      headers: request.headers,
+      pathname,
+      method: request.method,
+      contentLength,
+    });
 
-  // 2. Check Authorization Bearer header
-  let bearerKey: string | null = null;
-  const authHeader = request.headers.get("authorization")?.trim();
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    bearerKey = authHeader.slice(7).trim();
-  }
-
-  // 3. Check query param fallback (?key=... or ?token=...)
-  const queryKey = request.nextUrl.searchParams.get("key")?.trim() ||
-                   request.nextUrl.searchParams.get("token")?.trim();
-
-  const providedKey = headerKey || bearerKey || queryKey;
-
-  // 4. Validate key match
-  if (!providedKey || providedKey !== masterKey) {
-    return NextResponse.json(
-      {
-        error: "Acceso denegado: Clave de autenticación inválida o ausente.",
-      },
-      {
-        status: 401,
-        headers: {
-          "Content-Type": "application/json",
-          "WWW-Authenticate": 'Bearer realm="Nexora One API"',
+    if (!check.allowed) {
+      return NextResponse.json(
+        {
+          error: check.reason || "Acceso bloqueado por Centinela Zero-Trust (Neuronas de Policía).",
+          threatType: check.threatType,
+          status: check.status,
         },
+        {
+          status: check.status,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Police-Defense": "ACTIVE_ZERO_TRUST",
+          },
+        }
+      );
+    }
+  }
+
+  // 2. Validación de Clave Maestra en /api/nexora/*
+  if (pathname.startsWith("/api/nexora")) {
+    const masterKey = (process.env.NEXORA_MASTER_SECRET_KEY || "").trim();
+
+    if (masterKey) {
+      const headerKey = request.headers.get("x-nexora-key")?.trim();
+      let bearerKey: string | null = null;
+      const authHeader = request.headers.get("authorization")?.trim();
+      if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+        bearerKey = authHeader.slice(7).trim();
       }
-    );
+      const queryKey =
+        request.nextUrl.searchParams.get("key")?.trim() ||
+        request.nextUrl.searchParams.get("token")?.trim();
+
+      const providedKey = headerKey || bearerKey || queryKey;
+
+      if (!providedKey || providedKey !== masterKey) {
+        return NextResponse.json(
+          {
+            error: "Acceso denegado: Clave de autenticación maestra inválida o ausente.",
+          },
+          {
+            status: 401,
+            headers: {
+              "Content-Type": "application/json",
+              "WWW-Authenticate": 'Bearer realm="Nexora One API"',
+            },
+          }
+        );
+      }
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/api/nexora/:path*"],
+  matcher: [
+    "/api/nexora/:path*",
+    "/api/media/:path*",
+    "/api/agents/:path*",
+    "/api/storage/:path*",
+  ],
 };
 

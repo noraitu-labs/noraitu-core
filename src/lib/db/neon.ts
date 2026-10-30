@@ -155,7 +155,31 @@ export async function ensureNeonTablesExist(): Promise<void> {
         );
       `;
 
-      // 6. Performance indices
+      // 6. Trusted network identities (Neuronas de Policía Zero-Trust)
+      await sql`
+        CREATE TABLE IF NOT EXISTS trusted_network_identities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          device_label VARCHAR(100) NOT NULL,
+          ip_address VARCHAR(45) NOT NULL,
+          device_fingerprint VARCHAR(255),
+          imei_or_serial VARCHAR(100),
+          status VARCHAR(20) DEFAULT 'ACTIVE',
+          last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 7. Security incident logs (Auditoría Forense de Amenazas)
+      await sql`
+        CREATE TABLE IF NOT EXISTS security_incident_logs (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          threat_type VARCHAR(50) NOT NULL,
+          ip_origin VARCHAR(45) NOT NULL,
+          payload_blocked JSONB DEFAULT '{}'::jsonb,
+          timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 8. Performance indices
       await sql`
         CREATE INDEX IF NOT EXISTS idx_nexora_audit_session ON nexora_audit_logs(session_id);
       `;
@@ -170,6 +194,18 @@ export async function ensureNeonTablesExist(): Promise<void> {
       `;
       await sql`
         CREATE INDEX IF NOT EXISTS idx_commercial_spots_created_at ON commercial_spots(created_at);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_trusted_network_ip ON trusted_network_identities(ip_address);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_trusted_network_status ON trusted_network_identities(status);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_security_incidents_ip ON security_incident_logs(ip_origin);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_security_incidents_threat ON security_incident_logs(threat_type);
       `;
 
       tablesChecked = true;

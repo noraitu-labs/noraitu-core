@@ -27,6 +27,7 @@ export const viewport: Viewport = {
 };
 
 import { NoraSecurityProvider } from "@/components/NoraSecurityProvider";
+import { NoraCopilot } from "@/components/copilot/NoraCopilot";
 
 export default function RootLayout({
   children,
@@ -74,6 +75,7 @@ export default function RootLayout({
       <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100%", overflow: "hidden", overscrollBehavior: "none", overscrollBehaviorY: "none", touchAction: "none" }}>
         <NoraSecurityProvider>
           {children}
+          <NoraCopilot />
         </NoraSecurityProvider>
       </body>
     </html>
