@@ -80,6 +80,13 @@ export async function ensureNeonTablesExist(): Promise<void> {
 
   migrationPromise = (async () => {
     try {
+      // 0. Enable pgvector extension if available
+      try {
+        await sql`CREATE EXTENSION IF NOT EXISTS vector;`;
+      } catch (extErr) {
+        console.warn("[Neon pgvector warning]:", extErr);
+      }
+
       // 1. Sessions table
       await sql`
         CREATE TABLE IF NOT EXISTS nexora_sessions (
@@ -103,12 +110,44 @@ export async function ensureNeonTablesExist(): Promise<void> {
         );
       `;
 
-      // 3. Performance indices
+      // 3. User identities table for voice biometrics & PNL
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_identities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(100) NOT NULL,
+          voice_fingerprint vector(512),
+          preferred_sensory_channel VARCHAR(20) DEFAULT 'KINESTHETIC',
+          psychological_notes JSONB DEFAULT '{}'::jsonb,
+          first_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          last_interaction_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 4. Coaching sessions table for relational memory & Data Lake links
+      await sql`
+        CREATE TABLE IF NOT EXISTS coaching_sessions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES user_identities(id) ON DELETE CASCADE,
+          raw_audio_drive_id VARCHAR(255),
+          emotional_state_detected VARCHAR(50) DEFAULT 'CALM',
+          session_summary TEXT NOT NULL,
+          pending_commitments JSONB DEFAULT '[]'::jsonb,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 5. Performance indices
       await sql`
         CREATE INDEX IF NOT EXISTS idx_nexora_audit_session ON nexora_audit_logs(session_id);
       `;
       await sql`
         CREATE INDEX IF NOT EXISTS idx_nexora_sessions_status ON nexora_sessions(status);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_coaching_sessions_user_id ON coaching_sessions(user_id);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_coaching_sessions_created_at ON coaching_sessions(created_at);
       `;
 
       tablesChecked = true;

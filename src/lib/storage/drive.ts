@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { Readable } from "stream";
 import path from "path";
+import { recordNeonAuditEvent } from "../db/neon";
 
 // ══════════════════════════════════════════════════════════════
 //  NEXORA ONE — Enterprise Data Lake (Google Drive 5TB)
@@ -122,6 +123,7 @@ export interface UploadAssetResult {
   webViewLink?: string;
   webContentLink?: string;
   error?: string;
+  quotaExceeded?: boolean;
 }
 
 /**
@@ -187,12 +189,95 @@ export async function uploadEnterpriseAsset(
       webContentLink: res.data.webContentLink || undefined,
     };
   } catch (err: any) {
+    const isQuotaExceeded =
+      (err?.code === 403 &&
+        (err?.errors?.some(
+          (e: any) =>
+            e.reason === "storageQuotaExceeded" ||
+            e.reason === "userRateLimitExceeded"
+        ) ||
+          /quota|storageQuotaExceeded/i.test(err?.message || ""))) ||
+      err?.code === 507 ||
+      err?.status === 507 ||
+      /insufficient storage|storage quota/i.test(err?.message || "");
+
+    if (isQuotaExceeded) {
+      console.warn(
+        "[Drive DataLake Warning]: Quota exceeded. Emitting SYSTEM_ALERT to Neon DB."
+      );
+      try {
+        await recordNeonAuditEvent({
+          sessionId: "system",
+          eventType: "SYSTEM_ALERT: DRIVE_STORAGE_FULL",
+          metadata: {
+            fileName,
+            sizeBytes: buffer.length,
+            error: err?.message || "Storage quota exceeded",
+            timestamp: new Date().toISOString(),
+          },
+        });
+      } catch (neonErr) {
+        console.error("[Neon Audit Log Error]:", neonErr);
+      }
+
+      return {
+        ok: false,
+        fileName,
+        sizeBytes: buffer.length,
+        error: "DRIVE_STORAGE_FULL: Cuota de almacenamiento de Google Drive excedida.",
+        quotaExceeded: true,
+      };
+    }
+
     console.error("[Drive DataLake Upload Error]:", err?.message || err);
     return {
       ok: false,
       fileName,
       sizeBytes: buffer.length,
       error: err?.message || "Error al subir el archivo a Google Drive.",
+      quotaExceeded: false,
+    };
+  }
+}
+
+/**
+ * Deletes an enterprise asset by fileId from Google Drive.
+ * Treats already deleted/non-existent files (404) as successfully handled.
+ */
+export async function deleteEnterpriseAsset(
+  fileId: string
+): Promise<{ ok: boolean; error?: string; bytesFreed?: number }> {
+  try {
+    const drive = getDriveClient();
+
+    let bytesFreed = 0;
+    try {
+      const meta = await drive.files.get({
+        fileId,
+        fields: "size",
+        supportsAllDrives: true,
+      });
+      if (meta.data.size) {
+        bytesFreed = parseInt(meta.data.size, 10) || 0;
+      }
+    } catch {
+      // Metadata lookup is best-effort
+    }
+
+    await drive.files.delete({
+      fileId,
+      supportsAllDrives: true,
+    });
+
+    return { ok: true, bytesFreed };
+  } catch (err: any) {
+    if (err?.code === 404 || err?.status === 404) {
+      return { ok: true, bytesFreed: 0 };
+    }
+    console.error("[Drive DataLake Delete Error]:", err?.message || err);
+    return {
+      ok: false,
+      error: err?.message || "Error al eliminar el archivo de Google Drive.",
     };
   }
 }

@@ -1,14 +1,17 @@
 import Groq from "groq-sdk";
 import { analyzePsycholinguistics, PNLProfile } from "./pnl_analyzer";
 import { NORA_COACHING_PNL_PROMPT_MODULE, buildPnlSystemContext } from "./prompts/nora_personality";
+import { SpeakerIdentificationResult } from "../biometrics/voice_recognition";
 
 // ══════════════════════════════════════════════════════════════
 //  NEXORA ONE — CEREBRO PNL & COACHING DE NORA (LLAMA 3.3 70B)
 //  Inferencia ultra-rápida en Groq LPU con cadencia oral humana
+//  Integración Biometría Vocal + Memoria Relacional
 // ══════════════════════════════════════════════════════════════
 
 export interface NoraDialogueResponse {
   pnlProfile: PNLProfile;
+  speakerInfo?: SpeakerIdentificationResult;
   replyText: string;
   cadenceScript: string;
   suggestedVoiceParams: {
@@ -46,7 +49,8 @@ ${NORA_COACHING_PNL_PROMPT_MODULE}
  */
 export async function generateNoraDialogue(
   userMessage: string,
-  history: Array<{ role: "user" | "assistant"; content: string }> = []
+  history: Array<{ role: "user" | "assistant"; content: string }> = [],
+  speakerInfo?: SpeakerIdentificationResult
 ): Promise<NoraDialogueResponse> {
   const t0 = Date.now();
 
@@ -71,9 +75,21 @@ export async function generateNoraDialogue(
     pitch = 1.03;
   }
 
-  // 3. Inyección contextual en el System Prompt
+  // 3. Inyección contextual en el System Prompt (PNL + Biometría Vocal)
   const pnlContext = buildPnlSystemContext(pnlProfile);
-  const fullSystemPrompt = `${NORA_CORE_SYSTEM_PROMPT}\n\n${pnlContext}`;
+  let speakerContext = "";
+
+  if (speakerInfo && !speakerInfo.isNewUser && speakerInfo.name) {
+    speakerContext = `
+[RECONOCIMIENTO BIOMÉTRICO VOCAL Y MEMORIA RELACIONAL]
+Estás hablando con ${speakerInfo.name}.
+Canal predominante registrado: ${speakerInfo.preferredSensoryChannel || "KINESTHETIC"}.
+${speakerInfo.lastSessionSummary ? `La última vez conversaron sobre: "${speakerInfo.lastSessionSummary}".` : ""}
+Saludalo con calidez reconociendo su presencia y sintonizá con el hilo previo de forma orgánica.
+`;
+  }
+
+  const fullSystemPrompt = `${NORA_CORE_SYSTEM_PROMPT}\n\n${pnlContext}\n${speakerContext}`;
 
   // 4. Inferencia con Groq LPU (GPT-OSS-120B / Qwen 27B / GPT-OSS-20B con fallback)
   const groq = getGroqClient();
@@ -127,6 +143,7 @@ export async function generateNoraDialogue(
 
   return {
     pnlProfile,
+    speakerInfo,
     replyText: rawReply,
     cadenceScript,
     suggestedVoiceParams: { rate, pitch },
