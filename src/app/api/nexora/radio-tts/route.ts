@@ -314,7 +314,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return new Response(result.audioBytes, {
+    return new Response(Buffer.from(result.audioBytes), {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
@@ -352,7 +352,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return new Response(result.audioBytes, {
+    return new Response(Buffer.from(result.audioBytes), {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",

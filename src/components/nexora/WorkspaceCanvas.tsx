@@ -716,6 +716,7 @@ export function WorkspaceCanvas({
   };
 
   const pumpSentenceAudioQueue = () => {
+    if (typeof window === "undefined") return;
     if (isSentenceQueuePlayingRef.current) return;
     const next = sentenceQueueRef.current.find((i) => i.status === "ready");
     if (!next) {
@@ -771,6 +772,7 @@ export function WorkspaceCanvas({
   };
 
   const queueSentenceForCloudPlayback = (sentenceText: string) => {
+    if (typeof window === "undefined") return;
     const clean = cleanPhoneticsForLatamTTS(sentenceText);
     if (!clean || clean.length < 2) return;
 
@@ -1525,6 +1527,252 @@ export function WorkspaceCanvas({
    * Manual button `[Dar Pase a Nora]`: immediately dispatches the exact phrase
    * currently in the input box or the latest phrase in passive studio memory.
    */
+  const handleGiveFloorToNora = () => {
+    const typed = (consoleInputRef.current || consoleInput).trim();
+    if (typed) {
+      consoleInputRef.current = "";
+      setConsoleInput("");
+      void handleSendRadioDialogue(typed);
+      return;
+    }
+    const recentPassive = passiveTableContextRef.current;
+    if (recentPassive.length > 0) {
+      const lastCapturedPhrase = recentPassive[recentPassive.length - 1];
+      void handleSendRadioDialogue(lastCapturedPhrase);
+      return;
+    }
+    const cuePrompt = `Nora, te damos el pase en el aire de ${stationConfigRef.current.programName} con ${stationConfigRef.current.hostNames}: ¿qué análisis sumás a la mesa en este momento?`;
+    void handleSendRadioDialogue(cuePrompt);
+  };
+
+  /**
+   * Sends the human host's message to `/api/nexora/radio-chat` with real-time SSE streaming,
+   * sentence-by-sentence TTS audio pipelining, and continuous conversation tracking.
+   */
+  const handleSendRadioDialogue = async (overrideText?: string) => {
+    const messageText = (
+      overrideText ??
+      consoleInputRef.current ??
+      consoleInput
+    ).trim();
+    if (!messageText || isSendingToNoraRef.current) return;
+
+    // Immediately clear input and record interaction timestamp
+    consoleInputRef.current = "";
+    setConsoleInput("");
+    isSendingToNoraRef.current = true;
+    setIsSendingToNora(true);
+    lastInteractionEpochMsRef.current = Date.now();
+
+    const activeCfg = stationConfigRef.current;
+    const nowStr = new Date().toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    // Capture the last 10 live turns from dialogueHistoryRef
+    const priorHistoryPayload = dialogueHistoryRef.current
+      .filter((m) => m.id !== "turn-init-1" && !m.degraded)
+      .slice(-10)
+      .map((m) => ({
+        role: (m.speaker === "LOCUTOR_HUMANO" ? "user" : "assistant") as "user" | "assistant",
+        content: m.text,
+      }));
+
+    const capturedPassiveContext = [...passiveTableContextRef.current];
+
+    const userTurn: OnAirDialogueMessage = {
+      id: `turn-u-${Date.now()}`,
+      speaker: "LOCUTOR_HUMANO",
+      speakerLabel: `${activeCfg.hostNames || "Locutor Humano"} (Cabina)`,
+      text: messageText,
+      timestamp: nowStr,
+    };
+
+    const noraTurnId = `turn-n-${Date.now()}`;
+    const noraTurn: OnAirDialogueMessage = {
+      id: noraTurnId,
+      speaker: "NORA_CO_HOST",
+      speakerLabel: `Nora (${activeCfg.programName})`,
+      text: "",
+      timestamp: nowStr,
+      modelBadge: "Transmitiendo...",
+    };
+
+    const updatedWithUserAndNora = [...dialogueHistoryRef.current, userTurn, noraTurn];
+    dialogueHistoryRef.current = updatedWithUserAndNora;
+    setDialogueHistory(updatedWithUserAndNora);
+
+    onAppendLog(
+      "RADIO_CO_HOST_IN",
+      `${activeCfg.hostNames} -> Nora [${activeCfg.programName} | Turno #${
+        Math.floor(priorHistoryPayload.length / 2) + 1
+      }]: "${messageText.slice(0, 80)}"`,
+      "INFO"
+    );
+
+    // Reset sentence audio queue for low-latency streaming playback
+    sentenceQueueRef.current = [];
+    isSentenceQueuePlayingRef.current = false;
+    isStreamDoneRef.current = false;
+
+    try {
+      const res = await fetch("/api/nexora/radio-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+          "X-Nexora-Tenant": "NEXORA_ONE_ENGINE",
+        },
+        body: JSON.stringify({
+          message: messageText,
+          station_config: activeCfg,
+          passive_context: capturedPassiveContext,
+          history: priorHistoryPayload,
+          desk_briefing: deskBriefingItems,
+          visual_context: visualStudioContextRef.current,
+          stream: true,
+        }),
+      });
+
+      const isStream = (res.headers.get("content-type") || "").includes("text/event-stream");
+
+      if (isStream && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedReply = "";
+        let unspokenSentenceBuffer = "";
+        let sseBuffer = "";
+        let usedModelBadge = "Groq LPU (Stream)";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            try {
+              const payload = JSON.parse(trimmed.slice(6));
+              if (payload.type === "meta") {
+                if (payload.model_used) usedModelBadge = payload.model_used;
+              } else if (payload.type === "delta" && typeof payload.text === "string") {
+                accumulatedReply += payload.text;
+                unspokenSentenceBuffer += payload.text;
+
+                // Update text live in the chat bubble
+                setDialogueHistory((prev) =>
+                  prev.map((turn) =>
+                    turn.id === noraTurnId ? { ...turn, text: accumulatedReply } : turn
+                  )
+                );
+
+                // Sentence boundary detection: trigger instant TTS at the first punctuation mark
+                const match = unspokenSentenceBuffer.match(/^(.*?[.?!;\n])(?:\s+|$)([\s\S]*)$/);
+                if (match) {
+                  const sentence = match[1].trim();
+                  unspokenSentenceBuffer = match[2] || "";
+                  if (sentence && ttsEnabled) {
+                    queueSentenceForCloudPlayback(sentence);
+                  }
+                }
+              } else if (payload.type === "done") {
+                if (payload.model_used) usedModelBadge = payload.model_used;
+                if (payload.full_reply) accumulatedReply = payload.full_reply;
+              }
+            } catch {
+              // Ignore partial JSON
+            }
+          }
+        }
+
+        isStreamDoneRef.current = true;
+
+        // Queue any remaining tail text
+        if (unspokenSentenceBuffer.trim() && ttsEnabled) {
+          queueSentenceForCloudPlayback(unspokenSentenceBuffer.trim());
+          unspokenSentenceBuffer = "";
+        }
+
+        // Finalize Nora dialogue message
+        setDialogueHistory((prev) =>
+          prev.map((turn) =>
+            turn.id === noraTurnId
+              ? {
+                  ...turn,
+                  text: accumulatedReply || "Sin retorno en cabina.",
+                  modelBadge: `STREAM • ${usedModelBadge}`,
+                }
+              : turn
+          )
+        );
+
+        passiveTableContextRef.current = [];
+        setPassiveTableContext([]);
+
+        onAppendLog(
+          "NORA_CO_HOST_ON_AIR",
+          `Nora al aire (Stream) [${activeCfg.programName}]: "${accumulatedReply.slice(0, 90)}..."`,
+          "SUCCESS"
+        );
+      } else {
+        // Fallback for non-streaming response
+        const data = await res.json();
+        const noraReply = data.reply || "Sin retorno de cabina.";
+        setDialogueHistory((prev) =>
+          prev.map((turn) =>
+            turn.id === noraTurnId
+              ? {
+                  ...turn,
+                  text: noraReply,
+                  modelBadge: `${data.emotion_state || "WARM_EMPATHIC"} • ${data.model_used || "LLM"}`,
+                }
+              : turn
+          )
+        );
+
+        passiveTableContextRef.current = [];
+        setPassiveTableContext([]);
+
+        if (ttsEnabled) {
+          speakNoraAloud(noraReply, data.spoken_language, data.speech_rate, data.pitch_shift);
+        }
+      }
+    } catch {
+      const firstHost =
+        (activeCfg.hostNames || "Equipo").split(/\s+y\s+|,/)[0].trim() ||
+        "Equipo";
+      const fallbackReply = `Perdón ${firstHost}, se nos cortó un segundo la línea con cabina. ¿Me repetís la pregunta?`;
+      onAppendLog(
+        "LLM_INFERENCE_ERROR",
+        "Error de red al contactar /api/nexora/radio-chat.",
+        "WARN"
+      );
+      setDialogueHistory((prev) =>
+        prev.map((turn) =>
+          turn.id === noraTurnId
+            ? {
+                ...turn,
+                text: fallbackReply,
+                modelBadge: "⚠️ SIN CONEXIÓN CON EL SERVIDOR",
+                degraded: true,
+              }
+            : turn
+        )
+      );
+      if (ttsEnabled) {
+        speakNoraAloud(fallbackReply);
+      }
+    } finally {
+      isSendingToNoraRef.current = false;
+      setIsSendingToNora(false);
+    }
+  };
+
   /**
    * Initializes or returns the Sound Cart Web Audio context and calibrated gain hierarchy.
    */
