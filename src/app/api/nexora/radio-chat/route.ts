@@ -1363,32 +1363,36 @@ export async function POST(req: NextRequest) {
 
     // Asynchronous non-blocking persistence (Neon & Mongo)
     if (cleanSpeechText) {
-      Promise.allSettled([
-        saveRadioTranscript({
-          sessionId,
-          userMessage,
-          assistantReply: cleanSpeechText,
-          modelUsed,
-          latencyMs: totalLatencyMs,
-          hasImage: Boolean(formattedImageUrl),
-          metadata: {
-            stream: false,
-            station: stationConfig.programName,
-            emotion: climate.emotion_state,
-          },
-        }),
-        recordNeonAuditEvent({
-          sessionId,
-          eventType: "RADIO_CHAT_INTERVENTION",
-          metadata: {
-            user_chars: userMessage.length,
-            reply_chars: cleanSpeechText.length,
-            model_used: modelUsed,
-            latency_ms: totalLatencyMs,
-            has_image: Boolean(formattedImageUrl),
-          },
-        }),
-      ]).catch(() => {});
+      try {
+        await Promise.allSettled([
+          saveRadioTranscript({
+            sessionId,
+            userMessage,
+            assistantReply: cleanSpeechText,
+            modelUsed,
+            latencyMs: totalLatencyMs,
+            hasImage: Boolean(formattedImageUrl),
+            metadata: {
+              stream: false,
+              station: stationConfig.programName,
+              emotion: climate.emotion_state,
+            },
+          }),
+          recordNeonAuditEvent({
+            sessionId,
+            eventType: "RADIO_CHAT_INTERVENTION",
+            metadata: {
+              user_chars: userMessage.length,
+              reply_chars: cleanSpeechText.length,
+              model_used: modelUsed,
+              latency_ms: totalLatencyMs,
+              has_image: Boolean(formattedImageUrl),
+            },
+          }),
+        ]);
+      } catch (dbErr) {
+        console.warn("[radio-chat] DB background save error:", dbErr);
+      }
     }
 
     return NextResponse.json(

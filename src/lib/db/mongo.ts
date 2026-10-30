@@ -10,7 +10,7 @@ declare global {
   var __mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-const DB_NAME = process.env.MONGODB_DB_NAME?.trim() || "nexora_one_db";
+const DB_NAME = process.env.MONGODB_DB_NAME?.trim() || "nexora_conversations";
 
 // Circuit Breaker for Atlas connectivity
 let circuitOpenUntil = 0;
