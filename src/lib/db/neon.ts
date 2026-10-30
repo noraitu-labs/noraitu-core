@@ -136,7 +136,26 @@ export async function ensureNeonTablesExist(): Promise<void> {
         );
       `;
 
-      // 5. Performance indices
+      // 5. Commercial spots table for multimedia pipeline productions
+      await sql`
+        CREATE TABLE IF NOT EXISTS commercial_spots (
+          id VARCHAR(64) PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          script TEXT NOT NULL,
+          visual_prompts JSONB DEFAULT '[]'::jsonb,
+          music_genre VARCHAR(64),
+          voice_profile VARCHAR(64),
+          aspect_ratio VARCHAR(10) DEFAULT '16:9',
+          duration_seconds NUMERIC(6,2),
+          video_path VARCHAR(512),
+          web_url VARCHAR(512),
+          status VARCHAR(32) DEFAULT 'COMPLETED',
+          metadata JSONB DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+
+      // 6. Performance indices
       await sql`
         CREATE INDEX IF NOT EXISTS idx_nexora_audit_session ON nexora_audit_logs(session_id);
       `;
@@ -148,6 +167,9 @@ export async function ensureNeonTablesExist(): Promise<void> {
       `;
       await sql`
         CREATE INDEX IF NOT EXISTS idx_coaching_sessions_created_at ON coaching_sessions(created_at);
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_commercial_spots_created_at ON commercial_spots(created_at);
       `;
 
       tablesChecked = true;

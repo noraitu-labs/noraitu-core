@@ -35,19 +35,21 @@ export interface AudioMasteringOptions {
   duckingThreshold?: number; // default: 0.08
 
   /**
-   * Ratio de atenuación cuando la voz está activa (ej: 4:1 o 6:1).
+   * Ratio de atenuación cuando la voz está activa.
+   * Ratio 6:1 con threshold 0.08 atenúa la cama musical entre -8 dB y -12 dB (reducción del 60%).
    */
-  duckingRatio?: number; // default: 4
+  duckingRatio?: number; // default: 6
 
   /**
-   * Tiempo de ataque del ducking en milisegundos.
+   * Tiempo de ataque del ducking en milisegundos (20ms previene clics y no pisa consonantes).
    */
   duckingAttackMs?: number; // default: 20
 
   /**
    * Tiempo de recuperación (release) del ducking en milisegundos.
+   * 300ms permite que la música recupere su nivel orgánicamente en los silencios de la voz.
    */
-  duckingReleaseMs?: number; // default: 250
+  duckingReleaseMs?: number; // default: 300
 
   /**
    * Ganancia previa de la cama musical (ej: 0.75 para -2.5 dB).
@@ -93,9 +95,9 @@ export async function masterAudio(
   const truePeakDb = options.truePeakDb ?? -1.0;
   const loudnessRange = options.loudnessRange ?? 11;
   const duckingThreshold = options.duckingThreshold ?? 0.08;
-  const duckingRatio = options.duckingRatio ?? 4;
+  const duckingRatio = options.duckingRatio ?? 6;
   const duckingAttackMs = options.duckingAttackMs ?? 20;
-  const duckingReleaseMs = options.duckingReleaseMs ?? 250;
+  const duckingReleaseMs = options.duckingReleaseMs ?? 300;
   const musicVolume = options.musicVolume ?? 0.75;
   const voiceVolume = options.voiceVolume ?? 1.0;
   const durationMode = options.durationMode ?? "voice";

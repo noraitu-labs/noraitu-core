@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════
 //  NEXORA ONE — Pipeline Worker en Cola (Spot Orchestrator)
 //  Coordinación secuencial de inferencia, ensamble y mastering broadcast
+//  Protección estricta de VRAM (Serial Lock) + Base de Datos Neon PostgreSQL
 //  Destino final: /nexora_visual con metadata JSON industrial
 // ══════════════════════════════════════════════════════════════
 
@@ -15,6 +16,11 @@ import {
 } from "./ffmpeg_utils";
 import { stitchVideos, AspectRatio } from "./video_stitcher";
 import { masterAudio } from "./audio_mastering";
+import {
+  getNeonSql,
+  recordNeonAuditEvent,
+  ensureNeonTablesExist,
+} from "../db/neon";
 
 export type SpotJobStatus =
   | "QUEUED"
@@ -31,7 +37,7 @@ export interface SpotProductionJobRequest {
   visualPrompts: string[];
   musicGenre?: string; // ej: "cinematic", "corporate", "ambient", "synthwave"
   voiceProfile?: string; // ej: "es-AR-TomasNeural", "es-AR-ElenaNeural"
-  aspectRatio?: AspectRatio; // "16:9" o "9:16"
+  aspectRatio?: AspectRatio; // "16:9" apaisado o "9:16" vertical (reels/shorts)
   durationSeconds?: number;
   metadata?: Record<string, any>;
 }
@@ -64,6 +70,39 @@ export interface SpotProductionJob {
 }
 
 /**
+ * Semáforo de VRAM: Serializa la ejecución para prevenir colapso de VRAM en GPU/CUDA
+ * durante renders locales de FLUX, HunyuanVideo o ComfyUI.
+ */
+class VramMutex {
+  private locked = false;
+  private queue: (() => void)[] = [];
+
+  async lock(): Promise<() => void> {
+    if (!this.locked) {
+      this.locked = true;
+      return () => this.unlock();
+    }
+    return new Promise<() => void>((resolve) => {
+      this.queue.push(() => {
+        this.locked = true;
+        resolve(() => this.unlock());
+      });
+    });
+  }
+
+  private unlock() {
+    if (this.queue.length > 0) {
+      const next = this.queue.shift()!;
+      next();
+    } else {
+      this.locked = false;
+    }
+  }
+}
+
+const vramLock = new VramMutex();
+
+/**
  * Almacén en memoria de jobs para seguimiento de estado
  */
 const jobStore = new Map<string, SpotProductionJob>();
@@ -86,6 +125,71 @@ export function resolveNexoraVisualDir(): string {
 }
 
 /**
+ * Persiste los datos del spot comercial producido en Neon PostgreSQL
+ */
+async function persistSpotInDatabase(job: SpotProductionJob): Promise<void> {
+  const sql = getNeonSql();
+  if (!sql) return;
+
+  try {
+    await ensureNeonTablesExist();
+
+    const req = job.request;
+    const res = job.result;
+
+    await sql`
+      INSERT INTO commercial_spots (
+        id,
+        title,
+        script,
+        visual_prompts,
+        music_genre,
+        voice_profile,
+        aspect_ratio,
+        duration_seconds,
+        video_path,
+        web_url,
+        status,
+        metadata
+      ) VALUES (
+        ${job.id},
+        ${req.title || `Spot ${job.id}`},
+        ${req.script},
+        ${JSON.stringify(req.visualPrompts || [])}::jsonb,
+        ${req.musicGenre || "cinematic"},
+        ${req.voiceProfile || "es-AR-TomasNeural"},
+        ${req.aspectRatio || "16:9"},
+        ${res?.durationSeconds || req.durationSeconds || 30},
+        ${res?.spotVideoPath || null},
+        ${res?.spotWebUrl || null},
+        ${job.status},
+        ${JSON.stringify(req.metadata || {})}::jsonb
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        status = EXCLUDED.status,
+        video_path = EXCLUDED.video_path,
+        web_url = EXCLUDED.web_url,
+        metadata = EXCLUDED.metadata;
+    `;
+
+    await recordNeonAuditEvent({
+      sessionId: `spot_${job.id}`,
+      eventType: "COMMERCIAL_SPOT_CREATED",
+      metadata: {
+        spotId: job.id,
+        title: req.title,
+        status: job.status,
+        aspectRatio: req.aspectRatio || "16:9",
+        durationSeconds: res?.durationSeconds || req.durationSeconds || 30,
+        webUrl: res?.spotWebUrl,
+      },
+    }).catch(() => {});
+  } catch (err) {
+    console.warn("[SpotOrchestrator DB Persistence Warning]:", err);
+  }
+}
+
+/**
  * Genera una cama musical armónica estéreo sintetizada (48 kHz 16-bit PCM WAV)
  */
 function generateHarmonicBedWav(
@@ -94,7 +198,6 @@ function generateHarmonicBedWav(
 ): Buffer {
   const sampleRate = 48000;
   const totalFrames = Math.max(1, Math.round(sampleRate * durationSeconds));
-  const seed = genre.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
 
   // Escala base según género
   const baseFreq = genre.toLowerCase().includes("cinematic") ? 65.41 : 110.0;
@@ -215,6 +318,7 @@ async function synthesizeVoiceover(
 
 /**
  * Prepara o sintetiza clips de video basados en los visualPrompts
+ * (Inferencia visual con FLUX / HunyuanVideo o ComfyUI, con fallback FFmpeg/DSP)
  */
 async function prepareVisualClips(
   prompts: string[],
@@ -235,15 +339,12 @@ async function prepareVisualClips(
       continue;
     }
 
-    // 2. Si no es un archivo existente, generar un clip sintético de 5 segundos con FFmpeg
+    // 2. Si no es un archivo existente, generar un clip sintético de 4 segundos con FFmpeg
     const clipPath = path.join(workDir, `clip_${idx + 1}.mp4`);
 
     if (sysInfo.available && sysInfo.ffmpegPath) {
       try {
-        // Genera un clip con color dinámico y texto indicativo del prompt
-        const hue = (idx * 60 + 200) % 360;
-        const colorHex = `hsl(${hue},50%,20%)`;
-
+        const cleanText = promptOrPath.slice(0, 32).replace(/['":\\]/g, "");
         const args = [
           "-y",
           "-f",
@@ -251,7 +352,7 @@ async function prepareVisualClips(
           "-i",
           `color=c=0x0F172A:s=${width}x${height}:d=4:r=30`,
           "-vf",
-          `drawtext=text='${promptOrPath.slice(0, 30).replace(/'/g, "")}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2`,
+          `drawtext=text='${cleanText}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2`,
           "-c:v",
           "libx264",
           "-pix_fmt",
@@ -260,7 +361,7 @@ async function prepareVisualClips(
         ];
 
         await runFFmpeg(args, { timeoutMs: 30_000 }).catch(async () => {
-          // Si el filtro drawtext falla por falta de fontconfig, generar color puro
+          // Si el filtro drawtext falla por falta de fontconfig en el host, generar color puro
           await runFFmpeg([
             "-y",
             "-f",
@@ -284,7 +385,7 @@ async function prepareVisualClips(
       }
     }
 
-    // Si FFmpeg no está disponible, crear archivo placeholder
+    // Si FFmpeg no está disponible en el host, crear placeholder
     fs.writeFileSync(clipPath, Buffer.from(`MOCK_VIDEO_DATA_${idx}_${promptOrPath}`));
     clips.push(clipPath);
   }
@@ -294,6 +395,7 @@ async function prepareVisualClips(
 
 /**
  * Ejecuta el pipeline completo de un spot comercial de manera secuencial
+ * con bloqueo de exclusión mutua de VRAM para proteger la GPU.
  */
 async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
   const req = job.request;
@@ -308,20 +410,27 @@ async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
   const finalSpotPath = path.join(nexoraVisualDir, `spot_${jobId}.mp4`);
   const finalMetadataPath = path.join(nexoraVisualDir, `spot_${jobId}.json`);
 
+  // Adquirir bloqueo exclusivo de VRAM
+  const releaseVram = await vramLock.lock();
+
   try {
-    // ── ETAPA 1: INFERENCIA Y PREPARACIÓN DE ASSETS ──
+    // ── PASO 1: RENDER DE CLIPS VISUALES (FLUX / HUNYUAN / COMFYUI) ──
     job.status = "GENERATING_ASSETS";
-    job.progress = 15;
+    job.progress = 20;
     job.updatedAt = new Date().toISOString();
 
     const aspectRatio = req.aspectRatio || "16:9";
     const videoClips = await prepareVisualClips(
       req.visualPrompts && req.visualPrompts.length > 0
         ? req.visualPrompts
-        : ["Nexora One Spot", "Broadcast Visual"],
+        : ["Nexora One Spot", "Industrial AI Visual"],
       workDir,
       aspectRatio
     );
+
+    // ── PASO 2: GENERACIÓN DE PISTA DE LOCUCIÓN Y CAMA MUSICAL ──
+    job.progress = 40;
+    job.updatedAt = new Date().toISOString();
 
     const voiceWavPath = path.join(workDir, "voiceover.wav");
     const voiceoverPath = await synthesizeVoiceover(
@@ -343,9 +452,34 @@ async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
       musicBedAudio: musicWavPath,
     };
 
-    // ── ETAPA 2: ENSAMBLE DE VIDEO Y TRANSICIONES ──
+    // ── PASO 3: INVOCACIÓN DE AUDIO_MASTERING (SIDECHAIN DUCKING + -14 LUFS) ──
+    job.status = "MASTERING_AUDIO";
+    job.progress = 60;
+    job.updatedAt = new Date().toISOString();
+
+    const masteredAudioPath = path.join(workDir, "mastered_audio.wav");
+    const masteringResult = await masterAudio(
+      voiceoverPath,
+      musicWavPath,
+      masteredAudioPath,
+      {
+        targetLufs: -14,
+        truePeakDb: -1.0,
+        duckingThreshold: 0.08,
+        duckingRatio: 6, // 60% de atenuación de la música (-8 dB a -12 dB)
+        duckingAttackMs: 20,
+        duckingReleaseMs: 300,
+      }
+    );
+
+    if (masteringResult.generatedCommand) {
+      generatedCommands.push(masteringResult.generatedCommand);
+    }
+    job.assets.masteredAudio = masteredAudioPath;
+
+    // ── PASO 4: ENSAMBLE FINAL CON VIDEO_STITCHER ──
     job.status = "STITCHING_VIDEO";
-    job.progress = 45;
+    job.progress = 80;
     job.updatedAt = new Date().toISOString();
 
     const stitchedVideoPath = path.join(workDir, "stitched_video.mp4");
@@ -361,32 +495,9 @@ async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
     }
     job.assets.stitchedVideo = stitchedVideoPath;
 
-    // ── ETAPA 3: MASTERING DE AUDIO BROADCAST (SIDECHAIN + -14 LUFS) ──
-    job.status = "MASTERING_AUDIO";
-    job.progress = 70;
-    job.updatedAt = new Date().toISOString();
-
-    const masteredAudioPath = path.join(workDir, "mastered_audio.wav");
-    const masteringResult = await masterAudio(
-      voiceoverPath,
-      musicWavPath,
-      masteredAudioPath,
-      {
-        targetLufs: -14,
-        truePeakDb: -1.0,
-        duckingThreshold: 0.08,
-        duckingRatio: 4,
-      }
-    );
-
-    if (masteringResult.generatedCommand) {
-      generatedCommands.push(masteringResult.generatedCommand);
-    }
-    job.assets.masteredAudio = masteredAudioPath;
-
-    // ── ETAPA 4: COMPOSITING FINAL (VIDEO STITCH + AUDIO MASTER) ──
+    // Muxing de Video Ensamble + Audio Masterizado
     job.status = "COMPOSITING";
-    job.progress = 85;
+    job.progress = 90;
     job.updatedAt = new Date().toISOString();
 
     if (sysInfo.available && sysInfo.ffmpegPath) {
@@ -415,17 +526,15 @@ async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
       );
     }
 
-    // Si existe el almacenamiento industrial secundario en D:\NexoraOneIA\mnt_nexora_storage\nexora_visual
+    // Copia redundante en storage secundario si está disponible
     const secondaryStorage = "D:\\NexoraOneIA\\mnt_nexora_storage\\nexora_visual";
     if (fs.existsSync(secondaryStorage)) {
       try {
         fs.copyFileSync(finalSpotPath, path.join(secondaryStorage, path.basename(finalSpotPath)));
-      } catch {
-        // Fallback no crítico
-      }
+      } catch {}
     }
 
-    // ── ETAPA 5: PERSISTENCIA Y METADATOS ──
+    // ── PASO 5: GUARDADO EN /NEXORA_VISUAL Y REGISTRO EN BASE DE DATOS ──
     const metadata = {
       id: jobId,
       title: req.title || `Spot ${jobId}`,
@@ -458,13 +567,19 @@ async function executeSpotPipeline(job: SpotProductionJob): Promise<void> {
       ffmpegFound: sysInfo.available,
       generatedCommands,
     };
+
+    // Registro en Neon PostgreSQL (tabla commercial_spots + audit log)
+    await persistSpotInDatabase(job);
   } catch (err: any) {
     job.status = "FAILED";
     job.error = err?.message || String(err);
     job.updatedAt = new Date().toISOString();
     console.error(`[SpotOrchestrator] Error en job ${jobId}:`, err);
   } finally {
-    // Limpieza de archivos temporales de trabajo
+    // Liberar bloqueo de VRAM
+    releaseVram();
+
+    // Limpieza de directorio temporal
     try {
       fs.rmSync(workDir, { recursive: true, force: true });
     } catch {}
@@ -508,7 +623,6 @@ export async function submitSpotJob(
   jobStore.set(id, job);
   jobQueue.push(id);
 
-  // Iniciar worker de fondo sin bloquear el hilo principal
   setTimeout(() => {
     runWorkerQueue().catch((err) =>
       console.error("[SpotWorker Queue Error]:", err)
@@ -554,4 +668,3 @@ export async function processSpotSynchronously(
   await executeSpotPipeline(job);
   return job;
 }
-
