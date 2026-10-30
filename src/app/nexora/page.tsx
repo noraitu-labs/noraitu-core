@@ -22,7 +22,25 @@ import {
 } from "@/hooks/useNexoraDispatch";
 import { NexoraHeader } from "@/components/nexora/NexoraHeader";
 import { AgentSidebar } from "@/components/nexora/AgentSidebar";
-import { WorkspaceCanvas } from "@/components/nexora/WorkspaceCanvas";
+import dynamic from "next/dynamic";
+
+const WorkspaceCanvas = dynamic(
+  () =>
+    import("@/components/nexora/WorkspaceCanvas").then(
+      (mod) => mod.WorkspaceCanvas
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center bg-slate-950 text-slate-400 font-mono text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+          <span>Iniciando Cabina de Transmisión Nexora...</span>
+        </div>
+      </div>
+    ),
+  }
+);
 import { VisualForge } from "@/components/nexora/VisualForge";
 import { SdrRadar } from "@/components/nexora/SdrRadar";
 import { TelemetryVFSGauge } from "@/components/nexora/TelemetryVFSGauge";

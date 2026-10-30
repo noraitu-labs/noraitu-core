@@ -234,6 +234,11 @@ export function WorkspaceCanvas({
   onAppendLog,
 }: WorkspaceCanvasProps) {
   const isRadio = mode === "RADIO_CO_HOST";
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // --- WHITE-LABEL BROADCAST STATION CONFIGURATION STATE ---
   const [stationConfig, setStationConfig] = useState<BroadcastStationConfig>({
@@ -2057,6 +2062,17 @@ export function WorkspaceCanvas({
       correlationSuffix: "SNDMASTR",
     });
   };
+
+  if (!mounted) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-950 text-slate-400 font-mono text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+          <span>Iniciando Cabina de Transmisión Nexora...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col gap-3.5 p-4 overflow-y-auto bg-slate-950/60">
