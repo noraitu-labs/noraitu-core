@@ -344,13 +344,14 @@ export function WorkspaceCanvas({
   const consoleInputRef = useRef<string>("");
   const lastNoraSpeechEndMsRef = useRef<number>(0);
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
   const openMicDuplexModeRef = useRef<boolean>(false);
   const isNoraSpeakingRef = useRef<boolean>(false);
   const passiveTableContextRef = useRef<string[]>([]);
   const dialogueHistoryRef = useRef<OnAirDialogueMessage[]>(dialogueHistory);
   const stationConfigRef = useRef<BroadcastStationConfig>(stationConfig);
   const [pinnedVoiceLabel, setPinnedVoiceLabel] = useState<string>(
-    "Español Latino / Argentina Pro"
+    "Voz Cloud Neuronal (HD Broadcast)"
   );
   const [micHardwareWarning, setMicHardwareWarning] = useState<string | null>(
     null
@@ -557,7 +558,7 @@ export function WorkspaceCanvas({
     const chosen = prio1 || prio2 || prio3 || prio4 || null;
     if (chosen) {
       selectedVoiceRef.current = chosen;
-      setPinnedVoiceLabel(`${chosen.name} (${chosen.lang})`);
+      // Pinned to Voz Cloud Neuronal (HD Broadcast)
     }
     return chosen;
   };
@@ -634,10 +635,10 @@ export function WorkspaceCanvas({
   const speakNoraAloud = (
     textToSpeak: string,
     _ignoredLangCode?: string,
-    speechRate: number = 0.92,
-    pitchShift: number = 0.98
+    _speechRate: number = 0.92,
+    _pitchShift: number = 0.98
   ) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    if (typeof window === "undefined") {
       return;
     }
     try {
@@ -650,59 +651,59 @@ export function WorkspaceCanvas({
         }
       }
 
-      window.speechSynthesis.cancel();
+      // Pause previous cloud audio stream if playing
+      if (cloudAudioRef.current) {
+        try {
+          cloudAudioRef.current.pause();
+          cloudAudioRef.current.currentTime = 0;
+        } catch {
+          // Ignore
+        }
+      }
+      if ("speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // Ignore
+        }
+      }
+
       const cleanForTts = cleanPhoneticsForLatamTTS(textToSpeak);
       if (!cleanForTts) return;
 
-      const utterance = new SpeechSynthesisUtterance(cleanForTts);
-      const pinnedVoice = resolveAndPinLatamVoice();
-
-      if (pinnedVoice) {
-        utterance.voice = pinnedVoice;
-        // Match utterance.lang to pinnedVoice.lang (es-AR / es-419 / es-MX) so Chromium never falls back to OS es-ES
-        utterance.lang =
-          pinnedVoice.lang && pinnedVoice.lang.toLowerCase().startsWith("es")
-            ? pinnedVoice.lang
-            : "es-AR";
-      } else {
-        utterance.lang = "es-AR";
+      const audioUrl = `/api/nexora/radio-tts?text=${encodeURIComponent(cleanForTts)}`;
+      let audio = cloudAudioRef.current;
+      if (!audio) {
+        audio = new Audio();
+        cloudAudioRef.current = audio;
       }
+      audio.src = audioUrl;
 
-      // Calm, warm radio cadence: base rate 0.92 (max 0.95) and warm pitch 0.98
-      utterance.rate = Math.max(0.89, Math.min(0.95, speechRate || 0.92));
-      utterance.pitch = Math.max(0.95, Math.min(1.0, pitchShift || 0.98));
+      const handleSpeechDone = () => {
+        lastNoraSpeechEndMsRef.current = Date.now();
+        isNoraSpeakingRef.current = false;
+        setIsNoraSpeaking(false);
+        if (openMicDuplexModeRef.current) {
+          setTimeout(() => {
+            if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
+              startCabinRecognition(true);
+            }
+          }, 550);
+        }
+      };
 
-      utterance.onstart = () => {
+      audio.onplay = () => {
         isNoraSpeakingRef.current = true;
         setIsNoraSpeaking(true);
       };
-      utterance.onend = () => {
-        lastNoraSpeechEndMsRef.current = Date.now();
-        isNoraSpeakingRef.current = false;
-        setIsNoraSpeaking(false);
-        // If Open-Mic Duplex mode is active, return to silent listening after a 550ms room-echo guard
-        if (openMicDuplexModeRef.current) {
-          setTimeout(() => {
-            if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
-              startCabinRecognition(true);
-            }
-          }, 550);
-        }
-      };
-      utterance.onerror = () => {
-        lastNoraSpeechEndMsRef.current = Date.now();
-        isNoraSpeakingRef.current = false;
-        setIsNoraSpeaking(false);
-        if (openMicDuplexModeRef.current) {
-          setTimeout(() => {
-            if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
-              startCabinRecognition(true);
-            }
-          }, 550);
-        }
+      audio.onended = handleSpeechDone;
+      audio.onerror = () => {
+        handleSpeechDone();
       };
 
-      window.speechSynthesis.speak(utterance);
+      audio.play().catch(() => {
+        handleSpeechDone();
+      });
     } catch {
       isNoraSpeakingRef.current = false;
       setIsNoraSpeaking(false);
@@ -710,18 +711,30 @@ export function WorkspaceCanvas({
   };
 
   const stopNoraSpeech = () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      lastNoraSpeechEndMsRef.current = Date.now();
-      isNoraSpeakingRef.current = false;
-      setIsNoraSpeaking(false);
-      if (openMicDuplexModeRef.current) {
-        setTimeout(() => {
-          if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
-            startCabinRecognition(true);
-          }
-        }, 550);
+    if (cloudAudioRef.current) {
+      try {
+        cloudAudioRef.current.pause();
+        cloudAudioRef.current.currentTime = 0;
+      } catch {
+        // Ignore
       }
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // Ignore
+      }
+    }
+    lastNoraSpeechEndMsRef.current = Date.now();
+    isNoraSpeakingRef.current = false;
+    setIsNoraSpeaking(false);
+    if (openMicDuplexModeRef.current) {
+      setTimeout(() => {
+        if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
+          startCabinRecognition(true);
+        }
+      }, 550);
     }
   };
 
@@ -737,12 +750,12 @@ export function WorkspaceCanvas({
   ) => {
     const clamped = Math.max(0, Math.min(100, Math.round(levelPct)));
     if (vuBarFillRef.current) {
-      vuBarFillRef.current.style.width = `${Math.max(micActive ? 6 : 0, clamped)}%`;
+      vuBarFillRef.current.style.width = `${Math.max(micActive ? 4 : 0, clamped)}%`;
       vuBarFillRef.current.style.background =
         clamped > 15
-          ? "linear-gradient(90deg, #10b981 0%, #4ade80 60%, #bef264 100%)"
+          ? "linear-gradient(90deg, #06b6d4 0%, #3b82f6 70%, #10b981 100%)"
           : micActive
-          ? "#059669"
+          ? "linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%)"
           : "#334155";
     }
 
@@ -771,25 +784,22 @@ export function WorkspaceCanvas({
     lastVuDomUpdateMsRef.current = now;
 
     if (vuLabelTextRef.current) {
-      const statusText =
+      vuLabelTextRef.current.textContent =
         clamped > 15
-          ? "Detectando voz"
+          ? `Escuchando... ${clamped}%`
           : micActive
-          ? "Micrófono activo (en silencio)"
-          : "Micrófono en espera (pulsá 🎤)";
-      vuLabelTextRef.current.textContent = `🎤 Entrada de Audio: ${formatVuAsciiBar(
-        clamped
-      )} ${clamped}% - ${statusText}`;
+          ? "Micrófono activo"
+          : "Micrófono en reposo";
     }
 
     if (vuVoicePillRef.current) {
-      vuVoicePillRef.current.style.opacity = clamped > 15 ? "1" : "0.4";
-      vuVoicePillRef.current.textContent =
+      vuVoicePillRef.current.className = `w-2 h-2 rounded-full transition-colors duration-200 ${
         clamped > 15
-          ? "✓ VOZ ENTRANTE"
+          ? "bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]"
           : micActive
-          ? "MIC EN ESCUCHA"
-          : "MIC EN ESPERA";
+          ? "bg-emerald-400"
+          : "bg-slate-500"
+      }`;
     }
   };
 
@@ -2032,35 +2042,34 @@ export function WorkspaceCanvas({
               </div>
             </div>
 
-            {/* Row 2: Isolated Hardware VU-Meter Bar (Updated via Direct DOM Refs — 0 React Re-Renders) */}
-            <div className="w-full pt-2.5 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-3 relative">
-              <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-                <span
-                  ref={vuLabelTextRef}
-                  className="text-xs font-mono font-bold text-emerald-300"
-                >
-                  🎤 Entrada de Audio: [░░░░░░░░] 0% - Micrófono en espera (pulsá 🎤)
-                </span>
+            {/* Row 2: VU Meter Visual Sobrio */}
+            <div className="w-full pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 relative">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Badge discreto de estado de micrófono */}
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800/90 text-xs text-slate-300 backdrop-blur-sm">
+                  <span
+                    ref={vuVoicePillRef}
+                    className="w-2 h-2 rounded-full bg-slate-500 transition-colors duration-200"
+                  />
+                  <span
+                    ref={vuLabelTextRef}
+                    className="font-mono text-[11px] text-slate-300"
+                  >
+                    Micrófono en reposo
+                  </span>
+                </div>
 
-                {/* Isolated Fixed-Dimensions Green Volume Bar Container */}
-                <div className="w-36 h-3 rounded-full bg-slate-950 border border-slate-700 overflow-hidden p-0.5 flex items-center shrink-0 relative">
+                {/* Barra de progreso sutil con gradiente cyan/blue */}
+                <div className="w-36 h-2 rounded-full bg-slate-950/90 border border-slate-800 overflow-hidden flex items-center p-0.5 relative">
                   <div
                     ref={vuBarFillRef}
                     className="h-full rounded-full transition-[width] duration-100"
                     style={{
                       width: "0%",
-                      background: "#334155",
+                      background: "linear-gradient(90deg, #06b6d4, #3b82f6)",
                     }}
                   />
                 </div>
-
-                <span
-                  ref={vuVoicePillRef}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/60 shrink-0 transition-opacity duration-150"
-                  style={{ opacity: 0.4 }}
-                >
-                  MIC EN ESPERA
-                </span>
               </div>
 
               <div
@@ -2503,10 +2512,10 @@ export function WorkspaceCanvas({
                   <button
                     type="button"
                     onClick={handleToggleMicrophone}
-                    className={`p-2.5 rounded-xl border cursor-pointer transition-all shrink-0 ${
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all shrink-0 backdrop-blur-md ${
                       isListeningMic
-                        ? "bg-rose-600 text-white border-rose-400 animate-pulse"
-                        : "bg-slate-950 hover:bg-slate-800 text-cyan-300 border-slate-700"
+                        ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm shadow-rose-500/20 animate-pulse"
+                        : "bg-slate-900/80 hover:bg-slate-800 text-cyan-300 border-slate-700/80"
                     }`}
                     title="Hablarle a Nora por micrófono en vivo"
                   >
