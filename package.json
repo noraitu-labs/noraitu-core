@@ -16,6 +16,7 @@
     "groq-sdk": "^1.6.0",
     "lucide-react": "^1.48.0",
     "mongodb": "^7.7.0",
+    "msedge-tts": "^2.1.1",
     "next": "^15.5.26",
     "onnxruntime-web": "^1.30.0",
     "postgres": "^3.4.9",
