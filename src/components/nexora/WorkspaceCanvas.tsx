@@ -343,8 +343,13 @@ export function WorkspaceCanvas({
   const isSendingToNoraRef = useRef<boolean>(false);
   const consoleInputRef = useRef<string>("");
   const lastNoraSpeechEndMsRef = useRef<number>(0);
+  const lastInteractionEpochMsRef = useRef<number>(0);
+  const interimSpeechTimeoutRef = useRef<any>(null);
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sentenceQueueRef = useRef<Array<{ id: string; sentenceText: string; audio: HTMLAudioElement; status: "ready" | "playing" | "played" | "error" }>>([]);
+  const isSentenceQueuePlayingRef = useRef<boolean>(false);
+  const isStreamDoneRef = useRef<boolean>(false);
   const openMicDuplexModeRef = useRef<boolean>(false);
   const isNoraSpeakingRef = useRef<boolean>(false);
   const passiveTableContextRef = useRef<string[]>([]);
@@ -710,7 +715,91 @@ export function WorkspaceCanvas({
     }
   };
 
+  const pumpSentenceAudioQueue = () => {
+    if (isSentenceQueuePlayingRef.current) return;
+    const next = sentenceQueueRef.current.find((i) => i.status === "ready");
+    if (!next) {
+      if (
+        isStreamDoneRef.current &&
+        sentenceQueueRef.current.every((i) => i.status === "played" || i.status === "error")
+      ) {
+        lastNoraSpeechEndMsRef.current = Date.now();
+        lastInteractionEpochMsRef.current = Date.now();
+        isNoraSpeakingRef.current = false;
+        setIsNoraSpeaking(false);
+        if (openMicDuplexModeRef.current) {
+          setTimeout(() => {
+            if (openMicDuplexModeRef.current && !isNoraSpeakingRef.current) {
+              startCabinRecognition(true);
+            }
+          }, 550);
+        }
+      }
+      return;
+    }
+
+    isSentenceQueuePlayingRef.current = true;
+    isNoraSpeakingRef.current = true;
+    setIsNoraSpeaking(true);
+    cloudAudioRef.current = next.audio;
+    next.status = "playing";
+
+    next.audio.onplay = () => {
+      isNoraSpeakingRef.current = true;
+      setIsNoraSpeaking(true);
+    };
+
+    next.audio.onended = () => {
+      next.status = "played";
+      isSentenceQueuePlayingRef.current = false;
+      lastNoraSpeechEndMsRef.current = Date.now();
+      lastInteractionEpochMsRef.current = Date.now();
+      pumpSentenceAudioQueue();
+    };
+
+    next.audio.onerror = () => {
+      next.status = "error";
+      isSentenceQueuePlayingRef.current = false;
+      pumpSentenceAudioQueue();
+    };
+
+    next.audio.play().catch(() => {
+      next.status = "error";
+      isSentenceQueuePlayingRef.current = false;
+      pumpSentenceAudioQueue();
+    });
+  };
+
+  const queueSentenceForCloudPlayback = (sentenceText: string) => {
+    const clean = cleanPhoneticsForLatamTTS(sentenceText);
+    if (!clean || clean.length < 2) return;
+
+    const audioUrl = `/api/nexora/radio-tts?text=${encodeURIComponent(clean)}`;
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = audioUrl;
+
+    sentenceQueueRef.current.push({
+      id: `sq-${Date.now()}-${Math.random()}`,
+      sentenceText: clean,
+      audio,
+      status: "ready",
+    });
+
+    pumpSentenceAudioQueue();
+  };
+
   const stopNoraSpeech = () => {
+    sentenceQueueRef.current.forEach((item) => {
+      try {
+        item.audio.pause();
+        item.audio.currentTime = 0;
+      } catch {}
+    });
+    sentenceQueueRef.current = [];
+    isSentenceQueuePlayingRef.current = false;
+    isStreamDoneRef.current = true;
+
     if (cloudAudioRef.current) {
       try {
         cloudAudioRef.current.pause();
@@ -727,6 +816,7 @@ export function WorkspaceCanvas({
       }
     }
     lastNoraSpeechEndMsRef.current = Date.now();
+    lastInteractionEpochMsRef.current = Date.now();
     isNoraSpeakingRef.current = false;
     setIsNoraSpeaking(false);
     if (openMicDuplexModeRef.current) {
@@ -825,25 +915,31 @@ export function WorkspaceCanvas({
     }
 
     if (interimBannerDomRef.current) {
-      interimBannerDomRef.current.textContent = `🎙️ Última frase capturada: "${transcript.slice(
-        0,
-        65
-      )}"`;
+      interimBannerDomRef.current.textContent = `🎙️ Frase recibida: "${transcript.slice(0, 65)}"`;
     }
 
-    if (openMicDuplexModeRef.current) {
-      // Flexible Wake-Word & Direct Appeal Rule: immediately dispatch to Nora without requiring any button click
-      if (containsNoraWakeWord(transcript)) {
+    const now = Date.now();
+    const hasRecentInteraction =
+      lastInteractionEpochMsRef.current > 0 &&
+      now - lastInteractionEpochMsRef.current < 60000;
+    const isWakeWordPresent = containsNoraWakeWord(transcript);
+
+    if (openMicDuplexModeRef.current || isListeningMicRef.current) {
+      // Continuous conversation: if booth is active and interaction occurred within 60s, or wake-word is present:
+      if (isWakeWordPresent || hasRecentInteraction) {
+        lastInteractionEpochMsRef.current = now;
         consoleInputRef.current = "";
         setConsoleInput("");
         onAppendLog(
-          "DUPLEX_WAKE_WORD_HIT",
-          `Intervención directa detectada: "${transcript.slice(0, 80)}" -> Nora responde al instante.`,
+          "CABINA_CONTINUA",
+          isWakeWordPresent
+            ? `Llamado a Nora detectado: "${transcript.slice(0, 80)}" -> Procesando al aire.`
+            : `Conversación continua activa (ventana <60s): "${transcript.slice(0, 80)}" -> Procesando automáticamente.`,
           "SUCCESS"
         );
         void handleSendRadioDialogue(transcript);
       } else {
-        // Store in passive studio memory and place in input so pressing Enter or [Dar Pase a Nora] dispatches it immediately
+        // Fuera de ventana de 60s sin nombrar a Nora: guardar en memoria pasiva
         consoleInputRef.current = transcript;
         setConsoleInput(transcript);
         const nextPassive = [
@@ -854,11 +950,12 @@ export function WorkspaceCanvas({
         setPassiveTableContext(nextPassive);
         onAppendLog(
           "CABINA_ESCUCHA_PASIVA",
-          `Frase en mesa (pulsá Enter o 'Dar Pase a Nora' para enviar, o nombrá a 'Nora'): "${transcript.slice(0, 80)}"`,
+          `Frase en mesa guardada (mencioná a 'Nora' o pulsá Enter para enviar): "${transcript.slice(0, 80)}"`,
           "INFO"
         );
       }
     } else {
+      lastInteractionEpochMsRef.current = now;
       consoleInputRef.current = "";
       setConsoleInput("");
       void handleSendRadioDialogue(transcript);
@@ -955,7 +1052,7 @@ export function WorkspaceCanvas({
           } else if (
             voiceSpokeDuringChunkRef.current &&
             levelPct <= 10 &&
-            now - silenceSinceMsRef.current > 950
+            now - silenceSinceMsRef.current > 1350
           ) {
             voiceSpokeDuringChunkRef.current = false;
             if (
@@ -1165,6 +1262,17 @@ export function WorkspaceCanvas({
       // Show preliminary transcription directly in the fixed DOM banner (zero layout shift)
       if (interimText && interimBannerDomRef.current) {
         interimBannerDomRef.current.textContent = `🗣️ Escuchando: "${interimText}"`;
+      }
+
+      if (interimSpeechTimeoutRef.current) {
+        clearTimeout(interimSpeechTimeoutRef.current);
+      }
+      if (interimText && !finalText) {
+        interimSpeechTimeoutRef.current = setTimeout(() => {
+          if (!isNoraSpeakingRef.current && interimText.trim().length > 3) {
+            dispatchCapturedSpeechTranscript(interimText.trim());
+          }
+        }, 1350);
       }
 
       if (finalText) {
@@ -1417,230 +1525,6 @@ export function WorkspaceCanvas({
    * Manual button `[Dar Pase a Nora]`: immediately dispatches the exact phrase
    * currently in the input box or the latest phrase in passive studio memory.
    */
-  const handleGiveFloorToNora = () => {
-    const typed = (consoleInputRef.current || consoleInput).trim();
-    if (typed) {
-      consoleInputRef.current = "";
-      setConsoleInput("");
-      void handleSendRadioDialogue(typed);
-      return;
-    }
-    const recentPassive = passiveTableContextRef.current;
-    if (recentPassive.length > 0) {
-      const lastCapturedPhrase = recentPassive[recentPassive.length - 1];
-      void handleSendRadioDialogue(lastCapturedPhrase);
-      return;
-    }
-    const cuePrompt = `Nora, te damos el pase en el aire de ${stationConfigRef.current.programName} con ${stationConfigRef.current.hostNames}: ¿qué análisis sumás a la mesa en este momento?`;
-    void handleSendRadioDialogue(cuePrompt);
-  };
-
-  /**
-   * Sends the human host's message to `/api/nexora/radio-chat` (Groq LPU / SambaNova)
-   * with the full recent conversation history (last 10 turns), `passive_context`,
-   * and white-label `station_config`, then speaks Nora's response.
-   */
-  const handleSendRadioDialogue = async (overrideText?: string) => {
-    const messageText = (
-      overrideText ??
-      consoleInputRef.current ??
-      consoleInput
-    ).trim();
-    if (!messageText || isSendingToNoraRef.current) return;
-
-    // Immediately clear input so the spoken/typed phrase never remains stuck in the box
-    consoleInputRef.current = "";
-    setConsoleInput("");
-    isSendingToNoraRef.current = true;
-    setIsSendingToNora(true);
-
-    const activeCfg = stationConfigRef.current;
-    const nowStr = new Date().toLocaleTimeString("es-AR", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-
-    // Capture the last 10 live turns from dialogueHistoryRef (excluding the static UI welcome banner and degraded turns)
-    const priorHistoryPayload = dialogueHistoryRef.current
-      .filter((m) => m.id !== "turn-init-1" && !m.degraded)
-      .slice(-10)
-      .map((m) => ({
-        role: (m.speaker === "LOCUTOR_HUMANO" ? "user" : "assistant") as
-          | "user"
-          | "assistant",
-        content: m.text,
-      }));
-
-    const capturedPassiveContext = [...passiveTableContextRef.current];
-
-    const userTurn: OnAirDialogueMessage = {
-      id: `turn-u-${Date.now()}`,
-      speaker: "LOCUTOR_HUMANO",
-      speakerLabel: `${activeCfg.hostNames || "Locutor Humano"} (Cabina)`,
-      text: messageText,
-      timestamp: nowStr,
-    };
-
-    const updatedWithUser = [...dialogueHistoryRef.current, userTurn];
-    dialogueHistoryRef.current = updatedWithUser;
-    setDialogueHistory(updatedWithUser);
-
-    onAppendLog(
-      "RADIO_CO_HOST_IN",
-      `${activeCfg.hostNames} -> Nora [${activeCfg.programName} | Turno #${
-        Math.floor(priorHistoryPayload.length / 2) + 1
-      }]: "${messageText.slice(0, 80)}"`,
-      "INFO"
-    );
-
-    try {
-      const res = await fetch("/api/nexora/radio-chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Nexora-Tenant": "NEXORA_ONE_ENGINE",
-        },
-        body: JSON.stringify({
-          message: messageText,
-          station_config: activeCfg,
-          passive_context: capturedPassiveContext,
-          history: priorHistoryPayload,
-          desk_briefing: deskBriefingItems,
-          visual_context: visualStudioContextRef.current,
-        }),
-      });
-
-      const data = (await res.json()) as {
-        reply?: string;
-        prosody_script?: string;
-        spoken_language?: string;
-        emotion_state?: string;
-        emotion_label?: string;
-        speech_rate?: number;
-        pitch_shift?: number;
-        model_used?: string;
-        latency_ms?: number;
-        degraded?: boolean;
-        error_detail?: string;
-        triggered_tools?: Array<{ tool: string; params: string }>;
-      };
-
-      // Execute background agent tool triggers invoked by Nora
-      if (Array.isArray(data.triggered_tools) && data.triggered_tools.length > 0) {
-        for (const tCall of data.triggered_tools) {
-          if (tCall.tool === "trigger_sound_cue") {
-            const raw = (tCall.params || "").toLowerCase();
-            const cue = /tension/i.test(raw)
-              ? "TENSION"
-              : /remate|noticia|urgente/i.test(raw)
-              ? "NEWS"
-              : "SWEEPER";
-            handlePlaySoundCartStinger(cue);
-          } else if (tCall.tool === "trigger_visual_forge") {
-            onAppendLog(
-              "NORA_AUTONOMOUS_TOOL",
-              `Nora ordenó a Visual Forge crear placa de transmisión: ${tCall.params}`,
-              "SUCCESS"
-            );
-          } else if (tCall.tool === "query_sdr_radar") {
-            onAppendLog(
-              "NORA_AUTONOMOUS_TOOL",
-              `Nora consultó al SDR Radar cables en tiempo real: ${tCall.params}`,
-              "INFO"
-            );
-          }
-        }
-      }
-
-      const firstHost =
-        (activeCfg.hostNames || "Equipo").split(/\s+y\s+|,/)[0].trim() ||
-        "Equipo";
-      const isDegraded = Boolean(data.degraded) || !res.ok || !data.reply;
-      const noraReply =
-        data.reply ||
-        `Perdón ${firstHost}, se nos fue un segundo el retorno acá en cabina. ¿Me repetís la pregunta?`;
-      const spokenLang = data.spoken_language || "es-AR";
-      const emotionLabel = data.emotion_label || "Cálido & Empático";
-      const speechRate = data.speech_rate ?? 0.92;
-      const pitchShift = data.pitch_shift ?? 0.98;
-
-      if (isDegraded) {
-        onAppendLog(
-          "LLM_INFERENCE_ERROR",
-          `Sin inferencia en vivo (HTTP ${res.status}): ${
-            data.error_detail || "ninguna API LLM respondió"
-          }`,
-          "WARN"
-        );
-      } else {
-        // Clear passive context once Nora has integrated it into her intervention
-        passiveTableContextRef.current = [];
-        setPassiveTableContext([]);
-      }
-
-      const noraTurn: OnAirDialogueMessage = {
-        id: `turn-n-${Date.now()}`,
-        speaker: "NORA_CO_HOST",
-        speakerLabel: `Nora (${activeCfg.programName} • ${spokenLang} • ${emotionLabel})`,
-        text: noraReply,
-        timestamp: new Date().toLocaleTimeString("es-AR", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
-        modelBadge: isDegraded
-          ? `⚠️ SIN INFERENCIA • HTTP ${res.status}`
-          : `${data.emotion_state || "WARM_EMPATHIC"} • ${
-              data.model_used || "LLM"
-            } • ${data.latency_ms ?? 0}ms`,
-        degraded: isDegraded,
-      };
-
-      const updatedWithNora = [...dialogueHistoryRef.current, noraTurn];
-      dialogueHistoryRef.current = updatedWithNora;
-      setDialogueHistory(updatedWithNora);
-
-      onAppendLog(
-        "NORA_CO_HOST_ON_AIR",
-        `Nora al aire [${activeCfg.programName} | ${data.emotion_state || "WARM_EMPATHIC"}]: "${noraReply.slice(0, 90)}..."`,
-        "SUCCESS"
-      );
-
-      if (ttsEnabled) {
-        speakNoraAloud(noraReply, spokenLang, speechRate, pitchShift);
-      }
-    } catch {
-      const firstHost =
-        (activeCfg.hostNames || "Equipo").split(/\s+y\s+|,/)[0].trim() ||
-        "Equipo";
-      const fallbackReply = `Perdón ${firstHost}, se nos cortó un segundo la línea con cabina. ¿Me repetís la pregunta?`;
-      onAppendLog(
-        "LLM_INFERENCE_ERROR",
-        "Error de red al contactar /api/nexora/radio-chat.",
-        "WARN"
-      );
-      const fallbackTurn: OnAirDialogueMessage = {
-        id: `turn-n-${Date.now()}`,
-        speaker: "NORA_CO_HOST",
-        speakerLabel: `Nora (${activeCfg.programName})`,
-        text: fallbackReply,
-        timestamp: nowStr,
-        modelBadge: "⚠️ SIN CONEXIÓN CON EL SERVIDOR",
-        degraded: true,
-      };
-      const updatedFallback = [...dialogueHistoryRef.current, fallbackTurn];
-      dialogueHistoryRef.current = updatedFallback;
-      setDialogueHistory(updatedFallback);
-      if (ttsEnabled) {
-        speakNoraAloud(fallbackReply);
-      }
-    } finally {
-      isSendingToNoraRef.current = false;
-      setIsSendingToNora(false);
-    }
-  };
-
   /**
    * Initializes or returns the Sound Cart Web Audio context and calibrated gain hierarchy.
    */

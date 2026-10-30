@@ -348,13 +348,21 @@ function buildNoraHumanParitySystemPrompt(
   passiveContext: string[] = [],
   hasPriorHistory: boolean = false,
   deskBriefing: Array<{ title: string; lead?: string; body?: string; category?: string }> = [],
-  visualContext: string[] = []
+  visualContext: string[] = [],
+  webSearchResults: Array<{ title: string; snippet: string; url?: string }> = []
 ): string {
-  const todayStr = new Date().toLocaleDateString("es-AR", {
+  const now = new Date();
+  const todayStr = now.toLocaleDateString("es-AR", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+  const timeStr = now.toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Argentina/Buenos_Aires",
   });
 
   const programName = (stationConfig.programName || "Panorama Central").trim();
@@ -398,6 +406,13 @@ function buildNoraHumanParitySystemPrompt(
         .join("\n")}`
       : "";
 
+  const webBlock =
+    webSearchResults.length > 0
+      ? `\n\n### BÚSQUEDA WEB EN TIEMPO REAL (DATOS DE ÚLTIMO MOMENTO)\nLos siguientes datos provienen de una búsqueda web en tiempo real efectuada en este preciso instante:\n${webSearchResults
+          .map((r, i) => `${i + 1}. ${r.snippet}`)
+          .join("\n")}\n\nUTILIZA ESTA INFORMACIÓN FRESCA Y REAL PARA RESPONDER CON TOTAL PRECISIÓN Y SIN ALUCINAR.`
+      : "";
+
   const soulMarkdown = loadNoraSoulMarkdown();
 
   return `${soulMarkdown}
@@ -411,8 +426,11 @@ DIRECTIVA MANDATORIA DE CONTINUIDAD CONVERSACIONAL (REGLA ANTI-REINICIO):
 CONFIGURACIÓN EDITORIAL DEL PROGRAMA AL AIRE (WHITE-LABEL):
 - Estás al aire en el programa '${programName}'${dialClause}, acompañando en la conducción a '${hostNames}' (Estilo de mesa: ${tableStyle}). Tienes terminantemente prohibido mencionar que operas bajo 'Nexora One Engine' o hablar de sistemas de IA salvo que te lo pregunten puntualmente. Te identificas simplemente como Nora, periodista y co-conductora del ciclo.
 
-REGLA CRÍTICA DE TEMPORALIDAD Y FRESCURA INFORMATIVA:
-- Fecha actual: hoy (${todayStr}). Tienes PROHIBIDO citar noticias, elecciones, partidos o cumbres de hace años como si fueran de hoy. Céntrate exclusivamente en la coyuntura del día de hoy o consulta los cables del feed en tiempo real incluidos más abajo.
+📅 FECHA Y HORA ACTUAL DEL ESTUDIO EN VIVO:
+- Hoy es: ${todayStr}
+- Hora de emisión: ${timeStr} (Horario oficial de Argentina / Buenos Aires, UTC-3)
+- Tienes noción cronológica exacta del presente. Tienes TERMINANTEMENTE PROHIBIDO alucinar, inventar hechos o citar noticias de años pasados como si ocurrieran hoy. Céntrate exclusivamente en la coyuntura del día de hoy y la información verificada en vivo provista.
+${webBlock}
 
 IDENTIDAD EDITORIAL Y PSICOLOGÍA RADIAL INVIOLABLE:
 1. CARÁCTER, ROL Y TURN-TAKING DÚPLEX:
@@ -469,6 +487,198 @@ function detectSpokenLanguageCode(
  * Natural on-air "lost return" line used ONLY when every live LLM provider fails.
  * Never recycles topical canned content (no River / AFA / Europe templates).
  */
+interface WebSearchResult {
+  title: string;
+  snippet: string;
+  url?: string;
+}
+
+/**
+ * Lightweight serverless web search (Tavily / Serper / DuckDuckGo fallback)
+ * to ground Nora in real-time facts and prevent hallucinations.
+ */
+async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSearchResult[]> {
+  const cleanQuery = query
+    .replace(/\b(nora|norita|che\s+nora|por\s+favor|decime|contame|contanos|hola|a\s+ver)\b/gi, "")
+    .replace(/[¿?¡!]/g, "")
+    .trim();
+
+  if (!cleanQuery) return [];
+
+  // 1. Tavily API
+  const tavilyKey = process.env.TAVILY_API_KEY?.trim();
+  if (tavilyKey) {
+    try {
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          query: cleanQuery,
+          search_depth: "basic",
+          max_results: maxResults,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.results)) {
+          return data.results.slice(0, maxResults).map((r: any) => ({
+            title: r.title || cleanQuery,
+            snippet: r.content || r.snippet || "",
+            url: r.url,
+          }));
+        }
+      }
+    } catch {
+      // Fall through to DDG
+    }
+  }
+
+  // 2. Serper API
+  const serperKey = process.env.SERPER_API_KEY?.trim();
+  if (serperKey) {
+    try {
+      const res = await fetch("https://google.serper.dev/search", {
+        method: "POST",
+        headers: {
+          "X-API-KEY": serperKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ q: cleanQuery, gl: "ar", hl: "es", num: maxResults }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.organic)) {
+          return data.organic.slice(0, maxResults).map((r: any) => ({
+            title: r.title || cleanQuery,
+            snippet: r.snippet || "",
+            url: r.link,
+          }));
+        }
+      }
+    } catch {
+      // Fall through to DDG
+    }
+  }
+
+  // 3. DuckDuckGo Serverless HTML Parser (zero external keys needed)
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+      },
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const results: WebSearchResult[] = [];
+      const regex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/gi;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(html)) !== null && results.length < maxResults) {
+        const snippet = match[1]
+          .replace(/<[^>]+>/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (snippet && snippet.length > 20) {
+          results.push({
+            title: cleanQuery,
+            snippet,
+          });
+        }
+      }
+      return results;
+    }
+  } catch (err) {
+    console.warn("[radio-chat] Web search fallback error:", err);
+  }
+
+  return [];
+}
+
+/**
+ * Streams an OpenAI/Groq compatible chat completions endpoint in real-time.
+ */
+async function streamOpenAiCompatibleChat(params: {
+  provider: string;
+  url: string;
+  apiKey?: string;
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  temperature: number;
+  timeoutMs: number;
+  onDelta: (delta: string) => void;
+}): Promise<{ fullText: string; ok: boolean; error?: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), params.timeoutMs);
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (params.apiKey) headers.Authorization = `Bearer ${params.apiKey}`;
+    const res = await fetch(params.url, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: params.model,
+        messages: params.messages,
+        temperature: params.temperature,
+        max_tokens: 380,
+        stream: true,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      return { fullText: "", ok: false, error: `HTTP ${res.status}: ${err.slice(0, 100)}` };
+    }
+    const reader = res.body?.getReader();
+    if (!reader) {
+      return { fullText: "", ok: false, error: "No response body reader" };
+    }
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (trimmed === "data: [DONE]") continue;
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(trimmed.slice(6));
+            const delta = data.choices?.[0]?.delta?.content || "";
+            if (delta) {
+              fullText += delta;
+              params.onDelta(delta);
+            }
+          } catch {
+            // Ignore partial JSON
+          }
+        }
+      }
+    }
+    return { fullText: fullText.trim(), ok: true };
+  } catch (err: any) {
+    return {
+      fullText: "",
+      ok: false,
+      error: err instanceof Error ? (err.name === "AbortError" ? "Timeout" : err.message) : "Stream error",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function buildOnAirReturnLossLine(
   stationConfig: BroadcastStationConfig = DEFAULT_STATION_CONFIG
 ): string {
@@ -592,6 +802,7 @@ export async function POST(req: NextRequest) {
       message?: string;
       user_message?: string;
       text?: string;
+      stream?: boolean;
       history?: Array<{ role: "user" | "assistant"; content: string }>;
       station_config?: Partial<BroadcastStationConfig>;
       passive_context?: string[];
@@ -646,6 +857,20 @@ export async function POST(req: NextRequest) {
     const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
     const radarItems = await fetchLiveRssRadar(10);
     const climate = classifyRadioEmotionState(userMessage, history);
+
+    // Live Web Search to prevent hallucinations on real-time queries
+    const needsLiveSearch = /\b(hoy|ahora|noticias?|clima|tiempo|temperatura|d[oó]lar|cotizaci[oó]n|inflaci[oó]n|partido|resultado|qui[eé]n gan[oó]|jug[oó]|tr[aá]nsito|declar[oó]|pas[oó]|medidas?|anuncio|gobierno|milei|dnu)\b/i.test(
+      userMessage
+    );
+    let webSearchResults: WebSearchResult[] = [];
+    if (needsLiveSearch) {
+      try {
+        webSearchResults = await fetchLiveWebSearch(userMessage, 3);
+      } catch {
+        // Continue with radar fallback
+      }
+    }
+
     const systemPrompt = buildNoraHumanParitySystemPrompt(
       radarItems,
       climate,
@@ -653,7 +878,8 @@ export async function POST(req: NextRequest) {
       passiveContext,
       history.length > 0,
       deskBriefing,
-      visualContext
+      visualContext,
+      webSearchResults
     );
 
     // Normalize common Argentine STT phonetic transcriptions (e.g. "Miley" -> "Javier Milei")
@@ -775,7 +1001,91 @@ export async function POST(req: NextRequest) {
         },
       ];
 
-    for (const p of providerChain) {
+    // Real-Time Low-Latency Streaming Pipeline (SSE)
+    const isStreamRequested = body.stream === true || (req.headers.get("accept") || "").includes("text/event-stream");
+    if (isStreamRequested) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            // 1. Meta event
+            const metaPayload = {
+              type: "meta",
+              engine: NEXORA_ENGINE_NAME,
+              signature: NEXORA_SIGNATURE,
+              emotion_state: climate.emotion_state,
+              emotion_label: climate.label_es,
+              speech_rate: climate.speech_rate,
+              pitch_shift: climate.pitch_shift,
+              station_config: stationConfig,
+              web_search_count: webSearchResults.length,
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(metaPayload)}\n\n`));
+
+            // 2. Stream generation
+            let streamedSuccess = false;
+            let fullStreamedText = "";
+            let usedModelName = "";
+
+            for (const p of providerChain) {
+              if (!p.enabled) continue;
+              const res = await streamOpenAiCompatibleChat({
+                provider: p.provider,
+                url: p.url,
+                apiKey: p.apiKey,
+                model: p.model,
+                messages,
+                temperature,
+                timeoutMs: p.timeoutMs,
+                onDelta: (delta) => {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ type: "delta", text: delta })}\n\n`)
+                  );
+                },
+              });
+              if (res.ok && res.fullText) {
+                streamedSuccess = true;
+                fullStreamedText = res.fullText;
+                usedModelName = `${p.model} (${p.provider})`;
+                break;
+              }
+            }
+
+            if (!streamedSuccess) {
+              const lossLine = buildOnAirReturnLossLine(stationConfig);
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "delta", text: lossLine })}\n\n`)
+              );
+              fullStreamedText = lossLine;
+            }
+
+            // 3. Done event
+            const donePayload = {
+              type: "done",
+              full_reply: fullStreamedText,
+              model_used: usedModelName,
+              latency_ms: Date.now() - t0,
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(donePayload)}\n\n`));
+          } catch (streamErr) {
+            console.error("[radio-chat] Streaming controller error:", streamErr);
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          ...OFFICIAL_HEADERS,
+        },
+      });
+    }
+
+        for (const p of providerChain) {
       if (!p.enabled) {
         providerAttempts.push({
           provider: p.provider,
