@@ -617,7 +617,7 @@ async function streamOpenAiCompatibleChat(params: {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (params.apiKey) headers.Authorization = `Bearer ${params.apiKey}`;
+    if (params.apiKey) headers.Authorization = `Bearer ${params.apiKey.trim()}`;
     const res = await fetch(params.url, {
       method: "POST",
       headers,
@@ -632,6 +632,14 @@ async function streamOpenAiCompatibleChat(params: {
     });
     if (!res.ok) {
       const err = await res.text().catch(() => "");
+      if (params.provider.includes("SambaNova")) {
+        console.error("[SAMBANOVA_ERROR]", res.status, err);
+      } else if (
+        params.provider.includes("Groq") &&
+        (params.model.includes("vision") || params.provider.includes("Vision"))
+      ) {
+        console.error("[GROQ_VISION_ERROR]", res.status, err);
+      }
       return { fullText: "", ok: false, error: `HTTP ${res.status}: ${err.slice(0, 100)}` };
     }
     const reader = res.body?.getReader();
@@ -717,7 +725,7 @@ async function callOpenAiCompatibleChat(params: {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (params.apiKey) headers.Authorization = `Bearer ${params.apiKey}`;
+    if (params.apiKey) headers.Authorization = `Bearer ${params.apiKey.trim()}`;
     const res = await fetch(params.url, {
       method: "POST",
       headers,
@@ -730,7 +738,15 @@ async function callOpenAiCompatibleChat(params: {
       }),
     });
     if (!res.ok) {
-      const errBody = (await res.text().catch(() => "")).slice(0, 240);
+      const errBody = await res.text().catch(() => "");
+      if (params.provider.includes("SambaNova")) {
+        console.error("[SAMBANOVA_ERROR]", res.status, errBody);
+      } else if (
+        params.provider.includes("Groq") &&
+        (params.model.includes("vision") || params.provider.includes("Vision"))
+      ) {
+        console.error("[GROQ_VISION_ERROR]", res.status, errBody);
+      }
       return {
         text: "",
         attempt: {
@@ -738,7 +754,7 @@ async function callOpenAiCompatibleChat(params: {
           model: params.model,
           ok: false,
           status: res.status,
-          error: errBody || res.statusText,
+          error: errBody.slice(0, 240) || res.statusText,
           latency_ms: Date.now() - t,
         },
       };
@@ -951,6 +967,8 @@ export async function POST(req: NextRequest) {
     const moonshotKey = resolveLiveApiKey("MOONSHOT_API_KEY");
     const sambaVisionModel =
       process.env.SAMBANOVA_MODEL_VISION?.trim() || "Llama-3.2-11B-Vision-Instruct";
+    const groqVisionModel =
+      process.env.GROQ_MODEL_VISION?.trim() || "llama-3.2-11b-vision-preview";
     const ollamaBase = (
       process.env.OLLAMA_TUNNEL_URL ||
       process.env.OLLAMA_BASE_URL ||
@@ -959,6 +977,48 @@ export async function POST(req: NextRequest) {
       .trim()
       .replace(/\/+$/, "");
     const vllmBase = (process.env.VLLM_BASE_URL || "").trim().replace(/\/+$/, "");
+
+    const visionProviders: Array<{
+      provider: string;
+      url: string;
+      apiKey?: string;
+      model: string;
+      timeoutMs: number;
+      enabled: boolean;
+      isVision: boolean;
+    }> = [
+      {
+        provider: "SambaNova Cloud (Vision)",
+        url: "https://api.sambanova.ai/v1/chat/completions",
+        apiKey: sambaKey,
+        model: sambaVisionModel,
+        timeoutMs: 9500,
+        enabled: Boolean(sambaKey),
+        isVision: true,
+      },
+      ...(sambaVisionModel !== "Meta-Llama-3.2-11B-Vision-Instruct"
+        ? [
+            {
+              provider: "SambaNova Cloud (Vision Meta)",
+              url: "https://api.sambanova.ai/v1/chat/completions",
+              apiKey: sambaKey,
+              model: "Meta-Llama-3.2-11B-Vision-Instruct",
+              timeoutMs: 9500,
+              enabled: Boolean(sambaKey),
+              isVision: true,
+            },
+          ]
+        : []),
+      {
+        provider: "Groq LPU (Vision Fallback)",
+        url: "https://api.groq.com/openai/v1/chat/completions",
+        apiKey: groqKey,
+        model: groqVisionModel,
+        timeoutMs: 9500,
+        enabled: Boolean(groqKey),
+        isVision: true,
+      },
+    ];
 
     const providerChain: Array<{
       provider: string;
@@ -969,19 +1029,7 @@ export async function POST(req: NextRequest) {
       enabled: boolean;
       isVision?: boolean;
     }> = [
-        ...(formattedImageUrl
-          ? [
-              {
-                provider: "SambaNova Cloud (Vision)",
-                url: "https://api.sambanova.ai/v1/chat/completions",
-                apiKey: sambaKey,
-                model: sambaVisionModel,
-                timeoutMs: 9500,
-                enabled: Boolean(sambaKey),
-                isVision: true,
-              },
-            ]
-          : []),
+        ...(formattedImageUrl ? visionProviders : []),
         {
           provider: "Groq LPU",
           url: "https://api.groq.com/openai/v1/chat/completions",
@@ -1075,7 +1123,7 @@ export async function POST(req: NextRequest) {
             let usedModelName = "";
 
             const activeChain = formattedImageUrl
-              ? providerChain.filter((p) => p.isVision)
+              ? visionProviders
               : providerChain;
 
             for (const p of activeChain) {
@@ -1104,7 +1152,7 @@ export async function POST(req: NextRequest) {
 
             if (!streamedSuccess) {
               const fallbackLine = formattedImageUrl
-                ? "No logré captar la imagen de la cámara en este instante."
+                ? "No puedo ver tu cámara en este momento por un fallo en el servicio visual."
                 : buildOnAirReturnLossLine(stationConfig);
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: "delta", text: fallbackLine })}\n\n`)
@@ -1139,9 +1187,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-        const nonStreamChain = formattedImageUrl
-        ? providerChain.filter((p) => p.isVision)
-        : providerChain;
+    const nonStreamChain = formattedImageUrl
+      ? visionProviders
+      : providerChain;
 
     for (const p of nonStreamChain) {
       if (!p.enabled) {
@@ -1177,7 +1225,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!rawReply && formattedImageUrl) {
-      rawReply = "No logré captar la imagen de la cámara en este instante.";
+      rawReply = "No puedo ver tu cámara en este momento por un fallo en el servicio visual.";
       modelUsed = "Visión no disponible";
     }
 
