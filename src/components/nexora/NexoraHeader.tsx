@@ -7,9 +7,10 @@
  * Component: src/components/nexora/NexoraHeader.tsx
  */
 
-import React from "react";
-import { Activity, Cpu, Radio, ShieldCheck, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { Activity, Cpu, QrCode, Radio, ShieldCheck, Sparkles } from "lucide-react";
 import { NEXORA_ENGINE_NAME, NEXORA_SIGNATURE } from "@/lib/nexora/types";
+import { ShareModal } from "@/components/ui/ShareModal";
 
 export interface NexoraHeaderProps {
   gatewayOnline: boolean;
@@ -24,6 +25,8 @@ export function NexoraHeader({
   lastCorrelationId,
   onQuickMasterDispatch,
 }: NexoraHeaderProps) {
+  const [showShareModal, setShowShareModal] = useState(false);
+
   return (
     <header className="w-full bg-slate-950/95 border-b border-cyan-500/20 px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0 z-30">
       {/* Official Brand Identity & Wide LogoNexoraOne.png */}
@@ -50,7 +53,7 @@ export function NexoraHeader({
         </div>
       </div>
 
-      {/* Live Infrastructure Status Badges */}
+      {/* Live Infrastructure Status Badges & Quick Tools */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
           <span
@@ -60,6 +63,17 @@ export function NexoraHeader({
           />
           <span>Gateway: {gatewayOnline ? "ONLINE" : "STANDBY"}</span>
         </div>
+
+        {/* Botón QR Compartir y Conectar Móvil PWA */}
+        <button
+          type="button"
+          onClick={() => setShowShareModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/30 hover:border-cyan-400/60 text-[11px] text-cyan-300 transition-all cursor-pointer shadow-sm"
+          title="Compartir estación o instalar PWA en móvil con código QR"
+        >
+          <QrCode size={13} className="text-cyan-400" />
+          <span>Compartir QR</span>
+        </button>
 
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-cyan-300">
           <Cpu size={13} />
@@ -97,6 +111,13 @@ export function NexoraHeader({
           )}
         </button>
       </div>
+
+      {/* Modal interactivo de compartir con QR dinámico */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        url="https://nexora-one-engine.vercel.app"
+      />
     </header>
   );
 }

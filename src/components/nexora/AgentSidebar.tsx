@@ -78,7 +78,13 @@ export function AgentSidebar({
   };
 
   return (
-    <aside className="w-full lg:w-72 bg-slate-950/90 border-b lg:border-b-0 lg:border-r border-slate-800/80 p-3 flex flex-col justify-between shrink-0">
+    <aside
+      className="w-full lg:w-72 bg-slate-950/90 border-b lg:border-b-0 lg:border-r border-slate-800/80 p-3 flex flex-col justify-between shrink-0 overflow-y-auto max-h-[calc(100vh-120px)] pb-6 scrollbar-thin scrollbar-thumb-cyan-500/20"
+      style={{
+        scrollbarWidth: "thin",
+        scrollbarColor: "rgba(6, 182, 212, 0.25) transparent",
+      }}
+    >
       <div>
         <div className="px-2 py-1.5 mb-2 flex items-center justify-between">
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
@@ -129,8 +135,8 @@ export function AgentSidebar({
         </nav>
       </div>
 
-      {/* Fullstack Code Sandbox Status Card */}
-      <div className="mt-4 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+      {/* Fullstack Code Sandbox Status Card (Siempre visible y accesible con scroll) */}
+      <div className="mt-4 p-3 rounded-xl bg-slate-900/80 border border-slate-800 shadow-md">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-200 mb-1">
           <Terminal size={14} className="text-cyan-400" />
           <span>Fullstack Code Sandbox</span>
@@ -143,4 +149,3 @@ export function AgentSidebar({
     </aside>
   );
 }
-

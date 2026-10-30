@@ -3,13 +3,13 @@ export const dynamic = "force-dynamic";
 import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "Nora Itu PRO",
-  description: "Plataforma de IA Inclusiva Corporativa - Nexora One",
+  title: "Nexora One Engine • Nexora OS",
+  description: "Multi-Agent Industrial OS • Orchestrator: Nora Itu (Core / COO)",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Nora Itu PRO",
+    title: "Nexora OS",
   },
   icons: {
     icon: "/icon-192x192.png",
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#050B14",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -41,7 +41,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="theme-color" content="#09090b" />
+        <meta name="theme-color" content="#050B14" />
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
         <script src="https://cdn.tailwindcss.com"></script>
         {/* Estructura para móviles, PWAs y navegadores de escritorio */}
@@ -52,7 +52,7 @@ export default function RootLayout({
             width: 100% !important;
             margin: 0;
             padding: 0;
-            background-color: #020617;
+            background-color: #050B14;
             overflow: hidden !important;
             overscroll-behavior: none !important;
             overscroll-behavior-y: none !important;
@@ -72,7 +72,7 @@ export default function RootLayout({
           }
         `}} />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#020617", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100%", overflow: "hidden", overscrollBehavior: "none", overscrollBehaviorY: "none", touchAction: "none" }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#050B14", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100%", overflow: "hidden", overscrollBehavior: "none", overscrollBehaviorY: "none", touchAction: "none" }}>
         <NoraSecurityProvider>
           {children}
           <NoraCopilot />
