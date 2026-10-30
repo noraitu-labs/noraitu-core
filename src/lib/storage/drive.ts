@@ -4,7 +4,7 @@ import path from "path";
 
 // ══════════════════════════════════════════════════════════════
 //  NEXORA ONE — Enterprise Data Lake (Google Drive 5TB)
-//  Secure, audited asset upload and retrieval client
+//  Personal OAuth2 Quota Delegation & Fallback Engine
 // ══════════════════════════════════════════════════════════════
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -39,15 +39,28 @@ const ALLOWED_EXTENSIONS = new Set([
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB strict limit
 
 /**
- * Creates and returns an authenticated Google Drive API client using Service Account credentials.
+ * Creates and returns an authenticated Google Drive API client.
+ * Prioritizes OAuth2 User Refresh Token (direct 5 TB personal quota) with fallback to Service Account JWT.
  */
 export function getDriveClient() {
+  const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN || "").trim();
+  const clientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+
+  // 1. Primary: OAuth2 Refresh Token (Personal 5 TB Account)
+  if (refreshToken && clientId && clientSecret) {
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    return google.drive({ version: "v3", auth: oauth2Client });
+  }
+
+  // 2. Fallback: Service Account JWT
   const email = (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "").trim();
   const rawKey = (process.env.GOOGLE_PRIVATE_KEY || "").trim();
 
   if (!email || !rawKey) {
     throw new Error(
-      "Credenciales de Google Service Account ausentes (GOOGLE_SERVICE_ACCOUNT_EMAIL o GOOGLE_PRIVATE_KEY)."
+      "Credenciales de autenticación de Google Drive ausentes (OAuth2 GOOGLE_REFRESH_TOKEN o Service Account GOOGLE_SERVICE_ACCOUNT_EMAIL)."
     );
   }
 
@@ -143,15 +156,7 @@ export async function uploadEnterpriseAsset(
     };
   }
 
-  const rootFolderId = (process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "").trim();
-  if (!rootFolderId) {
-    return {
-      ok: false,
-      fileName,
-      sizeBytes: buffer.length,
-      error: "Variable GOOGLE_DRIVE_ROOT_FOLDER_ID no configurada en el entorno.",
-    };
-  }
+  const rootFolderId = (process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "").trim() || "1zJIsPi3KgeA6Az8qNHXLoqLgOvgyj6UG";
 
   try {
     const drive = getDriveClient();
@@ -196,10 +201,7 @@ export async function uploadEnterpriseAsset(
  * Lists enterprise assets located in the root or a given subfolder of the Data Lake.
  */
 export async function listEnterpriseAssets(subfolder?: string, pageSize = 20) {
-  const rootFolderId = (process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "").trim();
-  if (!rootFolderId) {
-    throw new Error("Variable GOOGLE_DRIVE_ROOT_FOLDER_ID no configurada.");
-  }
+  const rootFolderId = (process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "").trim() || "1zJIsPi3KgeA6Az8qNHXLoqLgOvgyj6UG";
 
   const drive = getDriveClient();
   const targetFolderId = await resolveTargetFolderId(drive, rootFolderId, subfolder);
@@ -215,4 +217,3 @@ export async function listEnterpriseAssets(subfolder?: string, pageSize = 20) {
 
   return res.data.files || [];
 }
-
