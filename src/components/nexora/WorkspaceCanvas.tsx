@@ -345,6 +345,10 @@ export function WorkspaceCanvas({
   const lastNoraSpeechEndMsRef = useRef<number>(0);
   const lastInteractionEpochMsRef = useRef<number>(0);
   const interimSpeechTimeoutRef = useRef<any>(null);
+  const speechSilenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const accumulatedSpeechTranscriptRef = useRef<string>("");
+  const latestInterimSpeechRef = useRef<string>("");
+  const latestCameraFrameBase64Ref = useRef<string | null>(null);
   const selectedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
   const sentenceQueueRef = useRef<Array<{ id: string; sentenceText: string; audio: HTMLAudioElement; status: "ready" | "playing" | "played" | "error" }>>([]);
@@ -921,41 +925,20 @@ export function WorkspaceCanvas({
     }
 
     const now = Date.now();
-    const hasRecentInteraction =
-      lastInteractionEpochMsRef.current > 0 &&
-      now - lastInteractionEpochMsRef.current < 60000;
-    const isWakeWordPresent = containsNoraWakeWord(transcript);
+    const isBoothActive = openMicDuplexModeRef.current || isListeningMicRef.current;
 
-    if (openMicDuplexModeRef.current || isListeningMicRef.current) {
-      // Continuous conversation: if booth is active and interaction occurred within 60s, or wake-word is present:
-      if (isWakeWordPresent || hasRecentInteraction) {
-        lastInteractionEpochMsRef.current = now;
-        consoleInputRef.current = "";
-        setConsoleInput("");
-        onAppendLog(
-          "CABINA_CONTINUA",
-          isWakeWordPresent
-            ? `Llamado a Nora detectado: "${transcript.slice(0, 80)}" -> Procesando al aire.`
-            : `Conversación continua activa (ventana <60s): "${transcript.slice(0, 80)}" -> Procesando automáticamente.`,
-          "SUCCESS"
-        );
-        void handleSendRadioDialogue(transcript);
-      } else {
-        // Fuera de ventana de 60s sin nombrar a Nora: guardar en memoria pasiva
-        consoleInputRef.current = transcript;
-        setConsoleInput(transcript);
-        const nextPassive = [
-          ...passiveTableContextRef.current.slice(-7),
-          transcript,
-        ];
-        passiveTableContextRef.current = nextPassive;
-        setPassiveTableContext(nextPassive);
-        onAppendLog(
-          "CABINA_ESCUCHA_PASIVA",
-          `Frase en mesa guardada (mencioná a 'Nora' o pulsá Enter para enviar): "${transcript.slice(0, 80)}"`,
-          "INFO"
-        );
-      }
+    if (isBoothActive) {
+      // Continuous booth conversation: dispatch automatically upon 2.5s silence completion.
+      // NO wake-word "Nora" required, NO getting stuck in CABINA_ESCUCHA_PASIVA.
+      lastInteractionEpochMsRef.current = now;
+      consoleInputRef.current = "";
+      setConsoleInput("");
+      onAppendLog(
+        "CABINA_CONTINUA",
+        `Voz en cabina recibida (silencio 2.5s cumplido): "${transcript.slice(0, 80)}" -> Procesando automáticamente.`,
+        "SUCCESS"
+      );
+      void handleSendRadioDialogue(transcript);
     } else {
       lastInteractionEpochMsRef.current = now;
       consoleInputRef.current = "";
@@ -1054,11 +1037,11 @@ export function WorkspaceCanvas({
           } else if (
             voiceSpokeDuringChunkRef.current &&
             levelPct <= 10 &&
-            now - silenceSinceMsRef.current > 1350
+            now - silenceSinceMsRef.current > 2500
           ) {
             voiceSpokeDuringChunkRef.current = false;
             if (
-              now - lastSpeechRecResultMsRef.current > 1800 &&
+              now - lastSpeechRecResultMsRef.current > 2500 &&
               mediaRecorderRef.current &&
               mediaRecorderRef.current.state === "recording"
             ) {
@@ -1094,7 +1077,7 @@ export function WorkspaceCanvas({
               const now = Date.now();
               if (
                 chunks.length > 0 &&
-                now - lastSpeechRecResultMsRef.current > 1400 &&
+                now - lastSpeechRecResultMsRef.current > 2500 &&
                 !isNoraSpeakingRef.current
               ) {
                 const audioBlob = new Blob(chunks, {
@@ -1116,7 +1099,7 @@ export function WorkspaceCanvas({
                       const whisperText = (sttData.transcript || "").trim();
                       if (
                         whisperText &&
-                        now - lastSpeechRecResultMsRef.current > 1200
+                        now - lastSpeechRecResultMsRef.current > 2500
                       ) {
                         lastSpeechRecResultMsRef.current = Date.now();
                         onAppendLog(
@@ -1245,8 +1228,8 @@ export function WorkspaceCanvas({
 
       lastSpeechRecResultMsRef.current = Date.now();
 
-      let interimText = "";
-      let finalText = "";
+      let interimPiece = "";
+      let newlyFinalPiece = "";
 
       const startIdx =
         typeof event.resultIndex === "number" ? event.resultIndex : 0;
@@ -1255,42 +1238,71 @@ export function WorkspaceCanvas({
         const piece = (resItem?.[0]?.transcript || "").trim();
         if (!piece) continue;
         if (resItem.isFinal) {
-          finalText += (finalText ? " " : "") + piece;
+          newlyFinalPiece += (newlyFinalPiece ? " " : "") + piece;
         } else {
-          interimText += (interimText ? " " : "") + piece;
+          interimPiece += (interimPiece ? " " : "") + piece;
         }
       }
 
+      if (newlyFinalPiece) {
+        accumulatedSpeechTranscriptRef.current = (
+          accumulatedSpeechTranscriptRef.current +
+          " " +
+          newlyFinalPiece
+        ).trim();
+      }
+      latestInterimSpeechRef.current = interimPiece;
+
+      const liveSpokenDisplay = (
+        accumulatedSpeechTranscriptRef.current +
+        " " +
+        interimPiece
+      ).trim();
+
       // Show preliminary transcription directly in the fixed DOM banner (zero layout shift)
-      if (interimText && interimBannerDomRef.current) {
-        interimBannerDomRef.current.textContent = `🗣️ Escuchando: "${interimText}"`;
+      if (liveSpokenDisplay && interimBannerDomRef.current) {
+        interimBannerDomRef.current.textContent = `🗣️ Escuchando: "${liveSpokenDisplay}"`;
       }
 
+      // Continuous 2.5s silence window: restart timer on every incoming speech chunk
+      if (speechSilenceTimerRef.current) {
+        clearTimeout(speechSilenceTimerRef.current);
+      }
       if (interimSpeechTimeoutRef.current) {
         clearTimeout(interimSpeechTimeoutRef.current);
       }
-      if (interimText && !finalText) {
-        interimSpeechTimeoutRef.current = setTimeout(() => {
-          if (!isNoraSpeakingRef.current && interimText.trim().length > 3) {
-            dispatchCapturedSpeechTranscript(interimText.trim());
-          }
-        }, 1350);
-      }
 
-      if (finalText) {
-        dispatchCapturedSpeechTranscript(finalText);
-        if (!duplexContinuous && !openMicDuplexModeRef.current) {
-          try {
-            rec.onend = null;
-            rec.stop();
-          } catch {
-            // Ignore
+      speechSilenceTimerRef.current = setTimeout(() => {
+        const fullTranscript = (
+          accumulatedSpeechTranscriptRef.current +
+          " " +
+          latestInterimSpeechRef.current
+        ).trim();
+
+        // Clear accumulation buffers
+        accumulatedSpeechTranscriptRef.current = "";
+        latestInterimSpeechRef.current = "";
+
+        if (
+          !isNoraSpeakingRef.current &&
+          fullTranscript.length > 2 &&
+          (openMicDuplexModeRef.current || isListeningMicRef.current)
+        ) {
+          dispatchCapturedSpeechTranscript(fullTranscript);
+
+          if (!duplexContinuous && !openMicDuplexModeRef.current) {
+            try {
+              rec.onend = null;
+              rec.stop();
+            } catch {
+              // Ignore
+            }
+            isListeningMicRef.current = false;
+            setIsListeningMic(false);
+            releaseHardwareStudioAudioStream();
           }
-          isListeningMicRef.current = false;
-          setIsListeningMic(false);
-          releaseHardwareStudioAudioStream();
         }
-      }
+      }, 2500);
     };
 
     rec.onerror = (event: any) => {
@@ -1410,6 +1422,33 @@ export function WorkspaceCanvas({
   };
 
   /**
+   * Captures the current camera video frame to a lightweight JPEG Base64 URI (384x216 at 0.65 quality).
+   */
+  const captureCurrentCameraFrame = (): string | null => {
+    if (typeof window === "undefined") return null;
+    if (!videoPreviewRef.current || !visionCanvasRef.current) {
+      return latestCameraFrameBase64Ref.current;
+    }
+    const video = videoPreviewRef.current;
+    const canvas = visionCanvasRef.current;
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      return latestCameraFrameBase64Ref.current;
+    }
+    try {
+      canvas.width = 384;
+      canvas.height = 216;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return latestCameraFrameBase64Ref.current;
+      ctx.drawImage(video, 0, 0, 384, 216);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
+      latestCameraFrameBase64Ref.current = dataUrl;
+      return dataUrl;
+    } catch {
+      return latestCameraFrameBase64Ref.current;
+    }
+  };
+
+  /**
    * Toggles the live studio webcam for vision grounding and samples keyframes at low frequency.
    */
   const handleToggleStudioCamera = async () => {
@@ -1426,6 +1465,7 @@ export function WorkspaceCanvas({
         videoPreviewRef.current.srcObject = null;
       }
       setStudioCameraActive(false);
+      latestCameraFrameBase64Ref.current = null;
       onAppendLog("VISION_GROUNDING", "Cámara de cabina desactivada.", "INFO");
     } else {
       try {
@@ -1443,21 +1483,12 @@ export function WorkspaceCanvas({
           "SUCCESS"
         );
 
-        // Low-frequency sampling (1 frame every 3.2 seconds) to keep local CPU and network light
+        // Low-frequency sampling (1 frame every 3.5 seconds) to keep local CPU and network light
         visionIntervalRef.current = setInterval(async () => {
-          if (!videoPreviewRef.current || !visionCanvasRef.current) return;
-          const video = videoPreviewRef.current;
-          const canvas = visionCanvasRef.current;
-          if (video.videoWidth === 0 || video.videoHeight === 0) return;
-
-          canvas.width = 320;
-          canvas.height = 180;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
-          ctx.drawImage(video, 0, 0, 320, 180);
+          const dataUrl = captureCurrentCameraFrame();
+          if (!dataUrl) return;
 
           try {
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
             const res = await fetch("/api/nexora/vision-grounding", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1478,7 +1509,7 @@ export function WorkspaceCanvas({
           } catch {
             // Non-blocking drop
           }
-        }, 3200);
+        }, 3500);
       } catch (err: any) {
         onAppendLog(
           "VISION_GROUNDING",
@@ -1557,12 +1588,24 @@ export function WorkspaceCanvas({
     ).trim();
     if (!messageText || isSendingToNoraRef.current) return;
 
-    // Immediately clear input and record interaction timestamp
+    // Immediately clear input, pending silence timers and record interaction timestamp
+    if (speechSilenceTimerRef.current) {
+      clearTimeout(speechSilenceTimerRef.current);
+      speechSilenceTimerRef.current = null;
+    }
+    accumulatedSpeechTranscriptRef.current = "";
+    latestInterimSpeechRef.current = "";
+
     consoleInputRef.current = "";
     setConsoleInput("");
     isSendingToNoraRef.current = true;
     setIsSendingToNora(true);
     lastInteractionEpochMsRef.current = Date.now();
+
+    // Capture the camera frame in real-time at the moment the operator finishes speaking
+    const currentCameraFrame = studioCameraActive
+      ? (captureCurrentCameraFrame() || latestCameraFrameBase64Ref.current)
+      : null;
 
     const activeCfg = stationConfigRef.current;
     const nowStr = new Date().toLocaleTimeString("es-AR", {
@@ -1632,6 +1675,7 @@ export function WorkspaceCanvas({
           history: priorHistoryPayload,
           desk_briefing: deskBriefingItems,
           visual_context: visualStudioContextRef.current,
+          image_base64: currentCameraFrame,
           stream: true,
         }),
       });

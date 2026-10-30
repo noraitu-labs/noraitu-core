@@ -8,6 +8,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { NEXORA_ENGINE_NAME, NEXORA_SIGNATURE } from "@/lib/nexora/types";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const OFFICIAL_HEADERS = {
   "X-Engine": NEXORA_ENGINE_NAME,
   "X-Signature": NEXORA_SIGNATURE,
@@ -41,21 +44,24 @@ export async function POST(req: NextRequest) {
 
     let visualDescription = "El conductor mantiene contacto visual atento y asiente con la cabeza ante el micrófono";
 
-    const groqKey = process.env.GROQ_API_KEY;
-    if (groqKey && !groqKey.startsWith("gsk_NO") && frameDataUrl.length > 200) {
+    const sambaKey = (process.env.SAMBANOVA_API_KEY || "").trim();
+    const sambaVisionModel =
+      (process.env.SAMBANOVA_MODEL_VISION || "").trim() || "Llama-3.2-11B-Vision-Instruct";
+
+    if (frameDataUrl.length > 200 && sambaKey && !sambaKey.startsWith("gsk_NO")) {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 3500);
 
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        const res = await fetch("https://api.sambanova.ai/v1/chat/completions", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${groqKey}`,
+            Authorization: `Bearer ${sambaKey}`,
             "Content-Type": "application/json",
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: "llama-3.2-11b-vision-preview",
+            model: sambaVisionModel,
             messages: [
               {
                 role: "system",
@@ -129,4 +135,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

@@ -606,7 +606,7 @@ async function streamOpenAiCompatibleChat(params: {
   url: string;
   apiKey?: string;
   model: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: any }>;
   temperature: number;
   timeoutMs: number;
   onDelta: (delta: string) => void;
@@ -706,7 +706,7 @@ async function callOpenAiCompatibleChat(params: {
   url: string;
   apiKey?: string;
   model: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: any }>;
   temperature: number;
   timeoutMs: number;
 }): Promise<{ text: string; attempt: LlmProviderAttempt }> {
@@ -808,6 +808,7 @@ export async function POST(req: NextRequest) {
       passive_context?: string[];
       desk_briefing?: Array<{ title: string; lead?: string; body?: string; category?: string }>;
       visual_context?: string[];
+      image_base64?: string | null;
     };
 
     const userMessage = (
@@ -900,7 +901,34 @@ export async function POST(req: NextRequest) {
           .join(" | ")}]\nIntervención directa a Nora: ${normalizedUserMessage}`
         : `${visualNotePrefix}${normalizedUserMessage}`;
 
-    const messages = [
+    const imageBase64 =
+      typeof body.image_base64 === "string" && body.image_base64.trim()
+        ? body.image_base64.trim()
+        : undefined;
+
+    const formattedImageUrl = imageBase64
+      ? imageBase64.startsWith("data:")
+        ? imageBase64
+        : `data:image/jpeg;base64,${imageBase64}`
+      : null;
+
+    const userTurnContentVision = formattedImageUrl
+      ? [
+          { type: "text", text: userContentForLlm },
+          { type: "image_url", image_url: { url: formattedImageUrl } },
+        ]
+      : userContentForLlm;
+
+    const visionMessages = [
+      { role: "system", content: systemPrompt },
+      ...history.map((h) => ({
+        role: h.role === "assistant" ? "assistant" : "user",
+        content: h.content,
+      })),
+      { role: "user", content: userTurnContentVision },
+    ];
+
+    const textMessages = [
       { role: "system", content: systemPrompt },
       ...history.map((h) => ({
         role: h.role === "assistant" ? "assistant" : "user",
@@ -918,6 +946,8 @@ export async function POST(req: NextRequest) {
     const groqKey = resolveLiveApiKey("GROQ_API_KEY");
     const sambaKey = resolveLiveApiKey("SAMBANOVA_API_KEY");
     const moonshotKey = resolveLiveApiKey("MOONSHOT_API_KEY");
+    const sambaVisionModel =
+      process.env.SAMBANOVA_MODEL_VISION?.trim() || "Llama-3.2-11B-Vision-Instruct";
     const ollamaBase = (
       process.env.OLLAMA_TUNNEL_URL ||
       process.env.OLLAMA_BASE_URL ||
@@ -934,7 +964,21 @@ export async function POST(req: NextRequest) {
       model: string;
       timeoutMs: number;
       enabled: boolean;
+      isVision?: boolean;
     }> = [
+        ...(formattedImageUrl
+          ? [
+              {
+                provider: "SambaNova Cloud (Vision)",
+                url: "https://api.sambanova.ai/v1/chat/completions",
+                apiKey: sambaKey,
+                model: sambaVisionModel,
+                timeoutMs: 9500,
+                enabled: Boolean(sambaKey),
+                isVision: true,
+              },
+            ]
+          : []),
         {
           provider: "Groq LPU",
           url: "https://api.groq.com/openai/v1/chat/completions",
@@ -1034,7 +1078,7 @@ export async function POST(req: NextRequest) {
                 url: p.url,
                 apiKey: p.apiKey,
                 model: p.model,
-                messages,
+                messages: p.isVision && formattedImageUrl ? visionMessages : textMessages,
                 temperature,
                 timeoutMs: p.timeoutMs,
                 onDelta: (delta) => {
@@ -1101,7 +1145,7 @@ export async function POST(req: NextRequest) {
         url: p.url,
         apiKey: p.apiKey,
         model: p.model,
-        messages,
+        messages: p.isVision && formattedImageUrl ? visionMessages : textMessages,
         temperature,
         timeoutMs: p.timeoutMs,
       });
