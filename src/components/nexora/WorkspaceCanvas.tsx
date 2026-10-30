@@ -1427,23 +1427,35 @@ export function WorkspaceCanvas({
   const captureCurrentCameraFrame = (): string | null => {
     if (typeof window === "undefined") return null;
     if (!videoPreviewRef.current || !visionCanvasRef.current) {
+      console.warn("[NEXORA_VISION] Elementos video o canvas no disponibles en DOM");
       return latestCameraFrameBase64Ref.current;
     }
     const video = videoPreviewRef.current;
     const canvas = visionCanvasRef.current;
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
+
+    // Verificar que el elemento video tenga datos listos (readyState >= 2) y dimensiones reales
+    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+      console.warn(
+        `[NEXORA_VISION] Elemento <video> no listo para captura: readyState=${video.readyState}, videoWidth=${video.videoWidth}, videoHeight=${video.videoHeight}`
+      );
       return latestCameraFrameBase64Ref.current;
     }
+
     try {
       canvas.width = 384;
       canvas.height = 216;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return latestCameraFrameBase64Ref.current;
+      if (!ctx) {
+        console.warn("[NEXORA_VISION] No se pudo inicializar contexto 2D del canvas");
+        return latestCameraFrameBase64Ref.current;
+      }
       ctx.drawImage(video, 0, 0, 384, 216);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
       latestCameraFrameBase64Ref.current = dataUrl;
+      console.log("[NEXORA_VISION] Frame capturado bytes:", dataUrl.length);
       return dataUrl;
-    } catch {
+    } catch (err) {
+      console.warn("[NEXORA_VISION] Excepción al capturar frame de video:", err);
       return latestCameraFrameBase64Ref.current;
     }
   };
@@ -1475,6 +1487,11 @@ export function WorkspaceCanvas({
         studioCameraStreamRef.current = stream;
         if (videoPreviewRef.current) {
           videoPreviewRef.current.srcObject = stream;
+          try {
+            await videoPreviewRef.current.play();
+          } catch {
+            // Autoplay catch
+          }
         }
         setStudioCameraActive(true);
         onAppendLog(
@@ -1606,6 +1623,7 @@ export function WorkspaceCanvas({
     const currentCameraFrame = studioCameraActive
       ? (captureCurrentCameraFrame() || latestCameraFrameBase64Ref.current)
       : null;
+    console.log("[NEXORA_VISION] Frame capturado bytes:", currentCameraFrame?.length || 0);
 
     const activeCfg = stationConfigRef.current;
     const nowStr = new Date().toLocaleTimeString("es-AR", {
@@ -2269,9 +2287,23 @@ export function WorkspaceCanvas({
             )}
           </div>
 
-          {/* Hidden video & canvas for low-frequency studio vision grounding */}
+          {/* Offscreen video & canvas for studio vision grounding & live frame capture */}
           <canvas ref={visionCanvasRef} className="hidden" />
-          <video ref={videoPreviewRef} autoPlay playsInline muted className="hidden" />
+          <video
+            ref={videoPreviewRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              position: "fixed",
+              top: -9999,
+              left: -9999,
+              width: 640,
+              height: 360,
+              pointerEvents: "none",
+              opacity: 0,
+            }}
+          />
 
           {/* Studio Vision Grounding Monitor (Ojos de Nora en Cabina) */}
           {studioCameraActive && (
