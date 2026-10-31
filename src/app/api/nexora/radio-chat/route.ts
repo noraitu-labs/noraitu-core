@@ -976,7 +976,7 @@ export async function POST(req: NextRequest) {
       : null;
 
     const cognitiveVisualDirective = formattedImageUrl
-      ? "Estás viendo la cabina en tiempo real a través del frame adjunto. Describe con precisión y naturalidad lo que observas (postura, entorno, objetos, gestos)."
+      ? "Estás viendo la cabina en tiempo real a través del frame adjunto. Describe con detalle lo que observas en cabina (personas, gestos, entorno, iluminación)."
       : "";
 
     const userTurnContentVision = formattedImageUrl

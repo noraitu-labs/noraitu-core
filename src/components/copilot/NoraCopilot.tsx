@@ -322,7 +322,7 @@ export function NoraCopilot() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="¿Qué necesitas hacer o encontrar en la consola?"
+                      placeholder="¿Qué necesitas hacer o dónde está X?"
                       className="w-full bg-slate-950/90 border border-slate-700/80 focus:border-cyan-400 pl-9 pr-10 py-2.5 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner"
                     />
                     <button
