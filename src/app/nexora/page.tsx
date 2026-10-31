@@ -49,6 +49,8 @@ import { NexoraFooter } from "@/components/nexora/NexoraFooter";
 export default function NexoraOneEnginePage() {
   const [selectedAgent, setSelectedAgent] =
     useState<NexoraSpecialistAgentId>("RADIO_CO_HOST");
+  const [mobileTab, setMobileTab] =
+    useState<"CABINA" | "AGENTES" | "TELEMETRIA">("CABINA");
 
   const {
     isDispatching,
@@ -71,7 +73,10 @@ export default function NexoraOneEnginePage() {
   };
 
   return (
-    <div className="w-screen h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none">
+    <div
+      className="w-full min-h-screen lg:h-screen lg:overflow-hidden overflow-y-auto bg-slate-950 text-slate-100 flex flex-col select-none"
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
       {/* 1. Top Stitch Header with LogoNexoraOne & Live Badges */}
       <NexoraHeader
         gatewayOnline={gatewayOnline}
@@ -84,6 +89,46 @@ export default function NexoraOneEnginePage() {
           });
         }}
       />
+
+      {/* 1.5 Mobile Navigation Switcher (< lg) — Dedicated Remote Cabin / Agents / Telemetry */}
+      <div className="lg:hidden flex items-center justify-between p-1.5 bg-slate-900/95 border-b border-slate-800 shrink-0 sticky top-0 z-30 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setMobileTab("CABINA")}
+          className={`flex-1 py-2.5 px-2 text-xs font-mono font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 touch-manipulation min-h-[44px] ${
+            mobileTab === "CABINA"
+              ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+          }`}
+        >
+          <span>🎙️</span>
+          <span>Cabina</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("AGENTES")}
+          className={`flex-1 py-2.5 px-2 text-xs font-mono font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 touch-manipulation min-h-[44px] ${
+            mobileTab === "AGENTES"
+              ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+          }`}
+        >
+          <span>🤖</span>
+          <span>Agentes</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("TELEMETRIA")}
+          className={`flex-1 py-2.5 px-2 text-xs font-mono font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 touch-manipulation min-h-[44px] ${
+            mobileTab === "TELEMETRIA"
+              ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+          }`}
+        >
+          <span>📊</span>
+          <span>Telemetría</span>
+        </button>
+      </div>
 
       {/* Optional Error Toast (Auto-dismiss 5s & manual close) */}
       {errorMessage && (
@@ -110,50 +155,69 @@ export default function NexoraOneEnginePage() {
       {/* 2. Central 3-Column Industrial Layout */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
         {/* Left: 4-Agent Selector Sidebar */}
-        <AgentSidebar
-          selectedAgent={selectedAgent}
-          onSelectAgent={handleSelectAgent}
-        />
+        <div
+          className={`w-full lg:w-72 shrink-0 ${
+            mobileTab === "AGENTES" ? "flex flex-col" : "hidden lg:flex lg:flex-col"
+          }`}
+        >
+          <AgentSidebar
+            selectedAgent={selectedAgent}
+            onSelectAgent={(agentId) => {
+              handleSelectAgent(agentId);
+              setMobileTab("CABINA");
+            }}
+          />
+        </div>
 
         {/* Center: Dynamic Operational Viewport */}
-        {selectedAgent === "ART_VIDEO_DIRECTOR" ? (
-          <VisualForge
-            isDispatching={isDispatching}
-            onDispatchVisualOrder={async (params) => {
-              appendRedisLog(
-                "VISUAL_FORGE_COMFYUI",
-                `Despachando render ${params.imageModel} / ${params.videoModel} (${params.resolution}) hacia /mnt/nexora_storage/media_production/nexora_visual/ [By Nora]`,
-                "INFO"
-              );
-              return await dispatchMasterOrder(params);
-            }}
-          />
-        ) : selectedAgent === "SDR_24_7" ? (
-          <SdrRadar
-            isDispatching={isDispatching}
-            onTriggerInstantDemo={async (params) => {
-              appendRedisLog(
-                "AGENT_GROWTH_NORA_SDR",
-                `Generando demo instantánea (Jingle 10s + Flyer) para ${params.prospectCompany} (USD ${params.anchorPriceUsd}) en /nexora_demos/ [By Nora]`,
-                "SUCCESS"
-              );
-              return await dispatchMasterOrder(params);
-            }}
-          />
-        ) : (
-          <WorkspaceCanvas
-            mode={selectedAgent}
-            redisLogs={redisLogs}
-            isDispatching={isDispatching}
-            onAppendLog={appendRedisLog}
-            onDispatchAction={async (params) => {
-              return await dispatchMasterOrder(params);
-            }}
-          />
-        )}
+        <div
+          className={`flex-1 flex-col min-w-0 overflow-hidden ${
+            mobileTab === "CABINA" ? "flex" : "hidden lg:flex"
+          }`}
+        >
+          {selectedAgent === "ART_VIDEO_DIRECTOR" ? (
+            <VisualForge
+              isDispatching={isDispatching}
+              onDispatchVisualOrder={async (params) => {
+                appendRedisLog(
+                  "VISUAL_FORGE_COMFYUI",
+                  `Despachando render ${params.imageModel} / ${params.videoModel} (${params.resolution}) hacia /mnt/nexora_storage/media_production/nexora_visual/ [By Nora]`,
+                  "INFO"
+                );
+                return await dispatchMasterOrder(params);
+              }}
+            />
+          ) : selectedAgent === "SDR_24_7" ? (
+            <SdrRadar
+              isDispatching={isDispatching}
+              onTriggerInstantDemo={async (params) => {
+                appendRedisLog(
+                  "AGENT_GROWTH_NORA_SDR",
+                  `Generando demo instantánea (Jingle 10s + Flyer) para ${params.prospectCompany} (USD ${params.anchorPriceUsd}) en /nexora_demos/ [By Nora]`,
+                  "SUCCESS"
+                );
+                return await dispatchMasterOrder(params);
+              }}
+            />
+          ) : (
+            <WorkspaceCanvas
+              mode={selectedAgent}
+              redisLogs={redisLogs}
+              isDispatching={isDispatching}
+              onAppendLog={appendRedisLog}
+              onDispatchAction={async (params) => {
+                return await dispatchMasterOrder(params);
+              }}
+            />
+          )}
+        </div>
 
         {/* Right: 5 TB VFS Storage & GPU Telemetry Gauge */}
-        <aside className="w-full xl:w-80 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] overflow-hidden flex flex-col shrink-0 border-t xl:border-t-0 xl:border-l border-slate-800/80 bg-slate-950/90">
+        <aside
+          className={`${
+            mobileTab === "TELEMETRIA" ? "flex" : "hidden lg:flex"
+          } w-full xl:w-80 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] overflow-hidden flex flex-col shrink-0 border-t xl:border-t-0 xl:border-l border-slate-800/80 bg-slate-950/90`}
+        >
           <TelemetryVFSGauge />
         </aside>
       </div>
@@ -163,4 +227,3 @@ export default function NexoraOneEnginePage() {
     </div>
   );
 }
-

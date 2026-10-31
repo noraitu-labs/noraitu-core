@@ -2214,7 +2214,7 @@ export function WorkspaceCanvas({
                 <button
                   type="button"
                   onClick={handleToggleOpenMicDuplex}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors min-h-[44px] touch-manipulation ${
                     openMicDuplexMode
                       ? "bg-emerald-500/25 text-emerald-200 border-emerald-400 shadow-md shadow-emerald-500/20"
                       : "bg-slate-800 text-slate-300 border-slate-700 hover:border-emerald-500/50"
@@ -2236,7 +2236,7 @@ export function WorkspaceCanvas({
                 <button
                   type="button"
                   onClick={handleToggleStudioCamera}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors min-h-[44px] touch-manipulation ${
                     studioCameraActive
                       ? "bg-violet-500/25 text-violet-200 border-violet-400 shadow-md shadow-violet-500/20"
                       : "bg-slate-800 text-slate-300 border-slate-700 hover:border-violet-500/40"
@@ -2258,7 +2258,7 @@ export function WorkspaceCanvas({
                 <button
                   type="button"
                   onClick={() => setShowDeskBriefing((v) => !v)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors min-h-[44px] touch-manipulation ${
                     showDeskBriefing
                       ? "bg-amber-500/25 text-amber-200 border-amber-400"
                       : "bg-slate-800 text-slate-300 border-slate-700 hover:border-amber-500/40"
@@ -2272,7 +2272,7 @@ export function WorkspaceCanvas({
                 <button
                   type="button"
                   onClick={() => setShowStationConfig((v) => !v)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors min-h-[44px] touch-manipulation ${
                     showStationConfig
                       ? "bg-cyan-500/25 text-cyan-200 border-cyan-400"
                       : "bg-slate-800 text-slate-300 border-slate-700 hover:border-cyan-500/40"
@@ -2289,7 +2289,7 @@ export function WorkspaceCanvas({
                     if (isNoraSpeaking) stopNoraSpeech();
                     setTtsEnabled((v) => !v);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border cursor-pointer transition-colors min-h-[44px] touch-manipulation ${
                     ttsEnabled
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                       : "bg-slate-800 text-slate-400 border-slate-700"
@@ -2809,7 +2809,7 @@ export function WorkspaceCanvas({
                   <button
                     type="button"
                     onClick={handleToggleMicrophone}
-                    className={`p-2.5 rounded-xl border cursor-pointer transition-all shrink-0 backdrop-blur-md ${
+                    className={`p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border cursor-pointer transition-all shrink-0 backdrop-blur-md touch-manipulation ${
                       isListeningMic
                         ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm shadow-rose-500/20 animate-pulse"
                         : "bg-slate-900/80 hover:bg-slate-800 text-cyan-300 border-slate-700/80"
@@ -2831,7 +2831,7 @@ export function WorkspaceCanvas({
                     type="button"
                     disabled={isSendingToNora}
                     onClick={handleGiveFloorToNora}
-                    className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shrink-0 transition-all"
+                    className="px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all touch-manipulation w-full sm:w-auto"
                     title="Dar el pase manual a Nora para que intervenga sobre lo que se viene hablando en la mesa"
                   >
                     <Radio size={13} />
@@ -2841,7 +2841,7 @@ export function WorkspaceCanvas({
                   <button
                     type="submit"
                     disabled={isSendingToNora || !consoleInput.trim()}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-slate-950 flex items-center gap-1.5 cursor-pointer shrink-0 shadow-md shadow-cyan-500/20"
+                    className="px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-slate-950 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 shadow-md shadow-cyan-500/20 touch-manipulation w-full sm:w-auto"
                   >
                     <Send size={14} />
                     <span>
