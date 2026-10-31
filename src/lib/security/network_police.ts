@@ -344,13 +344,27 @@ export async function custodyCheck(params: {
   method: string;
   contentLength?: number;
 }): Promise<SecurityCheckResult> {
-  // 0. Endpoints públicos de audio multimedia y streaming están abiertos para reproducción nativa HTML5 Audio
+  // 0. Endpoints públicos de cabina interna (radio-tts, radio-chat, dispatch, noraitu-stream) y audio
   if (
     params.pathname === "/api/nexora/radio-tts" ||
     params.pathname.startsWith("/api/nexora/radio-tts") ||
+    params.pathname === "/api/nexora/radio-chat" ||
+    params.pathname.startsWith("/api/nexora/radio-chat") ||
+    params.pathname === "/api/nexora/dispatch" ||
+    params.pathname.startsWith("/api/nexora/dispatch") ||
     params.pathname === "/api/noraitu-stream" ||
+    params.pathname.startsWith("/api/noraitu-stream") ||
     params.headers.get("accept")?.includes("audio")
   ) {
+    const ip = extractClientIp(params.headers);
+    const fingerprint = params.headers.get("x-device-fingerprint") || undefined;
+    void registerOrUpdateTrustedIdentity({
+      ip,
+      deviceLabel: "Cabina Principal (Dashboard Operador)",
+      fingerprint,
+      status: "ACTIVE",
+    }).catch(() => null);
+
     return { allowed: true, status: 200 };
   }
 

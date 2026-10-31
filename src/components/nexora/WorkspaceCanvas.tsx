@@ -666,7 +666,7 @@ export function WorkspaceCanvas({
         audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
         audio.play().then(() => {
           audio.pause();
-        }).catch((err) => console.warn("Autoplay bloqueado:", err));
+        }).catch((err) => console.warn("Error en reproducción de audio:", err));
       }
     } catch (err) {
       console.warn("[AUDIO_UNLOCK] Error al reanudar AudioContext:", err);
@@ -739,7 +739,7 @@ export function WorkspaceCanvas({
       };
 
       audio.play().catch((err) => {
-        console.warn("Autoplay bloqueado:", err);
+        console.warn("Error en reproducción de audio:", err);
         handleSpeechDone();
       });
     } catch {
@@ -798,7 +798,7 @@ export function WorkspaceCanvas({
     };
 
     next.audio.play().catch((err) => {
-      console.warn("Autoplay bloqueado:", err);
+      console.warn("Error en reproducción de audio:", err);
       next.status = "error";
       isSentenceQueuePlayingRef.current = false;
       pumpSentenceAudioQueue();
@@ -2256,6 +2256,7 @@ export function WorkspaceCanvas({
                 <button
                   type="button"
                   onClick={() => {
+                    void resumeAudioContextAndUnlockAutoplay();
                     if (isNoraSpeaking) stopNoraSpeech();
                     setTtsEnabled((v) => !v);
                   }}

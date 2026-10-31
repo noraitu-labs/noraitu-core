@@ -11,13 +11,18 @@ import { custodyCheck } from "@/lib/security/network_police";
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // 0. Excluir endpoints de audio multimedia de streaming para reproducción nativa HTML5 Audio
-  if (
+  // 0. Excluir endpoints de cabina interna y audio multimedia (radio-tts, radio-chat, dispatch, noraitu-stream)
+  const isInternalCabinRoute =
     pathname === "/api/nexora/radio-tts" ||
     pathname.startsWith("/api/nexora/radio-tts") ||
+    pathname === "/api/nexora/radio-chat" ||
+    pathname.startsWith("/api/nexora/radio-chat") ||
+    pathname === "/api/nexora/dispatch" ||
+    pathname.startsWith("/api/nexora/dispatch") ||
     pathname === "/api/noraitu-stream" ||
-    pathname.startsWith("/api/noraitu-stream")
-  ) {
+    pathname.startsWith("/api/noraitu-stream");
+
+  if (isInternalCabinRoute) {
     return NextResponse.next();
   }
 
