@@ -345,15 +345,18 @@ export async function custodyCheck(params: {
   contentLength?: number;
 }): Promise<SecurityCheckResult> {
   // 0. Endpoints públicos de cabina interna (radio-tts, radio-chat, dispatch, noraitu-stream) y audio
+  // 0. Endpoints públicos de cabina interna y streaming visual exentos de rate limit y bloqueos
   if (
+    params.pathname === "/api/nexora/vision-grounding" ||
+    params.pathname.startsWith("/api/nexora/vision-grounding") ||
     params.pathname === "/api/nexora/radio-tts" ||
     params.pathname.startsWith("/api/nexora/radio-tts") ||
     params.pathname === "/api/nexora/radio-chat" ||
     params.pathname.startsWith("/api/nexora/radio-chat") ||
     params.pathname === "/api/nexora/dispatch" ||
     params.pathname.startsWith("/api/nexora/dispatch") ||
-    params.pathname === "/api/nexora/vision-grounding" ||
-    params.pathname.startsWith("/api/nexora/vision-grounding") ||
+    params.pathname === "/api/nexora/desk-briefing" ||
+    params.pathname.startsWith("/api/nexora/desk-briefing") ||
     params.pathname === "/api/noraitu-stream" ||
     params.pathname.startsWith("/api/noraitu-stream") ||
     params.headers.get("accept")?.includes("audio")

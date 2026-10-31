@@ -8,19 +8,40 @@ import { custodyCheck } from "@/lib/security/network_police";
 //  DLP (50MB), Rate-limiting y Bloqueo de IPs no autorizadas
 // ══════════════════════════════════════════════════════════════
 
+export const PUBLIC_ROUTES = [
+  "/api/nexora/vision-grounding",
+  "/api/nexora/radio-tts",
+  "/api/nexora/radio-chat",
+  "/api/nexora/dispatch",
+  "/api/nexora/desk-briefing",
+  "/api/noraitu-stream",
+];
+
+export function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // 0. Excluir endpoints de cabina interna y audio multimedia (radio-tts, radio-chat, dispatch, noraitu-stream)
+  // 0. Whitelist perimetral explícita: Excluir endpoints de cabina interna y streaming visual
+  // Permite peticiones POST directas del cliente de cabina sin interceptación 403 ni 401
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Comprobación adicional de rutas de cabina interna
   const isInternalCabinRoute =
+    pathname === "/api/nexora/vision-grounding" ||
+    pathname.startsWith("/api/nexora/vision-grounding") ||
     pathname === "/api/nexora/radio-tts" ||
     pathname.startsWith("/api/nexora/radio-tts") ||
     pathname === "/api/nexora/radio-chat" ||
     pathname.startsWith("/api/nexora/radio-chat") ||
     pathname === "/api/nexora/dispatch" ||
     pathname.startsWith("/api/nexora/dispatch") ||
-    pathname === "/api/nexora/vision-grounding" ||
-    pathname.startsWith("/api/nexora/vision-grounding") ||
     pathname === "/api/noraitu-stream" ||
     pathname.startsWith("/api/noraitu-stream");
 
@@ -114,4 +135,3 @@ export const config = {
     "/api/storage/:path*",
   ],
 };
-

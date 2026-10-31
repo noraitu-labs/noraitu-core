@@ -1552,7 +1552,11 @@ export function WorkspaceCanvas({
           try {
             const res = await fetch("/api/nexora/vision-grounding", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "x-nexora-cabin": "true",
+                "x-nexora-tenant": "NEXORA_ONE_ENGINE",
+              },
               body: JSON.stringify({ frame_data_url: dataUrl }),
             });
             if (res.ok) {
@@ -1591,7 +1595,11 @@ export function WorkspaceCanvas({
     try {
       const res = await fetch("/api/nexora/desk-briefing", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+                "Content-Type": "application/json",
+                "x-nexora-cabin": "true",
+                "x-nexora-tenant": "NEXORA_ONE_ENGINE",
+              },
         body: JSON.stringify({
           title: newDeskTitle.trim(),
           lead: newDeskLead.trim(),
