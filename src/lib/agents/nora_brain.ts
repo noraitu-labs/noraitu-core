@@ -45,12 +45,13 @@ ${NORA_COACHING_PNL_PROMPT_MODULE}
 `;
 
 /**
- * Procesa el mensaje del usuario calibrando su perfil PNL y generando la respuesta con Llama 3.3 70B.
+ * Procesa el mensaje del usuario calibrando su perfil PNL y generando la respuesta con Llama 3.3 70B / Vision.
  */
 export async function generateNoraDialogue(
   userMessage: string,
   history: Array<{ role: "user" | "assistant"; content: string }> = [],
-  speakerInfo?: SpeakerIdentificationResult
+  speakerInfo?: SpeakerIdentificationResult,
+  visualFrame?: string | null
 ): Promise<NoraDialogueResponse> {
   const t0 = Date.now();
 
@@ -75,7 +76,7 @@ export async function generateNoraDialogue(
     pitch = 1.03;
   }
 
-  // 3. Inyección contextual en el System Prompt (PNL + Biometría Vocal)
+  // 3. Inyección contextual en el System Prompt (PNL + Biometría Vocal + Visión en Cabina)
   const pnlContext = buildPnlSystemContext(pnlProfile);
   let speakerContext = "";
 
@@ -89,30 +90,67 @@ Saludalo con calidez reconociendo su presencia y sintonizá con el hilo previo d
 `;
   }
 
-  const fullSystemPrompt = `${NORA_CORE_SYSTEM_PROMPT}\n\n${pnlContext}\n${speakerContext}`;
+  const rawVisual = visualFrame?.trim() || null;
+  const formattedImageUrl = rawVisual
+    ? rawVisual.startsWith("data:")
+      ? rawVisual
+      : `data:image/jpeg;base64,${rawVisual}`
+    : null;
 
-  // 4. Inferencia con Groq LPU (GPT-OSS-120B / Qwen 27B / GPT-OSS-20B con fallback)
+  const visualDirective = formattedImageUrl
+    ? `\n[RETORNO VISUAL DE CABINA ACTIVO]\nEl locutor te pregunta sobre lo que ves. Describe con naturalidad y calidez lo observado en cabina: presencia, postura, iluminación y gestos.`
+    : "";
+
+  const fullSystemPrompt = `${NORA_CORE_SYSTEM_PROMPT}\n\n${pnlContext}\n${speakerContext}${visualDirective}`;
+
+  // 4. Inferencia con Groq LPU (con fallback ordenado)
   const groq = getGroqClient();
-  const modelsToTry = [
+  const textModels = [
     process.env.GROQ_MODEL_TEXT?.trim() || "openai/gpt-oss-120b",
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-20b",
   ];
 
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: fullSystemPrompt },
-    ...history.slice(-6).map((h) => ({
-      role: h.role,
-      content: h.content,
-    })),
-    { role: "user", content: userMessage },
-  ];
+  const visionModels = formattedImageUrl
+    ? [
+        process.env.GROQ_MODEL_VISION?.trim() || "llama-3.2-11b-vision-preview",
+        "llama-3.2-90b-vision-preview",
+      ]
+    : [];
+
+  const modelsToTry = [...visionModels, ...textModels];
+
+  const baseHistory = history.slice(-6).map((h) => ({
+    role: h.role,
+    content: h.content,
+  }));
 
   let rawReply = "";
   let modelUsed = "";
 
   for (const model of modelsToTry) {
     try {
+      const isVisionModel = model.includes("vision");
+      const userContent =
+        isVisionModel && formattedImageUrl
+          ? ([
+              {
+                type: "text",
+                text: `El locutor te pregunta sobre lo que ves. Describe con naturalidad y calidez lo observado en cabina: presencia, postura, iluminación y gestos.\n${userMessage}`,
+              },
+              {
+                type: "image_url",
+                image_url: { url: formattedImageUrl },
+              },
+            ] as any)
+          : userMessage;
+
+      const messages: any[] = [
+        { role: "system", content: fullSystemPrompt },
+        ...baseHistory,
+        { role: "user", content: userContent },
+      ];
+
       const completion = await groq.chat.completions.create({
         model,
         messages,

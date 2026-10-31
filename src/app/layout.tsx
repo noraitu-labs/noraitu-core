@@ -70,6 +70,24 @@ export default function RootLayout({
             max-width: 100%;
             height: auto;
           }
+          * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(6, 182, 212, 0.3) transparent;
+          }
+          *::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+          }
+          *::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          *::-webkit-scrollbar-thumb {
+            background: rgba(6, 182, 212, 0.3);
+            border-radius: 9999px;
+          }
+          *::-webkit-scrollbar-thumb:hover {
+            background: rgba(6, 182, 212, 0.5);
+          }
         `}} />
       </head>
       <body style={{ margin: 0, padding: 0, backgroundColor: "#050B14", color: "#f0f6fc", fontFamily: "system-ui, -apple-system, sans-serif", width: "100%", height: "100%", overflow: "hidden", overscrollBehavior: "none", overscrollBehaviorY: "none", touchAction: "none" }}>

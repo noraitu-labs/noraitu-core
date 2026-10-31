@@ -1427,35 +1427,49 @@ export function WorkspaceCanvas({
   };
 
   /**
-   * Captures the current camera video frame to a lightweight JPEG Base64 URI (384x216 at 0.65 quality).
+   * Captures the current camera video frame to a Base64 JPEG URI (640x480 at 0.7 quality).
    */
   const captureCurrentCameraFrame = (): string | null => {
     if (typeof window === "undefined") return null;
-    if (!videoPreviewRef.current || !visionCanvasRef.current) {
-      console.warn("[NEXORA_VISION] Elementos video o canvas no disponibles en DOM");
-      return latestCameraFrameBase64Ref.current;
-    }
-    const video = videoPreviewRef.current;
-    const canvas = visionCanvasRef.current;
 
-    // Verificar que el elemento video tenga datos listos (readyState >= 2) y dimensiones reales
-    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+    let video = videoPreviewRef.current;
+    if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+      if (typeof document !== "undefined") {
+        const videos = Array.from(document.querySelectorAll("video")) as HTMLVideoElement[];
+        const validVideo = videos.find(
+          (v) => v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0
+        );
+        if (validVideo) {
+          video = validVideo;
+        }
+      }
+    }
+
+    if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
       console.warn(
-        `[NEXORA_VISION] Elemento <video> no listo para captura: readyState=${video.readyState}, videoWidth=${video.videoWidth}, videoHeight=${video.videoHeight}`
+        `[NEXORA_VISION] Elemento <video> no listo para captura: readyState=${video?.readyState}, videoWidth=${video?.videoWidth}, videoHeight=${video?.videoHeight}`
       );
       return latestCameraFrameBase64Ref.current;
     }
 
+    const canvas =
+      visionCanvasRef.current ||
+      (typeof document !== "undefined" ? document.createElement("canvas") : null);
+    if (!canvas) {
+      console.warn("[NEXORA_VISION] No hay canvas disponible");
+      return latestCameraFrameBase64Ref.current;
+    }
+
     try {
-      canvas.width = 384;
-      canvas.height = 216;
+      canvas.width = 640;
+      canvas.height = 480;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         console.warn("[NEXORA_VISION] No se pudo inicializar contexto 2D del canvas");
         return latestCameraFrameBase64Ref.current;
       }
-      ctx.drawImage(video, 0, 0, 384, 216);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
+      ctx.drawImage(video, 0, 0, 640, 480);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
       latestCameraFrameBase64Ref.current = dataUrl;
       console.log("[NEXORA_VISION] Frame capturado bytes:", dataUrl.length);
       return dataUrl;
@@ -1698,6 +1712,7 @@ export function WorkspaceCanvas({
           history: priorHistoryPayload,
           desk_briefing: deskBriefingItems,
           visual_context: visualStudioContextRef.current,
+          visual_frame: currentCameraFrame,
           image_base64: currentCameraFrame,
           stream: true,
         }),
@@ -1771,7 +1786,7 @@ export function WorkspaceCanvas({
             turn.id === noraTurnId
               ? {
                   ...turn,
-                  text: accumulatedReply || "Sin retorno en cabina.",
+                  text: accumulatedReply || "Acá te escucho perfecto en cabina, sigamos al aire.",
                   modelBadge: `STREAM • ${usedModelBadge}`,
                 }
               : turn
@@ -1789,7 +1804,7 @@ export function WorkspaceCanvas({
       } else {
         // Fallback for non-streaming response
         const data = await res.json();
-        const noraReply = data.reply || "Sin retorno de cabina.";
+        const noraReply = data.reply || "Acá estoy firme al aire en la mesa con vos.";
         setDialogueHistory((prev) =>
           prev.map((turn) =>
             turn.id === noraTurnId

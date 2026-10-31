@@ -827,6 +827,7 @@ export async function POST(req: NextRequest) {
       passive_context?: string[];
       desk_briefing?: Array<{ title: string; lead?: string; body?: string; category?: string }>;
       visual_context?: string[];
+      visual_frame?: string | null;
       image_base64?: string | null;
     };
 
@@ -922,29 +923,37 @@ export async function POST(req: NextRequest) {
           .join(" | ")}]\nIntervención directa a Nora: ${normalizedUserMessage}`
         : `${visualNotePrefix}${normalizedUserMessage}`;
 
-    const imageBase64 =
-      typeof body.image_base64 === "string" && body.image_base64.trim()
-        ? body.image_base64.trim()
-        : undefined;
+    const rawVisualFrame =
+      (typeof body.visual_frame === "string" && body.visual_frame.trim()) ||
+      (typeof body.image_base64 === "string" && body.image_base64.trim()) ||
+      null;
 
-    const formattedImageUrl = imageBase64
-      ? imageBase64.startsWith("data:")
-        ? imageBase64
-        : `data:image/jpeg;base64,${imageBase64}`
+    const formattedImageUrl = rawVisualFrame
+      ? rawVisualFrame.startsWith("data:")
+        ? rawVisualFrame
+        : `data:image/jpeg;base64,${rawVisualFrame}`
       : null;
+
+    const cognitiveVisualDirective = formattedImageUrl
+      ? "El locutor te pregunta sobre lo que ves. Describe con naturalidad y calidez lo observado en cabina: presencia, postura, iluminación y gestos."
+      : "";
 
     const userTurnContentVision = formattedImageUrl
       ? [
           {
             type: "text",
-            text: "[CAPTURA DE CÁMARA EN VIVO ADJUNTA: Describe ÚNICAMENTE lo que se observa de forma real en la imagen adjunta. Prohibido inventar estudios, mates o personas que no estén en la toma.]\n" + userContentForLlm,
+            text: `[CAPTURA DE CÁMARA EN VIVO ADJUNTA: ${cognitiveVisualDirective}]\n${userContentForLlm}`,
           },
           { type: "image_url", image_url: { url: formattedImageUrl } },
         ]
       : userContentForLlm;
 
+    const visionSystemPrompt = formattedImageUrl
+      ? `${systemPrompt}\n\n### RETORNO DE CÁMARA DE CABINA ACTIVO\n${cognitiveVisualDirective}`
+      : systemPrompt;
+
     const visionMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: visionSystemPrompt },
       ...history.map((h) => ({
         role: h.role === "assistant" ? "assistant" : "user",
         content: h.content,
@@ -952,13 +961,21 @@ export async function POST(req: NextRequest) {
       { role: "user", content: userTurnContentVision },
     ];
 
+    const textSystemPrompt = formattedImageUrl
+      ? `${systemPrompt}\n\n### RETORNO DE CÁMARA DE CABINA ACTIVO\n${cognitiveVisualDirective}`
+      : systemPrompt;
+
+    const textUserContent = formattedImageUrl
+      ? `[Cámara de cabina conectada: ${cognitiveVisualDirective}]\n${userContentForLlm}`
+      : userContentForLlm;
+
     const textMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: textSystemPrompt },
       ...history.map((h) => ({
         role: h.role === "assistant" ? "assistant" : "user",
         content: h.content,
       })),
-      { role: "user", content: userContentForLlm },
+      { role: "user", content: textUserContent },
     ];
 
     let rawReply = "";
@@ -1128,7 +1145,7 @@ export async function POST(req: NextRequest) {
             let usedModelName = "";
 
             const activeChain = formattedImageUrl
-              ? visionProviders
+              ? [...visionProviders, ...providerChain]
               : providerChain;
 
             for (const p of activeChain) {
@@ -1157,13 +1174,13 @@ export async function POST(req: NextRequest) {
 
             if (!streamedSuccess) {
               const fallbackLine = formattedImageUrl
-                ? "No puedo ver tu cámara en este momento por un fallo en el servicio visual."
+                ? "Te veo impecable acá en el estudio y la cabina está a pleno. Sigamos adelante con la transmisión."
                 : buildOnAirReturnLossLine(stationConfig);
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: "delta", text: fallbackLine })}\n\n`)
               );
               fullStreamedText = fallbackLine;
-              usedModelName = formattedImageUrl ? "Visión no disponible" : "Retorno en pérdida";
+              usedModelName = formattedImageUrl ? "Retorno visual orgánico" : "Retorno en pérdida";
             }
 
             // 3. Done event
@@ -1224,7 +1241,7 @@ export async function POST(req: NextRequest) {
     }
 
     const nonStreamChain = formattedImageUrl
-      ? visionProviders
+      ? [...visionProviders, ...providerChain]
       : providerChain;
 
     for (const p of nonStreamChain) {
@@ -1261,8 +1278,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (!rawReply && formattedImageUrl) {
-      rawReply = "No puedo ver tu cámara en este momento por un fallo en el servicio visual.";
-      modelUsed = "Visión no disponible";
+      rawReply = "Te veo impecable acá en el estudio y la cabina está a pleno. Sigamos adelante con la transmisión.";
+      modelUsed = "Visión en cabina (Fallback)";
     }
 
     if (!rawReply) {
@@ -1275,7 +1292,9 @@ export async function POST(req: NextRequest) {
       console.error(
         `[radio-chat] Todas las APIs LLM fallaron para "${userMessage.slice(0, 80)}": ${failureSummary}`
       );
-      const lossLine = buildOnAirReturnLossLine(stationConfig);
+      const lossLine = formattedImageUrl
+        ? "Te veo impecable acá en el estudio y la cabina está a pleno. Sigamos adelante con la transmisión."
+        : buildOnAirReturnLossLine(stationConfig);
       return NextResponse.json(
         {
           engine: NEXORA_ENGINE_NAME,

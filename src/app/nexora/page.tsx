@@ -140,7 +140,9 @@ export default function NexoraOneEnginePage() {
         )}
 
         {/* Right: 5 TB VFS Storage & GPU Telemetry Gauge */}
-        <TelemetryVFSGauge />
+        <aside className="w-full xl:w-80 h-[calc(100vh-130px)] max-h-[calc(100vh-130px)] overflow-hidden flex flex-col shrink-0 border-t xl:border-t-0 xl:border-l border-slate-800/80 bg-slate-950/90">
+          <TelemetryVFSGauge />
+        </aside>
       </div>
 
       {/* 3. Official Institutional Footer */}

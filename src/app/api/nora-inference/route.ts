@@ -26,6 +26,7 @@ interface RequestPayload {
   userText: string;
   userName?: string;
   imageBase64?: string | null;
+  visual_frame?: string | null;
   history?: ChatHistoryItem[];
   mode?: "general" | "tea" | "lazarillo" | "docente" | "executive" | string;
   visualTelemetry?: string | null;
@@ -52,13 +53,16 @@ export async function POST(req: Request) {
       sessionId = "nora-session",
       userText = "",
       userName = "",
-      imageBase64 = null,
+      imageBase64: rawImage = null,
+      visual_frame = null,
       history = [],
       mode = "general",
       visualTelemetry = null,
       deviceLocation = null,
       clientDateTime = null,
     } = body;
+
+    const imageBase64 = visual_frame || rawImage;
 
     // 1. Mapeo del modo al contrato oficial de NoraMode
     let mappedMode: NoraMode = "executive";
