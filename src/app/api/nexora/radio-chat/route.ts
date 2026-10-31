@@ -410,9 +410,9 @@ function buildNoraHumanParitySystemPrompt(
 
   const webBlock =
     webSearchResults.length > 0
-      ? `\n\n### BÚSQUEDA WEB EN TIEMPO REAL (DATOS DE ÚLTIMO MOMENTO)\nLos siguientes datos provienen de una búsqueda web en tiempo real efectuada en este preciso instante:\n${webSearchResults
-          .map((r, i) => `${i + 1}. ${r.snippet}`)
-          .join("\n")}\n\nUTILIZA ESTA INFORMACIÓN FRESCA Y REAL PARA RESPONDER CON TOTAL PRECISIÓN Y SIN ALUCINAR.`
+      ? `\n\n### INFORMACIÓN PERIODÍSTICA EN VIVO RECUPERADA DE LA WEB (DATOS DE ÚLTIMO MOMENTO):\nLos siguientes datos y noticias provienen de una búsqueda web en tiempo real efectuada en este preciso instante:\n${webSearchResults
+          .map((r, i) => `${i + 1}. [${r.title}] ${r.snippet}`)
+          .join("\n")}\n\nINSTRUCCIÓN PERIODÍSTICA MANDATORIA: Utiliza esta información fresca y real para responder e informar al oyente con precisión, seriedad y detalle, citando los hechos acontecidos sin alucinar ni evasivas.`
       : "";
 
   const soulMarkdown = loadNoraSoulMarkdown();
@@ -496,10 +496,10 @@ interface WebSearchResult {
 }
 
 /**
- * Lightweight serverless web search (Tavily / Serper / DuckDuckGo fallback)
- * to ground Nora in real-time facts and prevent hallucinations.
+ * Lightweight serverless web search (Google News RSS / Tavily / Serper / DuckDuckGo fallback)
+ * to ground Nora in real-time facts and regional Argentine news without hallucinations.
  */
-async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSearchResult[]> {
+async function fetchLiveWebSearch(query: string, maxResults = 4): Promise<WebSearchResult[]> {
   const cleanQuery = query
     .replace(/\b(nora|norita|che\s+nora|por\s+favor|decime|contame|contanos|hola|a\s+ver)\b/gi, "")
     .replace(/[¿?¡!]/g, "")
@@ -507,7 +507,49 @@ async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSea
 
   if (!cleanQuery) return [];
 
-  // 1. Tavily API
+  const results: WebSearchResult[] = [];
+
+  // 1. Google News RSS Search (Noticias en tiempo real sin API key, con cobertura nacional y regional Corrientes)
+  try {
+    const isRegional = /\b(corrientes|esquina|goya|ituzaing[oó]|posadas|misiones|chaco)\b/i.test(cleanQuery);
+    const newsQuery = isRegional
+      ? cleanQuery
+      : `${cleanQuery} noticias Argentina`;
+    const newsUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(newsQuery)}&hl=es-419&gl=AR&ceid=AR:es-419`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2600);
+    const res = await fetch(newsUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "application/rss+xml, application/xml, text/xml",
+      },
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const xml = await res.text();
+      const itemRegex = /<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?(?:<description>([\s\S]*?)<\/description>)?[\s\S]*?(?:<pubDate>([\s\S]*?)<\/pubDate>)?[\s\S]*?<\/item>/gi;
+      let match: RegExpExecArray | null;
+      while ((match = itemRegex.exec(xml)) !== null && results.length < maxResults) {
+        const rawTitle = (match[1] || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim();
+        const rawDesc = (match[2] || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim();
+        const pubDate = (match[3] || "").trim();
+        if (rawTitle && rawTitle.length > 10) {
+          results.push({
+            title: rawTitle,
+            snippet: `${rawTitle}${rawDesc ? `. ${rawDesc}` : ""}${pubDate ? ` [Publicado: ${pubDate}]` : ""}`,
+          });
+        }
+      }
+      if (results.length > 0) {
+        return results;
+      }
+    }
+  } catch (err) {
+    console.warn("[radio-chat] Google News RSS search error:", err);
+  }
+
+  // 2. Tavily API
   const tavilyKey = process.env.TAVILY_API_KEY?.trim();
   if (tavilyKey) {
     try {
@@ -532,11 +574,11 @@ async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSea
         }
       }
     } catch {
-      // Fall through to DDG
+      // Fall through to Serper/DDG
     }
   }
 
-  // 2. Serper API
+  // 3. Serper API
   const serperKey = process.env.SERPER_API_KEY?.trim();
   if (serperKey) {
     try {
@@ -563,7 +605,7 @@ async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSea
     }
   }
 
-  // 3. DuckDuckGo Serverless HTML Parser (zero external keys needed)
+  // 4. DuckDuckGo Serverless HTML Parser (zero external keys needed)
   try {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
     const res = await fetch(url, {
@@ -576,7 +618,6 @@ async function fetchLiveWebSearch(query: string, maxResults = 3): Promise<WebSea
     });
     if (res.ok) {
       const html = await res.text();
-      const results: WebSearchResult[] = [];
       const regex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/gi;
       let match: RegExpExecArray | null;
       while ((match = regex.exec(html)) !== null && results.length < maxResults) {
@@ -881,14 +922,14 @@ export async function POST(req: NextRequest) {
     const radarItems = await fetchLiveRssRadar(10);
     const climate = classifyRadioEmotionState(userMessage, history);
 
-    // Live Web Search to prevent hallucinations on real-time queries
-    const needsLiveSearch = /\b(hoy|ahora|noticias?|clima|tiempo|temperatura|d[oó]lar|cotizaci[oó]n|inflaci[oó]n|partido|resultado|qui[eé]n gan[oó]|jug[oó]|tr[aá]nsito|declar[oó]|pas[oó]|medidas?|anuncio|gobierno|milei|dnu)\b/i.test(
+    // Live Web Search to prevent hallucinations on real-time queries & regional news
+    const needsLiveSearch = /\b(hoy|ahora|noticias?|actualidad|suceso|sucesos|hecho|hechos|policial|policiales|crimen|crimenes|caso|femicidio|asesinato|robo|investigaci[oó]n|esquina|corrientes|ituzaing[oó]|goya|posadas|chaco|misiones|clima|tiempo|temperatura|d[oó]lar|cotizaci[oó]n|inflaci[oó]n|partido|resultado|qui[eé]n gan[oó]|jug[oó]|tr[aá]nsito|declar[oó]|pas[oó]|ocurri[oó]|sucedi[oó]|medidas?|anuncio|gobierno|milei|dnu|urgente|último momento|ultimo momento)\b/i.test(
       userMessage
     );
     let webSearchResults: WebSearchResult[] = [];
     if (needsLiveSearch) {
       try {
-        webSearchResults = await fetchLiveWebSearch(userMessage, 3);
+        webSearchResults = await fetchLiveWebSearch(userMessage, 4);
       } catch {
         // Continue with radar fallback
       }
@@ -935,14 +976,14 @@ export async function POST(req: NextRequest) {
       : null;
 
     const cognitiveVisualDirective = formattedImageUrl
-      ? "El locutor te pregunta sobre lo que ves. Describe con naturalidad y calidez lo observado en cabina: presencia, postura, iluminación y gestos."
+      ? "Estás viendo la cabina en tiempo real a través del frame adjunto. Describe con precisión y naturalidad lo que observas (postura, entorno, objetos, gestos)."
       : "";
 
     const userTurnContentVision = formattedImageUrl
       ? [
           {
             type: "text",
-            text: `[CAPTURA DE CÁMARA EN VIVO ADJUNTA: ${cognitiveVisualDirective}]\n${userContentForLlm}`,
+            text: `[RETORNO VISUAL DE CÁMARA DE CABINA EN VIVO: ${cognitiveVisualDirective}]\n${userContentForLlm}`,
           },
           { type: "image_url", image_url: { url: formattedImageUrl } },
         ]

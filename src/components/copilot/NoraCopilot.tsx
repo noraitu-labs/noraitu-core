@@ -1,18 +1,18 @@
 "use client";
 
 // ══════════════════════════════════════════════════════════════
-//  NEXORA ONE — COPILOT INTERACTIVO DE CABINA Y PRODUCCIÓN
-//  Guías paso a paso: Spot Comercial, Transmisión en Vivo y Auto-Test
-//  Monitoreo en tiempo real de GPU, VFS, Cabina y Centinela Policial
+//  NEXORA ONE — COPILOT INTERACTIVO & GUÍA OPERATIVA INTEGRAL
+//  Engine: Nexora One Engine | Signature: By Nora
+//  Base de conocimiento de la consola: Tren de Agentes, Cabina, VFS y Diagnóstico
 // ══════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   Radio,
   Activity,
-  CheckCircle2,
-  AlertTriangle,
+  Search,
+  Compass,
   RefreshCw,
   X,
   ChevronRight,
@@ -22,7 +22,21 @@ import {
   Database,
   Cloud,
   Check,
+  Copy,
+  CornerDownLeft,
+  Sliders,
+  HelpCircle,
+  Eye,
+  Layers,
+  Terminal,
+  Volume2,
 } from "lucide-react";
+import {
+  SYSTEM_MANUAL_ENTRIES,
+  searchSystemManual,
+  ManualEntry,
+  SystemPanel,
+} from "@/lib/copilot/system_manual";
 
 interface DiagnosticsData {
   overallStatus?: string;
@@ -35,12 +49,19 @@ interface DiagnosticsData {
 
 export function NoraCopilot() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"SPOT" | "LIVE" | "DIAGNOSTICS">("SPOT");
+  const [activeTab, setActiveTab] = useState<"GUIDE" | "SPOT" | "LIVE" | "DIAGNOSTICS">("GUIDE");
+
+  // Estado de consulta y chat operativo
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [activeGuideResult, setActiveGuideResult] = useState<ManualEntry | null>(() => SYSTEM_MANUAL_ENTRIES[0]);
+  const [customAnswer, setCustomAnswer] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Estado de inspección de consola
   const [isCabinaOn, setIsCabinaOn] = useState(false);
-  const [materialOnDesk, setMaterialOnDesk] = useState(true);
-  const [gpuStatus, setGpuStatus] = useState<"OPTIMAL" | "STANDBY">("OPTIMAL");
+  const [gpuStatus] = useState<"OPTIMAL" | "STANDBY">("OPTIMAL");
 
   // Checklist de Transmisión en Vivo
   const [liveChecklist, setLiveChecklist] = useState({
@@ -81,7 +102,10 @@ export function NoraCopilot() {
     if (isOpen && !diagData) {
       void runAutoTest();
     }
-  }, [isOpen]);
+    if (isOpen && activeTab === "GUIDE") {
+      setTimeout(() => searchInputRef.current?.focus(), 150);
+    }
+  }, [isOpen, activeTab]);
 
   const toggleChecklistItem = (key: keyof typeof liveChecklist) => {
     setLiveChecklist((prev) => {
@@ -91,6 +115,71 @@ export function NoraCopilot() {
       }
       return next;
     });
+  };
+
+  const handleManualSearch = async (queryText: string) => {
+    const q = queryText.trim();
+    if (!q) return;
+
+    setIsSearching(true);
+    setCustomAnswer(null);
+
+    // 1. Coincidencia ultra-rápida local con cero latencia
+    const localMatch = searchSystemManual(q);
+    if (localMatch) {
+      setActiveGuideResult(localMatch);
+      setIsSearching(false);
+      return;
+    }
+
+    // 2. Si no es coincidencia exacta, consultar endpoint de asistencia
+    try {
+      const res = await fetch("/api/copilot/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.entry) {
+          setActiveGuideResult(data.entry);
+        }
+        if (data.reply) {
+          setCustomAnswer(data.reply);
+        }
+      } else {
+        // Fallback al primer resultado
+        setActiveGuideResult(SYSTEM_MANUAL_ENTRIES[0]);
+      }
+    } catch {
+      setActiveGuideResult(SYSTEM_MANUAL_ENTRIES[0]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  const getPanelBadgeStyle = (panel: SystemPanel) => {
+    switch (panel) {
+      case "PANEL IZQUIERDO":
+        return "bg-cyan-950/80 text-cyan-300 border-cyan-500/40";
+      case "PANEL CENTRAL":
+        return "bg-emerald-950/80 text-emerald-300 border-emerald-500/40";
+      case "PANEL DERECHO":
+        return "bg-purple-950/80 text-purple-300 border-purple-500/40";
+      case "CABECERA":
+        return "bg-amber-950/80 text-amber-300 border-amber-500/40";
+      default:
+        return "bg-slate-800 text-slate-300 border-slate-600";
+    }
   };
 
   const completedChecklistCount = Object.values(liveChecklist).filter(Boolean).length;
@@ -106,38 +195,38 @@ export function NoraCopilot() {
               ? "bg-cyan-500 text-slate-950 border-cyan-300 shadow-cyan-500/40"
               : "bg-slate-900/95 hover:bg-slate-800 text-cyan-400 border-cyan-500/40 hover:border-cyan-400 shadow-slate-950"
           }`}
-          title="Abrir Nora Copilot Asistente de Cabina"
+          title="Abrir Nora Copilot — Guía Operativa Integral de la Consola"
         >
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500" />
           </span>
-          <Sparkles className="w-4 h-4 text-cyan-400" />
+          <Compass className="w-4 h-4 text-cyan-400" />
           <span>COPILOT NORA</span>
           <span className="hidden sm:inline-block text-[10px] text-slate-400 border-l border-slate-700 pl-2">
-            {isCabinaOn ? "EN VIVO" : "STANDBY"}
+            GUÍA EN VIVO
           </span>
         </button>
       </div>
 
       {/* ── PANEL MODAL FLOTANTE INTERACTIVO ── */}
       {isOpen && (
-        <div className="fixed bottom-16 right-4 z-50 w-[95vw] sm:w-[460px] max-h-[82vh] bg-slate-900/95 backdrop-blur-xl border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-16 right-4 z-50 w-[95vw] sm:w-[500px] max-h-[86vh] bg-slate-900/95 backdrop-blur-xl border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-200">
           {/* Header */}
           <div className="p-3.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
-                <Sparkles className="w-4 h-4" />
+                <Compass className="w-4 h-4" />
               </div>
               <div>
                 <h3 className="font-semibold text-xs tracking-wide text-slate-100 flex items-center gap-2">
                   <span>NORA COPILOT</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300">
-                    By Nora
+                    Guía Operativa Integral
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Asistencia interactiva, flujos de producción y diagnóstico
+                  Mapa de consola, controles milimétricos y resolución de fallas
                 </p>
               </div>
             </div>
@@ -153,20 +242,31 @@ export function NoraCopilot() {
           <div className="px-3.5 py-2 bg-slate-950/40 border-b border-slate-800/80 flex items-center justify-between text-[11px] font-mono">
             <div className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${isCabinaOn ? "bg-emerald-400" : "bg-amber-400"}`} />
-              <span className="text-slate-300">Cabina: {isCabinaOn ? "AL AIRE" : "OFF / STANDBY"}</span>
+              <span className="text-slate-300">Cabina: {isCabinaOn ? "AL AIRE" : "STANDBY"}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-300">VRAM: {gpuStatus}</span>
+              <span className="text-slate-300">GPU: {gpuStatus}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-300">POLICÍA: OK</span>
+              <span className="text-emerald-300">CENTINELA: ACTIVO</span>
             </div>
           </div>
 
           {/* Selector de Pestañas */}
           <div className="flex border-b border-slate-800 bg-slate-950/60 p-1 gap-1 text-xs">
+            <button
+              onClick={() => setActiveTab("GUIDE")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all ${
+                activeTab === "GUIDE"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>¿Qué Necesitas?</span>
+            </button>
             <button
               onClick={() => setActiveTab("SPOT")}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all ${
@@ -176,7 +276,7 @@ export function NoraCopilot() {
               }`}
             >
               <Film className="w-3.5 h-3.5" />
-              <span>Spot Comercial</span>
+              <span>Spot Publicitario</span>
             </button>
             <button
               onClick={() => setActiveTab("LIVE")}
@@ -204,7 +304,193 @@ export function NoraCopilot() {
 
           {/* Contenido Dinámico con Scroll */}
           <div className="p-4 overflow-y-auto flex-1 space-y-3.5 text-xs text-slate-300">
-            {/* ── PESTAÑA 1: SPOT COMERCIAL PASO A PASO ── */}
+            {/* ── PESTAÑA PRINCIPAL: GUÍA OPERATIVA Y CHAT OPERATIVO ── */}
+            {activeTab === "GUIDE" && (
+              <div className="space-y-3.5">
+                {/* Barra de Consulta Rápida */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleManualSearch(searchQuery);
+                  }}
+                  className="relative"
+                >
+                  <div className="relative flex items-center">
+                    <Search className="w-4 h-4 absolute left-3 text-cyan-400" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="¿Qué necesitas hacer o encontrar en la consola?"
+                      className="w-full bg-slate-950/90 border border-slate-700/80 focus:border-cyan-400 pl-9 pr-10 py-2.5 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors shadow-inner"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSearching || !searchQuery.trim()}
+                      className="absolute right-1.5 p-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-30 text-white transition-colors cursor-pointer"
+                      title="Consultar Copilot"
+                    >
+                      <CornerDownLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+
+                {/* Preguntas Frecuentes y Atajos Clicables */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <HelpCircle className="w-3 h-3 text-cyan-400" />
+                    <span>Consultas operativas rápidas:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "¿Dónde está Despacho Integral?", q: "despacho integral" },
+                      { label: "¿Cómo calibro el eco?", q: "calibrar eco retorno" },
+                      { label: "¿Cómo activo la cámara?", q: "ojos de cabina camara" },
+                      { label: "¿Qué hacer si no hay audio?", q: "no hay audio" },
+                      { label: "¿Qué es Fullstack Sandbox?", q: "fullstack sandbox" },
+                      { label: "¿Cómo veo la cuota de Drive?", q: "drive vfs cuota" },
+                      { label: "Compartir con QR", q: "compartir qr" },
+                      { label: "Instalar PWA", q: "instalar pwa" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery(chip.q);
+                          void handleManualSearch(chip.q);
+                        }}
+                        className="px-2 py-1 rounded-md bg-slate-950 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-800 text-[11px] text-slate-300 hover:text-cyan-200 transition-colors cursor-pointer"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tarjeta de Respuesta Estructurada Milimétrica */}
+                {isSearching ? (
+                  <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-center gap-2 text-cyan-300 text-xs font-mono">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Localizando control y procedimiento en la consola...</span>
+                  </div>
+                ) : activeGuideResult ? (
+                  <div className="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800/90 space-y-3 shadow-lg">
+                    {/* Encabezado con Panel y Control Exacto */}
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border tracking-wide ${getPanelBadgeStyle(
+                              activeGuideResult.panel
+                            )}`}
+                          >
+                            {activeGuideResult.panel}
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-400">
+                            Control Exacto:
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-slate-100 text-xs flex items-center gap-1.5 text-cyan-200">
+                          <span>{activeGuideResult.controlName}</span>
+                        </h4>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            `${activeGuideResult.panel} > ${activeGuideResult.controlName}\n${activeGuideResult.procedure.join("\n")}`,
+                            activeGuideResult.id
+                          )
+                        }
+                        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                        title="Copiar guía al portapapeles"
+                      >
+                        {copiedId === activeGuideResult.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Resumen del Control */}
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      {activeGuideResult.summary}
+                    </p>
+
+                    {/* Procedimiento Paso a Paso (Exactamente 3 Líneas Claras) */}
+                    <div className="p-2.5 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1.5">
+                      <div className="text-[10px] font-mono text-cyan-400 font-semibold uppercase tracking-wider">
+                        Procedimiento Paso a Paso:
+                      </div>
+                      <div className="space-y-1 text-[11px] text-slate-200">
+                        {activeGuideResult.procedure.map((step, idx) => (
+                          <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                            <span className="text-cyan-400 font-mono font-bold">•</span>
+                            <span>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Respuesta Enriquecida si vino de LLM */}
+                    {customAnswer && (
+                      <div className="p-2 bg-slate-900/60 rounded border border-cyan-500/20 text-[11px] text-cyan-100 font-mono whitespace-pre-line leading-relaxed">
+                        {customAnswer}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Directorio de Paneles de la Consola */}
+                <div className="pt-1 border-t border-slate-800/80 space-y-2">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                    Mapa de Navegación Rápida:
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("panel izquierdo");
+                        void handleManualSearch("panel izquierdo");
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-cyan-500/40 text-left transition-colors"
+                    >
+                      <div className="text-cyan-400 font-bold">IZQUIERDA</div>
+                      <div className="text-slate-400 text-[9px]">Tren de Agentes</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("panel central");
+                        void handleManualSearch("panel central");
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-emerald-500/40 text-left transition-colors"
+                    >
+                      <div className="text-emerald-400 font-bold">CENTRO</div>
+                      <div className="text-slate-400 text-[9px]">Mesa & Despacho</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("panel derecho");
+                        void handleManualSearch("panel derecho");
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-purple-500/40 text-left transition-colors"
+                    >
+                      <div className="text-purple-400 font-bold">DERECHA</div>
+                      <div className="text-slate-400 text-[9px]">VFS & Telemetría</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── PESTAÑA 2: SPOT COMERCIAL PASO A PASO ── */}
             {activeTab === "SPOT" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
@@ -308,7 +594,7 @@ export function NoraCopilot() {
               </div>
             )}
 
-            {/* ── PESTAÑA 2: TRANSMISIÓN EN VIVO ── */}
+            {/* ── PESTAÑA 3: TRANSMISIÓN EN VIVO ── */}
             {activeTab === "LIVE" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
@@ -374,7 +660,7 @@ export function NoraCopilot() {
               </div>
             )}
 
-            {/* ── PESTAÑA 3: DIAGNÓSTICO AUTO-TEST ── */}
+            {/* ── PESTAÑA 4: DIAGNÓSTICO AUTO-TEST ── */}
             {activeTab === "DIAGNOSTICS" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
@@ -454,4 +740,3 @@ export function NoraCopilot() {
     </>
   );
 }
-

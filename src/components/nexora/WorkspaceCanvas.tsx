@@ -1664,11 +1664,40 @@ export function WorkspaceCanvas({
     setIsSendingToNora(true);
     lastInteractionEpochMsRef.current = Date.now();
 
-    // Capture the camera frame in real-time at the moment the operator finishes speaking
-    const currentCameraFrame = studioCameraActive
-      ? (captureCurrentCameraFrame() || latestCameraFrameBase64Ref.current)
-      : null;
-    console.log("[NEXORA_VISION] Frame capturado bytes:", currentCameraFrame?.length || 0);
+    // Extracción obligatoria del frame visual de cabina
+    let currentCameraFrame: string | null = null;
+    const videoElement =
+      videoPreviewRef.current ||
+      (typeof document !== "undefined"
+        ? (document.querySelector("video") as HTMLVideoElement | null)
+        : null);
+
+    if (
+      videoElement &&
+      (videoElement.readyState === 4 || videoElement.readyState >= 2) &&
+      videoElement.videoWidth > 0
+    ) {
+      const canvas =
+        visionCanvasRef.current ||
+        (typeof document !== "undefined" ? document.createElement("canvas") : null);
+      if (canvas) {
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(videoElement, 0, 0, 640, 480);
+          const frameBase64 = canvas.toDataURL("image/jpeg", 0.7);
+          currentCameraFrame = frameBase64;
+          latestCameraFrameBase64Ref.current = frameBase64;
+          console.log("[NEXORA_VISION] Frame visual capturado con éxito (bytes):", frameBase64.length);
+        }
+      }
+    }
+
+    if (!currentCameraFrame && studioCameraActive) {
+      currentCameraFrame = captureCurrentCameraFrame() || latestCameraFrameBase64Ref.current;
+    }
+    console.log("[NEXORA_VISION] Frame a enviar a Nora (bytes):", currentCameraFrame?.length || 0);
 
     const activeCfg = stationConfigRef.current;
     const nowStr = new Date().toLocaleTimeString("es-AR", {
