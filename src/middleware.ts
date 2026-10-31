@@ -11,6 +11,16 @@ import { custodyCheck } from "@/lib/security/network_police";
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // 0. Excluir endpoints de audio multimedia de streaming para reproducción nativa HTML5 Audio
+  if (
+    pathname === "/api/nexora/radio-tts" ||
+    pathname.startsWith("/api/nexora/radio-tts") ||
+    pathname === "/api/noraitu-stream" ||
+    pathname.startsWith("/api/noraitu-stream")
+  ) {
+    return NextResponse.next();
+  }
+
   // 1. Custodia Zero-Trust en endpoints sensibles
   const isSensitiveEndpoint =
     pathname.startsWith("/api/media") ||

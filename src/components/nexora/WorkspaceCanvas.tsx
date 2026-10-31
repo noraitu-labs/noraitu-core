@@ -646,6 +646,33 @@ export function WorkspaceCanvas({
    * with a strictly pinned LATAM / Argentina voice (`selectedVoiceRef`) and a calm,
    * unhurried radio cadence (`rate = 0.92`, `pitch = 0.98`).
    */
+  /**
+   * Desbloquea las restricciones de AudioContext y autoplay del navegador al interactuar en cabina
+   */
+  const resumeAudioContextAndUnlockAutoplay = async () => {
+    if (typeof window === "undefined") return;
+    try {
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+      if (soundCartCtxRef.current && soundCartCtxRef.current.state === "suspended") {
+        await soundCartCtxRef.current.resume();
+      }
+      if (!cloudAudioRef.current) {
+        cloudAudioRef.current = new Audio();
+      }
+      const audio = cloudAudioRef.current;
+      if (audio && audio.paused) {
+        audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+        audio.play().then(() => {
+          audio.pause();
+        }).catch((err) => console.warn("Autoplay bloqueado:", err));
+      }
+    } catch (err) {
+      console.warn("[AUDIO_UNLOCK] Error al reanudar AudioContext:", err);
+    }
+  };
+
   const speakNoraAloud = (
     textToSpeak: string,
     _ignoredLangCode?: string,
@@ -686,12 +713,8 @@ export function WorkspaceCanvas({
       if (!cleanForTts) return;
 
       const audioUrl = `/api/nexora/radio-tts?text=${encodeURIComponent(cleanForTts)}`;
-      let audio = cloudAudioRef.current;
-      if (!audio) {
-        audio = new Audio();
-        cloudAudioRef.current = audio;
-      }
-      audio.src = audioUrl;
+      const audio = new Audio(audioUrl);
+      cloudAudioRef.current = audio;
 
       const handleSpeechDone = () => {
         lastNoraSpeechEndMsRef.current = Date.now();
@@ -715,7 +738,8 @@ export function WorkspaceCanvas({
         handleSpeechDone();
       };
 
-      audio.play().catch(() => {
+      audio.play().catch((err) => {
+        console.warn("Autoplay bloqueado:", err);
         handleSpeechDone();
       });
     } catch {
@@ -773,7 +797,8 @@ export function WorkspaceCanvas({
       pumpSentenceAudioQueue();
     };
 
-    next.audio.play().catch(() => {
+    next.audio.play().catch((err) => {
+      console.warn("Autoplay bloqueado:", err);
       next.status = "error";
       isSentenceQueuePlayingRef.current = false;
       pumpSentenceAudioQueue();
@@ -786,9 +811,8 @@ export function WorkspaceCanvas({
     if (!clean || clean.length < 2) return;
 
     const audioUrl = `/api/nexora/radio-tts?text=${encodeURIComponent(clean)}`;
-    const audio = new Audio();
+    const audio = new Audio(audioUrl);
     audio.preload = "auto";
-    audio.src = audioUrl;
 
     sentenceQueueRef.current.push({
       id: `sq-${Date.now()}-${Math.random()}`,
@@ -1391,6 +1415,7 @@ export function WorkspaceCanvas({
    * Executes `startCabinRecognition(true)` directly inside the synchronous `onClick` user gesture.
    */
   const handleToggleOpenMicDuplex = () => {
+    void resumeAudioContextAndUnlockAutoplay();
     const nextState = !openMicDuplexModeRef.current;
     openMicDuplexModeRef.current = nextState;
     setOpenMicDuplexMode(nextState);
@@ -1617,6 +1642,7 @@ export function WorkspaceCanvas({
    * sentence-by-sentence TTS audio pipelining, and continuous conversation tracking.
    */
   const handleSendRadioDialogue = async (overrideText?: string) => {
+    void resumeAudioContextAndUnlockAutoplay();
     const messageText = (
       overrideText ??
       consoleInputRef.current ??
@@ -1778,6 +1804,8 @@ export function WorkspaceCanvas({
         if (unspokenSentenceBuffer.trim() && ttsEnabled) {
           queueSentenceForCloudPlayback(unspokenSentenceBuffer.trim());
           unspokenSentenceBuffer = "";
+        } else if (ttsEnabled && sentenceQueueRef.current.length === 0 && accumulatedReply.trim()) {
+          speakNoraAloud(accumulatedReply.trim());
         }
 
         // Finalize Nora dialogue message

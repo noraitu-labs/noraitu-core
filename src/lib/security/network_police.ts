@@ -344,6 +344,16 @@ export async function custodyCheck(params: {
   method: string;
   contentLength?: number;
 }): Promise<SecurityCheckResult> {
+  // 0. Endpoints públicos de audio multimedia y streaming están abiertos para reproducción nativa HTML5 Audio
+  if (
+    params.pathname === "/api/nexora/radio-tts" ||
+    params.pathname.startsWith("/api/nexora/radio-tts") ||
+    params.pathname === "/api/noraitu-stream" ||
+    params.headers.get("accept")?.includes("audio")
+  ) {
+    return { allowed: true, status: 200 };
+  }
+
   const ip = extractClientIp(params.headers);
   const fingerprint = params.headers.get("x-device-fingerprint") || undefined;
   const now = Date.now();
