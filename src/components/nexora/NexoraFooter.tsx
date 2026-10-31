@@ -13,11 +13,11 @@ import { NEXORA_ENGINE_NAME, NEXORA_SIGNATURE } from "@/lib/nexora/types";
 
 export function NexoraFooter() {
   return (
-    <footer className="w-full bg-slate-950 border-t border-slate-800/90 px-4 py-2 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
+    <footer className="w-full bg-slate-950 border-t border-slate-800/90 px-4 py-2 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2 shrink-0 z-40">
       <div className="flex items-center gap-2">
         <Shield size={13} className="text-cyan-400" />
         <span className="font-bold text-slate-200">
-          © 2025 NexoraOne — {NEXORA_ENGINE_NAME} | Signature: {NEXORA_SIGNATURE}
+          © {new Date().getFullYear()} NexoraOne — {NEXORA_ENGINE_NAME} | Signature: {NEXORA_SIGNATURE}
         </span>
         <span className="hidden sm:inline text-slate-600">•</span>
         <span className="hidden sm:inline text-slate-400">
@@ -25,7 +25,7 @@ export function NexoraFooter() {
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 font-mono">
+      <div className="flex flex-wrap items-center gap-4 font-mono pr-4">
         <a
           href="tel:3786414533"
           className="flex items-center gap-1.5 text-cyan-300 hover:text-cyan-200 transition-colors"
@@ -44,4 +44,3 @@ export function NexoraFooter() {
     </footer>
   );
 }
-

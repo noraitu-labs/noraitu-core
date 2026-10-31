@@ -187,7 +187,7 @@ export function NoraCopilot() {
   return (
     <>
       {/* ── BOTÓN FLOTANTE ACCESO RÁPIDO COPILOT ── */}
-      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
+      <div className="fixed bottom-12 right-4 z-50 flex items-center gap-2">
         <button
           onClick={() => setIsOpen((prev) => !prev)}
           className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full font-mono text-xs font-semibold shadow-2xl transition-all duration-300 border ${
@@ -211,7 +211,7 @@ export function NoraCopilot() {
 
       {/* ── PANEL MODAL FLOTANTE INTERACTIVO ── */}
       {isOpen && (
-        <div className="fixed bottom-16 right-4 z-50 w-[95vw] sm:w-[500px] max-h-[86vh] bg-slate-900/95 backdrop-blur-xl border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-24 right-4 z-50 w-[95vw] sm:w-[500px] max-h-[78vh] bg-slate-900/95 backdrop-blur-xl border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-200">
           {/* Header */}
           <div className="p-3.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
