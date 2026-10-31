@@ -54,6 +54,7 @@ export default function NexoraOneEnginePage() {
     isDispatching,
     lastDispatchResult,
     errorMessage,
+    clearErrorMessage,
     gatewayOnline,
     redisLogs,
     appendRedisLog,
@@ -84,13 +85,25 @@ export default function NexoraOneEnginePage() {
         }}
       />
 
-      {/* Optional Error Toast */}
+      {/* Optional Error Toast (Auto-dismiss 5s & manual close) */}
       {errorMessage && (
-        <div className="bg-rose-950/90 border-b border-rose-500/40 px-4 py-1.5 text-xs text-rose-200 flex items-center justify-between">
-          <span>Alerta de Despacho: {errorMessage}</span>
-          <span className="font-mono text-[10px]">
-            Engine: Nexora One Engine | Signature: By Nora
-          </span>
+        <div className="bg-rose-950/95 border-b border-rose-500/50 px-4 py-2 text-xs text-rose-200 flex items-center justify-between shadow-lg animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping shrink-0" />
+            <span className="truncate">Alerta de Despacho: {errorMessage}</span>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="font-mono text-[10px] text-rose-300/80 hidden sm:inline">
+              Engine: Nexora One Engine | Signature: By Nora
+            </span>
+            <button
+              type="button"
+              onClick={clearErrorMessage}
+              className="text-rose-200 hover:text-white px-2 py-0.5 rounded bg-rose-900/60 hover:bg-rose-800 border border-rose-500/40 cursor-pointer font-bold text-[10px] transition-colors"
+            >
+              CERRAR ✕
+            </button>
+          </div>
         </div>
       )}
 

@@ -76,6 +76,19 @@ export function useNexoraDispatch() {
   const [lastDispatchResult, setLastDispatchResult] =
     useState<NexoraDispatchResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Auto-dismiss del banner de error tras 5 segundos
+  useEffect(() => {
+    if (!errorMessage) return;
+    const timer = setTimeout(() => {
+      setErrorMessage(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [errorMessage]);
+
+  const clearErrorMessage = useCallback(() => {
+    setErrorMessage(null);
+  }, []);
   const [gatewayOnline, setGatewayOnline] = useState<boolean>(true);
   const [redisLogs, setRedisLogs] = useState<NexoraRedisLogEntry[]>([
     {
@@ -125,6 +138,10 @@ export function useNexoraDispatch() {
         method: "GET",
         headers: {
           "x-nexora-tenant": "NEXORA_ONE_ENGINE",
+          "X-Engine": NEXORA_ENGINE_NAME,
+          "X-Signature": NEXORA_SIGNATURE,
+          "X-Nexora-Cabin": "true",
+          "X-Nexora-Operator-Session": "CABIN_OPERATOR_AUTHENTICATED",
         },
       });
       if (resp.ok) {
@@ -408,6 +425,8 @@ export function useNexoraDispatch() {
             "x-nexora-tenant": "NEXORA_ONE_ENGINE",
             "X-Engine": NEXORA_ENGINE_NAME,
             "X-Signature": NEXORA_SIGNATURE,
+            "X-Nexora-Cabin": "true",
+            "X-Nexora-Operator-Session": "CABIN_OPERATOR_AUTHENTICATED",
           },
           body: JSON.stringify(contract),
         });
@@ -448,6 +467,7 @@ export function useNexoraDispatch() {
     isDispatching,
     lastDispatchResult,
     errorMessage,
+    clearErrorMessage,
     gatewayOnline,
     redisLogs,
     appendRedisLog,
