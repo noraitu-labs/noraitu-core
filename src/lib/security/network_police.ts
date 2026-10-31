@@ -352,6 +352,8 @@ export async function custodyCheck(params: {
     params.pathname.startsWith("/api/nexora/radio-chat") ||
     params.pathname === "/api/nexora/dispatch" ||
     params.pathname.startsWith("/api/nexora/dispatch") ||
+    params.pathname === "/api/nexora/vision-grounding" ||
+    params.pathname.startsWith("/api/nexora/vision-grounding") ||
     params.pathname === "/api/noraitu-stream" ||
     params.pathname.startsWith("/api/noraitu-stream") ||
     params.headers.get("accept")?.includes("audio")

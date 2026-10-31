@@ -6,14 +6,15 @@ export const metadata: Metadata = {
   title: "Nexora One Engine • Nexora OS",
   description: "Multi-Agent Industrial OS • Orchestrator: Nora Itu (Core / COO)",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
+    apple: "/icon-192x192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Nexora OS",
-  },
-  icons: {
-    icon: "/icon-192x192.png",
-    apple: "/icon-192x192.png",
   },
 };
 
@@ -38,6 +39,7 @@ export default function RootLayout({
     <html lang="es">
       <head>
         <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

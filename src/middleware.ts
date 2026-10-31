@@ -19,6 +19,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/nexora/radio-chat") ||
     pathname === "/api/nexora/dispatch" ||
     pathname.startsWith("/api/nexora/dispatch") ||
+    pathname === "/api/nexora/vision-grounding" ||
+    pathname.startsWith("/api/nexora/vision-grounding") ||
     pathname === "/api/noraitu-stream" ||
     pathname.startsWith("/api/noraitu-stream");
 
